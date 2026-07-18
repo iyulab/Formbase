@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.Core.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Test method naming / style relaxations -->
+    <NoWarn>$(NoWarn);CA1707;CA1711;CA1822;CA1859</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    Live tests (Live/) stand up a real MorphDB container via Testcontainers and need a healthy Docker
+    host. They are excluded from compilation by default so the suite never depends on Docker and cannot
+    hang. Opt in with: dotnet test -p:IncludeLiveTests=true  (requires Docker).
+  -->
+  <ItemGroup Condition="'$(IncludeLiveTests)' != 'true'">
+    <Compile Remove="Live/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Formbase.Core\Formbase.Core.csproj" />
+    <ProjectReference Include="..\..\src\Formbase.MorphDb\Formbase.MorphDb.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FluentAssertions" />
+  </ItemGroup>
+
+</Project>

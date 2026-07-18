@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Formbase.Core/Formbase.Core.csproj" />
+    <Project Path="src/Formbase.MorphDb/Formbase.MorphDb.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Formbase.Core.Tests/Formbase.Core.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.MorphDb</RootNamespace>
+    <Description>MorphDB adapter for formbase — implements the projection-store port over MorphDB.Client.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MorphDB.Client" />
+  </ItemGroup>
+
+</Project>

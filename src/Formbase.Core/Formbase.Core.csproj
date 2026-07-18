@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.Core</RootNamespace>
+    <Description>formbase core engine — raw-first document intake and hint-driven projection over MorphDB.</Description>
+  </PropertyGroup>
+
+</Project>
