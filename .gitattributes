@@ -1,0 +1,19 @@
+# Normalize line endings: store text as LF in the repo, check out native.
+* text=auto eol=lf
+
+# Explicitly text
+*.cs        text
+*.csproj    text
+*.props     text
+*.slnx      text
+*.json      text
+*.md        text
+*.config    text
+*.gitignore text
+*.gitattributes text
+
+# Binary
+*.png binary
+*.jpg binary
+*.dll binary
+*.snk binary

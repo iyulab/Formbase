@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Formbase.Core\Formbase.Core.csproj" />
+    <ProjectReference Include="..\..\src\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\Formbase.MorphDb\Formbase.MorphDb.csproj" />
   </ItemGroup>
 
@@ -30,6 +31,7 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>
