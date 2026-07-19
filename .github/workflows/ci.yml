@@ -80,10 +80,40 @@ jobs:
             ${{ runner.os }}-nuget-
 
       # The flag changes which files compile, so restore/build/test all carry it.
-      # MorphDB live stays off: its service needs redis and a seeded tenant that this harness
-      # does not yet provide, so enabling it here would fail the job by design.
       - name: Test (Postgres live contract)
         run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludePostgresLiveTests=true
+
+  morphdb-live:
+    name: MorphDB Live Contract
+    runs-on: ubuntu-latest
+    # Same gating as postgres-live: don't burn container minutes on a build that already failed.
+    needs: build
+    # The fixture starts morphdb and its postgres through Testcontainers and provisions its own
+    # project, so no `services:` block and no seeded state are needed -- only the opt-in flag.
+    # Two containers and an image pull make this the slowest job, hence the wider bound.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # This is the job that catches a MorphDB.Client release drifting from the server: the client
+      # comes from nuget.org and the server from ghcr, so nothing here pins them to each other.
+      - name: Test (MorphDB live contract)
+        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true
 
   quality:
     name: Format & Vulnerability Scan

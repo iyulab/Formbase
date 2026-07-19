@@ -16,6 +16,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     private const int InsertChunkSize = 500;
     private const int DefaultPageSize = 50;
 
+    /// <summary>MorphDB caps a page at this many rows, so a window wider than it spans several pages.</summary>
+    private const int MaxPageSize = 1000;
+
     private readonly MorphDBClient _client;
 
     public MorphDbProjectionStore(MorphDBClient client) => _client = client;
@@ -63,15 +66,22 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var inserted = 0;
         foreach (var chunk in rows.Chunk(InsertChunkSize))
         {
-            var request = new BatchRequest
-            {
-                Inserts = chunk
-                    .Select(r => (IDictionary<string, object?>)new Dictionary<string, object?>(r, StringComparer.Ordinal))
-                    .ToList(),
-            };
+            var records = chunk
+                .Select(r => (IDictionary<string, object?>)new Dictionary<string, object?>(r, StringComparer.Ordinal))
+                .ToList();
 
-            var response = await _client.Data.BatchAsync(tableName, request, cancellationToken).ConfigureAwait(false);
-            inserted += response.Inserted.Count;
+            var response = await _client.Batch.InsertManyAsync(tableName, records, cancellationToken).ConfigureAwait(false);
+
+            // A batch reports per-operation outcomes and stays a 200 even when some rows fail, so a
+            // partial failure has to be raised here rather than silently shrinking the count.
+            if (response.FailureCount > 0)
+            {
+                var reason = response.Results.FirstOrDefault(r => !r.Success)?.Error ?? "unknown";
+                throw new InvalidOperationException(
+                    $"MorphDB rejected {response.FailureCount} of {records.Count} rows for '{tableName}': {reason}");
+            }
+
+            inserted += response.SuccessCount;
         }
 
         return inserted;
@@ -79,28 +89,57 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
     public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
     {
-        var pageSize = spec.Limit ?? DefaultPageSize;
+        var limit = spec.Limit ?? DefaultPageSize;
         var offset = spec.Offset ?? 0;
 
-        var request = new QueryRequest
+        if (limit <= 0)
         {
-            Filters = spec.Filters is { Count: > 0 } filters
-                ? filters.Select(f => new Filter(f.Key, FilterOperator.Equal, f.Value)).ToList()
-                : [],
-            // Server-side ordering — the only way paging is deterministic (a client-side sort would order
-            // an already-arbitrary page). Descending maps to ascending: false.
-            OrderBy = spec.OrderBy is { Count: > 0 } orderBy
-                ? orderBy.Select(k => new OrderBy(k.Column, ascending: !k.Descending)).ToList()
-                : [],
-            PageSize = pageSize,
-            // MorphDB pages are 1-based; exact offset requires it to align to the page size.
-            Page = pageSize > 0 ? (offset / pageSize) + 1 : 1,
-        };
+            return [];
+        }
 
-        var paged = await _client.Data.QueryAsync(tableName, request, cancellationToken).ConfigureAwait(false);
+        // MorphDB pages instead of taking an offset, so an arbitrary offset has to be assembled from the
+        // pages that cover it. Sizing pages at the limit keeps that to two requests in the common case:
+        // the window is never longer than a page, so it straddles at most a page boundary.
+        var pageSize = Math.Min(limit, MaxPageSize);
+        var firstPage = (offset / pageSize) + 1;
+        var skip = offset % pageSize;
+        var needed = skip + limit;
 
-        return paged.Data
-            .Select(record => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(record.Data, StringComparer.Ordinal))
-            .ToList();
+        var filters = spec.Filters is { Count: > 0 } specFilters
+            ? specFilters.Select(f => new Filter(f.Key, FilterOperator.Equal, f.Value)).ToList()
+            : [];
+
+        // Server-side ordering — the only way paging is deterministic (a client-side sort would order
+        // an already-arbitrary page). Descending maps to ascending: false.
+        var orderBy = spec.OrderBy is { Count: > 0 } specOrder
+            ? specOrder.Select(k => new OrderBy(k.Column, ascending: !k.Descending)).ToList()
+            : [];
+
+        var window = new List<IReadOnlyDictionary<string, object?>>(needed);
+        for (var page = firstPage; window.Count < needed; page++)
+        {
+            var request = new QueryRequest
+            {
+                Filters = filters,
+                OrderBy = orderBy,
+                PageSize = pageSize,
+                Page = page,
+            };
+
+            var paged = await _client.Data
+                .QueryAsync(tableName, request, cancellationToken)
+                .ConfigureAwait(false);
+
+            window.AddRange(paged.Data
+                .Select(record => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(record.Data, StringComparer.Ordinal)));
+
+            // A short page is the last one — asking for more would loop forever on an exhausted table.
+            if (paged.Data.Count < pageSize)
+            {
+                break;
+            }
+        }
+
+        return window.Skip(skip).Take(limit).ToList();
     }
 }
