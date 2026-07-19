@@ -23,8 +23,30 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
+  <!--
+    NuGet packaging. Applies to every packable project; test projects opt out with IsPackable=false.
+    PackageId defaults to the project name (Formbase.Core, Formbase.MorphDb, ...) — no override needed.
+  -->
+  <PropertyGroup>
+    <PackageProjectUrl>https://github.com/iyulab/Formbase</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>formbase;morphdb;document;schema;projection;raw-first;postgres</PackageTags>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- SourceLink (built into the SDK for GitHub) so published symbols resolve to source. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!-- The repo-root README ships as the package readme. Inert in non-packable projects. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DebugType>pdbonly</DebugType>
+    <!-- portable (not pdbonly): snupkg symbol packages require portable PDBs. -->
+    <DebugType>portable</DebugType>
     <Optimize>true</Optimize>
   </PropertyGroup>
 </Project>
