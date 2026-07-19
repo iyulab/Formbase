@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read
+      contents: write   # needed to push the release tag
       packages: write
 
     steps:
@@ -77,3 +77,18 @@ jobs:
       # GitHub Packages rejects snupkg, so only the .nupkg glob is pushed here.
       - name: Push to GitHub Packages
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
+
+      # Without this the repository keeps no record of what was released. MorphDB had the same gap
+      # and it cost a consumer real time: packages had reached 0.5.1 while the newest tag was still
+      # v0.2.1, so reading the repo to pick a version to pin produced one four minors old.
+      - name: Tag the released version
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists, leaving it alone."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
