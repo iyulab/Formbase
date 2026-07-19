@@ -85,12 +85,12 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var request = new QueryRequest
         {
             Filters = spec.Filters is { Count: > 0 } filters
-                ? filters.Select(f => new Filter { Column = f.Key, Operator = FilterOperator.Equal, Value = f.Value }).ToList()
+                ? filters.Select(f => new Filter(f.Key, FilterOperator.Equal, f.Value)).ToList()
                 : [],
             // Server-side ordering — the only way paging is deterministic (a client-side sort would order
             // an already-arbitrary page). Descending maps to ascending: false.
             OrderBy = spec.OrderBy is { Count: > 0 } orderBy
-                ? orderBy.Select(k => new OrderBy { Column = k.Column, Ascending = !k.Descending }).ToList()
+                ? orderBy.Select(k => new OrderBy(k.Column, ascending: !k.Descending)).ToList()
                 : [],
             PageSize = pageSize,
             // MorphDB pages are 1-based; exact offset requires it to align to the page size.
