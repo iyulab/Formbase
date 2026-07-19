@@ -2,7 +2,7 @@ using Formbase.Core.Ports;
 using Formbase.Core.Tests.Contracts;
 using Formbase.Postgres;
 
-namespace Formbase.Core.Tests.Live;
+namespace Formbase.Core.Tests.Live.Postgres;
 
 /// <summary>
 /// Runs the raw-store contract against a real PostgreSQL. Proves the durable adapter honors the same
@@ -11,7 +11,7 @@ namespace Formbase.Core.Tests.Live;
 /// Requires Docker (category: Live).
 /// </summary>
 [Collection(PostgresCollection.Name)]
-[Trait("Category", "Live")]
+[Trait("Category", "Live.Postgres")]
 public sealed class PostgresRawStoreLiveContractTests : RawStoreContractTests
 {
     private readonly PostgresFixture _fixture;

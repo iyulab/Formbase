@@ -116,17 +116,15 @@ dotnet build Formbase.slnx
 dotnet test  Formbase.slnx          # default suite — no Docker required
 ```
 
-Live tests stand up real backing services via Testcontainers and are excluded from the default build. Run them explicitly on a machine with Docker:
+Live tests stand up real backing services via Testcontainers and are excluded from the default build. The two suites need different things, so each has its own switch:
 
 ```bash
-dotnet test Formbase.slnx -p:IncludeLiveTests=true
+dotnet test Formbase.slnx -p:IncludePostgresLiveTests=true   # Docker only — self-contained
+dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # also needs Redis + a seeded tenant
+dotnet test Formbase.slnx -p:IncludeLiveTests=true           # umbrella: both
 ```
 
-The PostgreSQL raw-store live tests run against a plain `postgres` container and pass out of the box. The MorphDB live tests additionally require a Redis service and a provisioned tenant, so they are best run in CI where those can be declared as service containers — filter to just the Postgres suite when running locally:
-
-```bash
-dotnet test Formbase.slnx -p:IncludeLiveTests=true --filter "FullyQualifiedName~PostgresRawStoreLiveContractTests"
-```
+The PostgreSQL raw-store live tests run against a plain `postgres` container and pass out of the box, which is why they are the ones worth enabling locally. The MorphDB suite is not runnable yet: MorphDB reports `/health` as 503 while Redis is absent, so its fixture times out (after two minutes — bounded deliberately, so an unreachable service fails rather than stalls). Completing that harness is tracked as its own roadmap phase.
 
 ## Roadmap
 

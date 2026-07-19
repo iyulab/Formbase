@@ -9,12 +9,31 @@
   </PropertyGroup>
 
   <!--
-    Live tests (Live/) stand up a real MorphDB container via Testcontainers and need a healthy Docker
-    host. They are excluded from compilation by default so the suite never depends on Docker and cannot
-    hang. Opt in with: dotnet test -p:IncludeLiveTests=true  (requires Docker).
+    Live tests stand up real services via Testcontainers and need a healthy Docker host, so they are
+    excluded from compilation by default: the suite never depends on Docker and cannot hang.
+
+    The two live suites have different requirements and are therefore gated independently — folding
+    them into one switch means the self-contained Postgres suite cannot run without also dragging in
+    the MorphDB one, which is not yet runnable (see below).
+
+      dotnet test -p:IncludePostgresLiveTests=true   # needs Docker only — self-contained
+      dotnet test -p:IncludeMorphDbLiveTests=true    # additionally needs redis + a seeded tenant
+      dotnet test -p:IncludeLiveTests=true           # umbrella: both
+
+    MorphDB live is expected to fail until its harness is completed (its /health stays 503 without
+    redis); it fails on a bounded timeout rather than hanging.
   -->
-  <ItemGroup Condition="'$(IncludeLiveTests)' != 'true'">
-    <Compile Remove="Live/**/*.cs" />
+  <PropertyGroup Condition="'$(IncludeLiveTests)' == 'true'">
+    <IncludePostgresLiveTests>true</IncludePostgresLiveTests>
+    <IncludeMorphDbLiveTests>true</IncludeMorphDbLiveTests>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IncludePostgresLiveTests)' != 'true'">
+    <Compile Remove="Live/Postgres/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IncludeMorphDbLiveTests)' != 'true'">
+    <Compile Remove="Live/MorphDb/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

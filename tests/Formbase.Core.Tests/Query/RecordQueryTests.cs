@@ -128,6 +128,60 @@ public class RecordQueryTests
         await act.Should().ThrowAsync<ProjectionUnavailableException>();
     }
 
+    [Fact]
+    public async Task An_unordered_query_still_reaches_the_store_ordered_by_watermark()
+    {
+        var spy = new SpecCapturingQueryStore();
+        var h = new Harness(queryStore: spy);
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc);
+
+        await h.Query.QueryAsync(Qc, QuerySpec.All);
+
+        // Paging is only well-defined over a total order. Callers rarely supply one, so the read path
+        // appends the unique, monotonic watermark as the last key — asserted on the spec handed to the
+        // store, because whether a *result* comes back stable depends on the backing store's sort
+        // (an in-memory LINQ sort is stable and would hide a missing tie-break entirely).
+        spy.Captured!.OrderBy.Should().ContainSingle()
+            .Which.Column.Should().Be(ProjectionSystemColumns.Watermark);
+    }
+
+    [Fact]
+    public async Task A_caller_supplied_order_keeps_its_keys_and_gains_the_watermark_tie_break()
+    {
+        var spy = new SpecCapturingQueryStore();
+        var h = new Harness(queryStore: spy);
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc);
+
+        await h.Query.QueryAsync(Qc, new QuerySpec(OrderBy: [new OrderKey("lot", Descending: true)]));
+
+        // The caller's intent leads; the tie-break only breaks ties beneath it. Ordering the watermark
+        // first would silently override what the caller asked for.
+        spy.Captured!.OrderBy.Should().HaveCount(2);
+        spy.Captured.OrderBy![0].Should().Be(new OrderKey("lot", Descending: true));
+        spy.Captured.OrderBy[1].Column.Should().Be(ProjectionSystemColumns.Watermark);
+    }
+
+    /// <summary>Records the spec the read path actually hands to the projection store.</summary>
+    private sealed class SpecCapturingQueryStore : IProjectionStore
+    {
+        public QuerySpec? Captured { get; private set; }
+
+        public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) => Task.FromResult(rows.Count);
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
+        {
+            Captured = spec;
+            return Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>([]);
+        }
+    }
+
     private sealed class ThrowingQueryStore : IProjectionStore
     {
         public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) => Task.FromResult(true);

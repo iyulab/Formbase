@@ -142,9 +142,12 @@ public abstract class RawStoreContractTests
         var store = CreateStore();
         const int count = 20;
 
-        // Launch all appends at once. For a store that assigns watermarks with a naive max()+1 or that
-        // lets assignment order diverge from commit order, this collides or drops rows; a correctly
-        // serialized store gives every append a distinct watermark and loses nothing.
+        // Launch all appends at once: a store that assigns watermarks with a naive max()+1 collides or
+        // drops rows, while a correct one gives every append its own watermark and loses nothing.
+        // This asserts on final state only, so it says nothing about *how* a store gets there — a
+        // Postgres sequence is concurrency-safe by itself, and this test stays green even with that
+        // adapter's append serialization removed (measured, cycle 21). What serialization buys is
+        // pinned per-adapter instead; see PostgresAppendSerializationTests.
         var appends = Enumerable.Range(0, count)
             .Select(i => store.AppendAsync(Qc, DocumentId.New(), Body($$"""{"n":{{i}}}""")))
             .ToArray();

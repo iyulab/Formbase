@@ -7,7 +7,7 @@ using Formbase.Core.Query;
 using Formbase.Core.Schema;
 using Formbase.MorphDb;
 
-namespace Formbase.Core.Tests.Live;
+namespace Formbase.Core.Tests.Live.MorphDb;
 
 /// <summary>
 /// The flagship end-to-end scenario against a real MorphDB projection store: raw-first intake,
@@ -15,7 +15,7 @@ namespace Formbase.Core.Tests.Live;
 /// the projection lands in a real database. Requires Docker (category: Live).
 /// </summary>
 [Collection(MorphDbCollection.Name)]
-[Trait("Category", "Live")]
+[Trait("Category", "Live.MorphDb")]
 public sealed class MorphDbEngineLiveTests
 {
     private readonly MorphDbFixture _fixture;

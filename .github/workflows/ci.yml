@@ -44,10 +44,46 @@ jobs:
       - name: Build
         run: dotnet build Formbase.slnx --no-restore --configuration Release
 
-      # Live/ tests (Testcontainers + real MorphDB) are excluded from compilation unless
-      # IncludeLiveTests=true, so the default suite needs no Docker host or service containers.
+      # Live tests are excluded from compilation unless their opt-in flag is set, so the default
+      # suite needs no Docker host or service containers. The Postgres suite runs in its own job.
       - name: Test
         run: dotnet test Formbase.slnx --no-build --configuration Release --verbosity normal
+
+  postgres-live:
+    name: Postgres Live Contract
+    runs-on: ubuntu-latest
+    # Gated on the cheap suite: a compile error or a plain-suite regression should not also burn
+    # container-pulling minutes here. The live flag changes which files compile, so this job cannot
+    # reuse the build job's output and rebuilds regardless.
+    needs: build
+    # The runner already provides a Docker daemon, and the fixture starts its own postgres through
+    # Testcontainers — so this needs no `services:` block, only the opt-in flag.
+    # Bounds the job independently of the fixture's own readiness timeout: a wedged daemon or a slow
+    # image pull costs a few minutes of Actions time, not the six-hour default.
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # The flag changes which files compile, so restore/build/test all carry it.
+      # MorphDB live stays off: its service needs redis and a seeded tenant that this harness
+      # does not yet provide, so enabling it here would fail the job by design.
+      - name: Test (Postgres live contract)
+        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludePostgresLiveTests=true
 
   quality:
     name: Format & Vulnerability Scan

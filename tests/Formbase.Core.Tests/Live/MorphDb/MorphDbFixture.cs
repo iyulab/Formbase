@@ -4,15 +4,24 @@ using DotNet.Testcontainers.Networks;
 using MorphDB.Client;
 using Testcontainers.PostgreSql;
 
-namespace Formbase.Core.Tests.Live;
+namespace Formbase.Core.Tests.Live.MorphDb;
 
 /// <summary>
 /// Spins up a real MorphDB service backed by PostgreSQL, both on a shared Docker network, once for
 /// all live tests. MorphDB ensures its own schema/extensions at startup, so a plain postgres suffices.
+/// <para>
+/// Incomplete on purpose: MorphDB's <c>/health</c> reports 503 while its optional redis dependency is
+/// absent, so readiness is never reached with this harness alone (a redis service and a seeded tenant
+/// are still missing). The readiness wait is therefore bounded — Testcontainers otherwise retries for
+/// its one-hour default, which stalls a CI job rather than failing it.
+/// </para>
 /// </summary>
 public sealed class MorphDbFixture : IAsyncLifetime
 {
     private const string PostgresAlias = "postgres";
+
+    /// <summary>Bounds the readiness wait so an unreachable service fails the run instead of stalling it.</summary>
+    private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
     private readonly INetwork _network = new NetworkBuilder().Build();
     private PostgreSqlContainer _postgres = null!;
@@ -42,7 +51,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
             .WithPortBinding(8080, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilHttpRequestIsSucceeded(r => r.ForPort(8080).ForPath("/health")))
+                .UntilHttpRequestIsSucceeded(r => r.ForPort(8080).ForPath("/health"), o => o.WithTimeout(ReadinessTimeout)))
             .Build();
         await _morphdb.StartAsync();
 
