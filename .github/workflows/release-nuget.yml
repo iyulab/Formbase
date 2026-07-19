@@ -70,12 +70,10 @@ jobs:
       - name: Pack
         run: dotnet pack Formbase.slnx --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 
+      # Pushing a .nupkg also uploads the co-located .snupkg, so symbols need no separate step.
       - name: Push to NuGet.org
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
-      # Symbol packages are supported by NuGet.org but not by GitHub Packages.
-      - name: Push symbols to NuGet.org
-        run: dotnet nuget push ./nupkgs/*.snupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
-
+      # GitHub Packages rejects snupkg, so only the .nupkg glob is pushed here.
       - name: Push to GitHub Packages
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
