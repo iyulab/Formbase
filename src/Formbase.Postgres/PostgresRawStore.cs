@@ -14,11 +14,16 @@ namespace Formbase.Postgres;
 /// </summary>
 /// <remarks>
 /// <para><b>Concurrency guarantee.</b> Appends are serialized through a transaction-scoped Postgres
-/// advisory lock keyed to the store's schema. This makes watermark <i>assignment order == commit order</i>:
+/// advisory lock keyed to the store's schema. The lock is <i>database-scoped</i>, so appends serialize
+/// across every connection and process sharing the schema — not merely within one store instance; a
+/// second in-process lock would be redundant. This makes watermark <i>assignment order == commit order</i>:
 /// without it, a sequence assigns watermark N to a transaction that commits <i>after</i> N+1, and a
 /// projection running in that window would record a head that permanently skips the late-committing
-/// document (silent data loss). The cost is that appends do not run concurrently within one store — an
+/// document (silent data loss). The cost is that appends do not run concurrently within one schema — an
 /// acceptable trade for an append-only log of record at this stage. Reads (get/stream/head) are lock-free.</para>
+/// <para>Schema/table creation is likewise serialized under the same lock, because <c>CREATE … IF NOT
+/// EXISTS</c> is not atomic against the catalog — two instances cold-starting against a fresh shared
+/// schema could otherwise both create it and one would fail.</para>
 /// </remarks>
 public sealed partial class PostgresRawStore : IRawStore, IDisposable
 {
@@ -170,7 +175,18 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
             }
 
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            await using var command = new NpgsqlCommand(
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+            // Serialize DDL across connections/processes with the same schema-scoped advisory lock the
+            // appends use: CREATE ... IF NOT EXISTS is not atomic against the catalog, so two instances
+            // cold-starting against a fresh schema could otherwise both create it and one would throw.
+            await using (var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@k)", connection, transaction))
+            {
+                lockCommand.Parameters.AddWithValue("k", _appendLockKey);
+                await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await using (var ddl = new NpgsqlCommand(
                 $"""
                 CREATE SCHEMA IF NOT EXISTS "{_schema}";
                 CREATE SEQUENCE IF NOT EXISTS "{_schema}".raw_watermark_seq AS bigint START 1 MINVALUE 1;
@@ -183,8 +199,12 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
                 );
                 CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
                     ON "{_schema}".raw_documents (form_type, watermark);
-                """, connection);
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                """, connection, transaction))
+            {
+                await ddl.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             _initialized = true;
         }
         finally
