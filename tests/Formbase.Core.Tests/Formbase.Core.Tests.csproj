@@ -14,14 +14,17 @@
 
     The two live suites have different requirements and are therefore gated independently — folding
     them into one switch means the self-contained Postgres suite cannot run without also dragging in
-    the MorphDB one, which is not yet runnable (see below).
+    the MorphDB one, whose adapter is not yet fully green (see below).
 
       dotnet test -p:IncludePostgresLiveTests=true   # needs Docker only — self-contained
-      dotnet test -p:IncludeMorphDbLiveTests=true    # additionally needs redis + a seeded tenant
+      dotnet test -p:IncludeMorphDbLiveTests=true    # needs Docker; the fixture provisions its own tenant
       dotnet test -p:IncludeLiveTests=true           # umbrella: both
 
-    MorphDB live is expected to fail until its harness is completed (its /health stays 503 without
-    redis); it fails on a bounded timeout rather than hanging.
+    Both fixtures are self-contained. Set FORMBASE_MORPHDB_URL to run the MorphDB suite against an
+    already-running service instead of starting one.
+
+    The MorphDB suite still has failing rows: MorphDB.Client's batch endpoint does not exist on the
+    service, so every insert-dependent case fails. Until that is fixed the suite is not a CI gate.
   -->
   <PropertyGroup Condition="'$(IncludeLiveTests)' == 'true'">
     <IncludePostgresLiveTests>true</IncludePostgresLiveTests>

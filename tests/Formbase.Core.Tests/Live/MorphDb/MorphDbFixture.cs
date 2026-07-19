@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Networks;
@@ -7,36 +9,59 @@ using Testcontainers.PostgreSql;
 namespace Formbase.Core.Tests.Live.MorphDb;
 
 /// <summary>
-/// Spins up a real MorphDB service backed by PostgreSQL, both on a shared Docker network, once for
-/// all live tests. MorphDB ensures its own schema/extensions at startup, so a plain postgres suffices.
+/// Provides a ready-to-use MorphDB service for the live tests: by default a real service plus its
+/// PostgreSQL, both started on a shared Docker network and shared by every live test class. Setting
+/// <see cref="BaseUrlVariable"/> points the suite at an already-running service instead (CI service
+/// container, local compose) and skips container management entirely.
 /// <para>
-/// Incomplete on purpose: MorphDB's <c>/health</c> reports 503 while its optional redis dependency is
-/// absent, so readiness is never reached with this harness alone (a redis service and a seeded tenant
-/// are still missing). The readiness wait is therefore bounded — Testcontainers otherwise retries for
-/// its one-hour default, which stalls a CI job rather than failing it.
+/// MorphDB is multi-tenant: every schema/data request is scoped by a project (tenant) that must exist
+/// first, so the fixture provisions one and hands clients its id. MorphDB ensures its own global schema
+/// at startup and retries while its database is still coming up, so no ordering is forced here.
 /// </para>
 /// </summary>
 public sealed class MorphDbFixture : IAsyncLifetime
 {
+    /// <summary>Points the live suite at an external MorphDB instead of starting one.</summary>
+    public const string BaseUrlVariable = "FORMBASE_MORPHDB_URL";
+
     private const string PostgresAlias = "postgres";
 
     /// <summary>Bounds the readiness wait so an unreachable service fails the run instead of stalling it.</summary>
     private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
-    private readonly INetwork _network = new NetworkBuilder().Build();
-    private PostgreSqlContainer _postgres = null!;
-    private IContainer _morphdb = null!;
+    private readonly INetwork? _network;
+    private PostgreSqlContainer? _postgres;
+    private IContainer? _morphdb;
 
-    public string BaseUrl { get; private set; } = string.Empty;
+    public MorphDbFixture()
+    {
+        BaseUrl = Environment.GetEnvironmentVariable(BaseUrlVariable)?.TrimEnd('/') ?? string.Empty;
+        _network = BaseUrl.Length == 0 ? new NetworkBuilder().Build() : null;
+    }
 
-    public MorphDBClient CreateClient() => new(BaseUrl);
+    public string BaseUrl { get; private set; }
+
+    /// <summary>The provisioned project every client is scoped to. MorphDB reads it as the tenant.</summary>
+    public Guid ProjectId { get; private set; }
+
+    public MorphDBClient CreateClient() => new(BaseUrl, new MorphDBClientOptions { TenantId = ProjectId });
 
     public async Task InitializeAsync()
     {
-        await _network.CreateAsync();
+        if (_network is not null)
+        {
+            await StartServiceAsync(_network);
+        }
+
+        ProjectId = await ProvisionProjectAsync();
+    }
+
+    private async Task StartServiceAsync(INetwork network)
+    {
+        await network.CreateAsync();
 
         _postgres = new PostgreSqlBuilder("postgres:16-alpine")
-            .WithNetwork(_network)
+            .WithNetwork(network)
             .WithNetworkAliases(PostgresAlias)
             .WithDatabase("morphdb")
             .WithUsername("morph")
@@ -45,7 +70,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
         await _postgres.StartAsync();
 
         _morphdb = new ContainerBuilder("ghcr.io/iyulab/morphdb:latest")
-            .WithNetwork(_network)
+            .WithNetwork(network)
             .WithEnvironment("ConnectionStrings__MorphDB", $"Host={PostgresAlias};Port=5432;Database=morphdb;Username=morph;Password=morph")
             .WithEnvironment("Jwt__SecretKey", "MorphDB-Testcontainers-Secret-Key-Must-Be-At-Least-32-Characters")
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
@@ -56,6 +81,31 @@ public sealed class MorphDbFixture : IAsyncLifetime
         await _morphdb.StartAsync();
 
         BaseUrl = $"http://{_morphdb.Hostname}:{_morphdb.GetMappedPublicPort(8080)}";
+    }
+
+    /// <summary>
+    /// Creates the project MorphDB provisions per-tenant schemas for. The name is unique per run so the
+    /// external-service mode does not collide with leftovers from an earlier run.
+    /// </summary>
+    private async Task<Guid> ProvisionProjectAsync()
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = ReadinessTimeout };
+
+        var response = await http.PostAsJsonAsync(
+            "/api/projects",
+            new { name = $"formbase-live-{Guid.NewGuid():N}" });
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(
+                $"MorphDB rejected the project provisioning request ({(int)response.StatusCode}): {body}");
+        }
+
+        var project = await response.Content.ReadFromJsonAsync<ProvisionedProject>()
+            ?? throw new InvalidOperationException("MorphDB returned no body for the project provisioning request.");
+
+        return project.Id;
     }
 
     public async Task DisposeAsync()
@@ -70,8 +120,13 @@ public sealed class MorphDbFixture : IAsyncLifetime
             await _postgres.DisposeAsync();
         }
 
-        await _network.DeleteAsync();
+        if (_network is not null)
+        {
+            await _network.DeleteAsync();
+        }
     }
+
+    private sealed record ProvisionedProject([property: JsonPropertyName("id")] Guid Id);
 }
 
 /// <summary>Shares one MorphDB container across all live test classes.</summary>

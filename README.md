@@ -120,11 +120,11 @@ Live tests stand up real backing services via Testcontainers and are excluded fr
 
 ```bash
 dotnet test Formbase.slnx -p:IncludePostgresLiveTests=true   # Docker only — self-contained
-dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # also needs Redis + a seeded tenant
+dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # Docker only — the fixture seeds its own tenant
 dotnet test Formbase.slnx -p:IncludeLiveTests=true           # umbrella: both
 ```
 
-The PostgreSQL raw-store live tests run against a plain `postgres` container and pass out of the box, which is why they are the ones worth enabling locally. The MorphDB suite is not runnable yet: MorphDB reports `/health` as 503 while Redis is absent, so its fixture times out (after two minutes — bounded deliberately, so an unreachable service fails rather than stalls). Completing that harness is tracked as its own roadmap phase.
+Both suites are self-contained: each fixture starts what it needs and, for MorphDB, provisions the project (tenant) its requests are scoped to. Set `FORMBASE_MORPHDB_URL` to run the MorphDB suite against an already-running service instead of starting one. Readiness waits are bounded at two minutes, so an unreachable service fails the run rather than stalling it.
 
 ## Roadmap
 
@@ -134,13 +134,13 @@ Implemented:
 - **Durable Postgres raw store** — Formbase-owned source of truth over Npgsql, contract-verified against a real PostgreSQL (including concurrent appends); the in-memory raw store remains the reference implementation
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection
 - Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
-- MorphDB projection-store adapter (API-verified against `MorphDB.Client` 0.5.0)
+- MorphDB projection-store adapter — type- and API-verified; the projection-store contract has been run end-to-end against a real MorphDB service and passes with the client release that carries the batch and value-mapping fixes (see below)
 - DI composition and contract test suites for the store ports
 
 Planned (later stages, each its own effort):
 
 - **Ontology layer** — an LLM-based `ISchemaProposer` that infers structure from raw documents, plus scheduled/threshold-driven projection triggers
-- **MorphDB live verification in CI** — the adapter is API-verified; an end-to-end run needs a MorphDB service with Redis and a provisioned tenant (see the tests section)
+- **MorphDB live verification as a CI gate** — running the suite surfaced three defects below the adapter (a batch endpoint the client called but no server serves, record values handed back as `JsonElement`, and offsets that do not align to a page). All three are fixed and the suite passes 10/10, but the client fixes are not published yet, so this repository still references the released client and the CI gate waits on that release
 - Input adapters (M3L and others) that produce `FormType` + `Document`
 - Richer querying (non-equality filters) and non-blocking re-projection
 
