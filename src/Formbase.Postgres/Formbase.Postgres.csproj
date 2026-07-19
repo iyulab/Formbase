@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.Postgres</RootNamespace>
+    <Description>PostgreSQL adapter for formbase — the durable, append-only raw store (source of truth).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+    <!-- For the AddPostgresRawStore registration helper. Abstractions-only keeps the footprint minimal. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>

@@ -71,6 +71,11 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                 query = query.Where(row => filters.All(f => Matches(row, f.Key, f.Value)));
             }
 
+            if (spec.OrderBy is { Count: > 0 } orderBy)
+            {
+                query = ApplyOrder(query, orderBy);
+            }
+
             if (spec.Offset is { } offset)
             {
                 query = query.Skip(offset);
@@ -89,8 +94,36 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         }
     }
 
+    private static IEnumerable<Dictionary<string, object?>> ApplyOrder(
+        IEnumerable<Dictionary<string, object?>> query, IReadOnlyList<OrderKey> orderBy)
+    {
+        IOrderedEnumerable<Dictionary<string, object?>>? ordered = null;
+        foreach (var key in orderBy)
+        {
+            var column = key.Column;
+            object? Selector(Dictionary<string, object?> row) => row.GetValueOrDefault(column);
+
+            ordered = ordered is null
+                ? (key.Descending ? query.OrderByDescending(Selector, ValueComparer) : query.OrderBy(Selector, ValueComparer))
+                : (key.Descending ? ordered.ThenByDescending(Selector, ValueComparer) : ordered.ThenBy(Selector, ValueComparer));
+        }
+
+        return ordered ?? query;
+    }
+
     private static bool Matches(Dictionary<string, object?> row, string column, object? expected)
         => row.TryGetValue(column, out var actual) && Equals(actual, expected);
+
+    /// <summary>Orders nulls first, then compares same-typed values via their natural order.</summary>
+    private static readonly IComparer<object?> ValueComparer = Comparer<object?>.Create(static (a, b) =>
+    {
+        if (a is null)
+        {
+            return b is null ? 0 : -1;
+        }
+
+        return b is null ? 1 : Comparer<object>.Default.Compare(a, b);
+    });
 
     private Table Require(string tableName)
         => _tables.TryGetValue(tableName, out var table)

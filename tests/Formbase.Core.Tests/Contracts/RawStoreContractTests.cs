@@ -137,6 +137,31 @@ public abstract class RawStoreContractTests
     }
 
     [Fact]
+    public async Task Concurrent_appends_get_distinct_monotonic_watermarks()
+    {
+        var store = CreateStore();
+        const int count = 20;
+
+        // Launch all appends at once. For a store that assigns watermarks with a naive max()+1 or that
+        // lets assignment order diverge from commit order, this collides or drops rows; a correctly
+        // serialized store gives every append a distinct watermark and loses nothing.
+        var appends = Enumerable.Range(0, count)
+            .Select(i => store.AppendAsync(Qc, DocumentId.New(), Body($$"""{"n":{{i}}}""")))
+            .ToArray();
+        var stored = await Task.WhenAll(appends);
+
+        var watermarks = stored.Select(s => s.Watermark).ToList();
+        watermarks.Should().OnlyHaveUniqueItems("each append must be assigned its own watermark");
+        watermarks.Should().HaveCount(count);
+        (await store.HeadAsync(Qc)).Should().Be(watermarks.Max(), "head must reflect every committed append");
+
+        foreach (var s in stored)
+        {
+            (await store.GetAsync(s.Id)).Should().NotBeNull("no appended document may be lost to a race");
+        }
+    }
+
+    [Fact]
     public async Task Head_is_zero_when_no_documents_of_the_type()
     {
         var store = CreateStore();

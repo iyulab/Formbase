@@ -1,3 +1,4 @@
+using System.Globalization;
 using Formbase.Core.Ports;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
@@ -8,7 +9,9 @@ namespace Formbase.Core.Tests.Contracts;
 /// The behavioral contract every <see cref="IProjectionStore"/> must honor. Held implementation-agnostic:
 /// the exact exception types differ (in-memory throws <see cref="InvalidOperationException"/>, a real
 /// MorphDB adapter throws its own conflict/not-found types), so the throwing cases assert only that some
-/// error surfaces. Paging assertions are order-independent because the port promises no ordering.
+/// error surfaces. When a query carries no ordering, row order is unspecified (so those assertions stay
+/// order-independent); when it carries a <see cref="OrderKey"/>, the store must return rows in that total
+/// order, which is what makes offset/limit paging deterministic.
 /// </summary>
 public abstract class ProjectionStoreContractTests
 {
@@ -105,6 +108,37 @@ public abstract class ProjectionStoreContractTests
         var rows = await store.QueryAsync(TableName, new QuerySpec(Limit: 2));
 
         rows.Should().HaveCount(2);
+        await store.DropTableAsync(TableName);
+    }
+
+    [Fact]
+    public async Task Query_orders_by_the_requested_key_in_both_directions()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema());
+        // Inserted out of order, so passing order (not insertion order) is what's being verified.
+        await store.BulkInsertAsync(TableName, [Row("a", 3), Row("b", 1), Row("c", 2)]);
+
+        var asc = await store.QueryAsync(TableName, new QuerySpec(OrderBy: [new OrderKey("v")]));
+        asc.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(1L, 2L, 3L);
+
+        var desc = await store.QueryAsync(TableName, new QuerySpec(OrderBy: [new OrderKey("v", Descending: true)]));
+        desc.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(3L, 2L, 1L);
+
+        await store.DropTableAsync(TableName);
+    }
+
+    [Fact]
+    public async Task Ordered_paging_returns_a_deterministic_slice()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema());
+        await store.BulkInsertAsync(TableName, [Row("a", 3), Row("b", 1), Row("d", 4), Row("c", 2)]);
+
+        // Ordered by v ascending → 1,2,3,4; skip 1, take 2 → the middle slice, same on any store.
+        var page = await store.QueryAsync(TableName, new QuerySpec(Limit: 2, Offset: 1, OrderBy: [new OrderKey("v")]));
+
+        page.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(2L, 3L);
         await store.DropTableAsync(TableName);
     }
 }

@@ -21,6 +21,7 @@
     <ProjectReference Include="..\..\src\Formbase.Core\Formbase.Core.csproj" />
     <ProjectReference Include="..\..\src\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\Formbase.MorphDb\Formbase.MorphDb.csproj" />
+    <ProjectReference Include="..\..\src\Formbase.Postgres\Formbase.Postgres.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -28,7 +29,7 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
@@ -36,7 +37,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
-    <Using Include="FluentAssertions" />
+    <Using Include="AwesomeAssertions" />
   </ItemGroup>
 
 </Project>

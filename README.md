@@ -43,7 +43,7 @@ A document's life:
 2. **Projection** — when a form type has declared field hints, `ProjectAsync(formType)` drops any existing table, recreates it from the proposed schema, streams the raw documents through deterministic value mapping (recording — never discarding — any that can't be mapped), and records the watermark it reached. Because raw is the source of truth, a schema change needs no `ALTER` diffing: the table is simply rebuilt.
 3. **Reading** — there are two questions with two paths:
    - *"Show me this document"* → the raw store, always available.
-   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`.
+   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic.
 
 ## Quick start
 
@@ -99,8 +99,9 @@ Six ports define the engine; everything else composes them.
 **Projects**
 
 - `Formbase.Core` — primitives, the six ports, the projector/intake/query services, and in-memory implementations. **Zero external package dependencies.**
-- `Formbase.MorphDb` — `IProjectionStore` implemented over `MorphDB.Client`. A thin translation layer; all projection policy stays in the core.
-- `Formbase.DependencyInjection` — `AddFormbaseCore` / `AddFormbaseInMemory` wiring.
+- `Formbase.MorphDb` — `IProjectionStore` implemented over `MorphDB.Client`, plus `AddMorphDbProjectionStore`. A thin translation layer; all projection policy stays in the core.
+- `Formbase.Postgres` — the durable, append-only `IRawStore` over PostgreSQL (direct Npgsql, never through MorphDB), plus `AddPostgresRawStore`. Appends are serialized so watermark assignment order equals commit order.
+- `Formbase.DependencyInjection` — `AddFormbaseCore` / `AddFormbaseInMemory` wiring. Each adapter package ships its own registration helper, so this package stays free of adapter dependencies.
 
 **Design decisions worth knowing**
 
@@ -115,10 +116,16 @@ dotnet build Formbase.slnx
 dotnet test  Formbase.slnx          # default suite — no Docker required
 ```
 
-Live tests stand up a real MorphDB container via Testcontainers and are excluded from the default build. Run them explicitly on a machine with Docker:
+Live tests stand up real backing services via Testcontainers and are excluded from the default build. Run them explicitly on a machine with Docker:
 
 ```bash
 dotnet test Formbase.slnx -p:IncludeLiveTests=true
+```
+
+The PostgreSQL raw-store live tests run against a plain `postgres` container and pass out of the box. The MorphDB live tests additionally require a Redis service and a provisioned tenant, so they are best run in CI where those can be declared as service containers — filter to just the Postgres suite when running locally:
+
+```bash
+dotnet test Formbase.slnx -p:IncludeLiveTests=true --filter "FullyQualifiedName~PostgresRawStoreLiveContractTests"
 ```
 
 ## Roadmap
@@ -126,17 +133,18 @@ dotnet test Formbase.slnx -p:IncludeLiveTests=true
 Implemented:
 
 - Raw-first intake, append-only raw store, idempotent re-submission
+- **Durable Postgres raw store** — Formbase-owned source of truth over Npgsql, contract-verified against a real PostgreSQL (including concurrent appends); the in-memory raw store remains the reference implementation
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection
-- Record query with not-projected / stale / unavailable distinction
+- Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter (API-verified against `MorphDB.Client` 0.5.0)
 - DI composition and contract test suites for the store ports
 
 Planned (later stages, each its own effort):
 
 - **Ontology layer** — an LLM-based `ISchemaProposer` that infers structure from raw documents, plus scheduled/threshold-driven projection triggers
-- **Formbase-owned Postgres raw store** — a durable append-only `IRawStore` (today's durable store is the projection target; the reference raw store is in-memory)
+- **MorphDB live verification in CI** — the adapter is API-verified; an end-to-end run needs a MorphDB service with Redis and a provisioned tenant (see the tests section)
 - Input adapters (M3L and others) that produce `FormType` + `Document`
-- Richer querying (ordering, non-equality filters) and non-blocking re-projection
+- Richer querying (non-equality filters) and non-blocking re-projection
 
 ## License
 

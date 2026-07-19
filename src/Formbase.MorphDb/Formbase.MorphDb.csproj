@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <PackageReference Include="MorphDB.Client" />
+    <!-- For the AddMorphDbProjectionStore registration helper. Abstractions-only keeps the footprint minimal. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
 </Project>

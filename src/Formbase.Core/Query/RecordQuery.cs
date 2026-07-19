@@ -46,7 +46,7 @@ public sealed class RecordQuery : IRecordQuery
 
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
         var status = ProjectionStatus.Evaluate(projectedWatermark, rawHead);
-        var coerced = Coerce(spec, schema);
+        var coerced = WithDeterministicOrder(Coerce(spec, schema));
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
         try
@@ -60,6 +60,17 @@ public sealed class RecordQuery : IRecordQuery
         }
 
         return new QueryResult(rows, status.State == ProjectionState.Stale);
+    }
+
+    private static QuerySpec WithDeterministicOrder(QuerySpec spec)
+    {
+        // fb_watermark is unique and monotonic per document, so appending it as the final key gives a
+        // total order — record queries page deterministically whether or not the caller ordered.
+        var keys = new List<OrderKey>(spec.OrderBy ?? [])
+        {
+            new OrderKey(ProjectionSystemColumns.Watermark),
+        };
+        return spec with { OrderBy = keys };
     }
 
     private static QuerySpec Coerce(QuerySpec spec, TableSchema schema)

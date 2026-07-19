@@ -3,6 +3,7 @@
     <Project Path="src/Formbase.Core/Formbase.Core.csproj" />
     <Project Path="src/Formbase.DependencyInjection/Formbase.DependencyInjection.csproj" />
     <Project Path="src/Formbase.MorphDb/Formbase.MorphDb.csproj" />
+    <Project Path="src/Formbase.Postgres/Formbase.Postgres.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Formbase.Core.Tests/Formbase.Core.Tests.csproj" />
