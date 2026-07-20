@@ -30,10 +30,11 @@ Formbase sits on top of [MorphDB](https://github.com/iyulab/MorphDB) (runtime-fl
   infers structure from the raw documents themselves.
 ```
 
-Two things make this different from "define a table, then insert rows":
+Three things make this different from "define a table, then insert rows":
 
-- **Declaration is never required to accept data.** Documents land in the raw store immediately. Structure is declared later (or, eventually, inferred), and the raw stream is the source of truth — the typed table is a rebuildable projection of it.
+- **Declaration is never required to accept data.** Documents land in the raw store immediately. Structure is declared later, and the raw stream is the source of truth — the typed table is a rebuildable projection of it.
 - **`FormType` is the unit of typing, and it stays inside Formbase.** MorphDB only ever sees a generic table; the form concept never leaks into it.
+- **Less-derived is a state, not a failure.** The engine never demands that input be complete. No hints means no projection — but intake still succeeds and raw reads always work. An unmappable document becomes a recorded `ProjectionSkip`, not an exception. What the input has not decided stays empty rather than being filled with a plausible default, because **a wrong value is never discovered while an empty one can still be filled in.**
 
 ## How it works
 
@@ -84,12 +85,13 @@ var result = await engine.QueryAsync(qc, new QuerySpec(
 
 ## Architecture
 
-Six ports define the engine; everything else composes them.
+Eight ports define the engine; everything else composes them.
 
 | Port | Responsibility |
 |------|----------------|
 | `IRawStore` | Append-only source of truth. Owned by Formbase. |
 | `IIntakeService` | Accept documents (raw-first, no declaration required). |
+| `IFieldHintSource` | Supply the declared structure for a form type — the input to schema proposal. |
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
 | `IProjector` | Drop-and-rebuild the projected table from raw. |
 | `IProjectionState` | Track the watermark each projection reached. |
@@ -105,9 +107,10 @@ Six ports define the engine; everything else composes them.
 
 **Design decisions worth knowing**
 
-- **`ISchemaProposer` is where the ontology layer will live.** The current `HintSchemaProposer` reads declared field hints. A later LLM-based proposer infers schema from the raw documents and plugs into the same port — no core change.
+- **`ISchemaProposer` is where the ontology layer will live.** The current `HintSchemaProposer` reads declared field hints. A later proposer plugs into the same port — no core change. Its job is to **read what a form already declares**, not to invent structure from values: looking at a `product_name` column alone can never tell you whether it is a snapshot, a denormalization, or a mistake. The form can — a "filled-in" box and an "attached" box are different boxes.
 - **Raw lives in Formbase, not MorphDB.** Formbase owns its source of truth, so a MorphDB outage never blocks intake or document reads, and re-projection is a full scan Formbase controls rather than something tunneled through a REST API.
 - **`FormType` never reaches MorphDB.** Projected tables are generic; the form concept is a Formbase-internal string.
+- **Layout is outside; structure is inside.** How a form is laid out, rendered, or printed is an adapter/UI concern and never enters the engine. Which parts of a form define an entity boundary is *derivation policy* and belongs in the core. The declaration vocabulary that carries that distinction is still open — see Roadmap.
 
 ## Building and testing
 
@@ -137,9 +140,15 @@ Implemented:
 - MorphDB projection-store adapter — type- and API-verified; the projection-store contract has been run end-to-end against a real MorphDB service and passes with the client release that carries the batch and value-mapping fixes (see below)
 - DI composition and contract test suites for the store ports
 
+Known gaps (audited 2026-07-20 against Formology):
+
+- **Absent and null are indistinguishable in a projection.** `DocumentMapper` treats a field that was never in the document and a field explicitly written as `null` the same way — both become `null` in a nullable column. After a schema grows, re-projection therefore cannot tell *"left blank"* from *"that box did not exist yet."* Raw keeps the truth, but a query over the projection quietly conflates the two. Fix planned; raw is unaffected.
+- **The declaration vocabulary is flat.** A form type maps to one flat list of columns, so a child section (1:N), a reference to another entity (FK), and the time-binding of a value (is it true *now*, or was it true *then*?) have nowhere to be expressed. This is a known deferral — the richer format is the open question in the core design — and it is the single largest gap between this engine and the methodology it implements.
+
 Planned (later stages, each its own effort):
 
-- **Ontology layer** — an LLM-based `ISchemaProposer` that infers structure from raw documents, plus scheduled/threshold-driven projection triggers
+- **Richer declaration vocabulary** — resolve the deferred hint format so section structure and time-binding survive into the projection. Architectural; needs a decision, not just an implementation
+- **Ontology layer** — an `ISchemaProposer` that reads structure a form already declares, plus scheduled/threshold-driven projection triggers
 - **MorphDB live verification as a CI gate** — running the suite surfaced three defects below the adapter (a batch endpoint the client called but no server serves, record values handed back as `JsonElement`, and offsets that do not align to a page). All three are fixed and the suite passes 10/10, but the client fixes are not published yet, so this repository still references the released client and the CI gate waits on that release
 - Input adapters (M3L and others) that produce `FormType` + `Document`
 - Richer querying (non-equality filters) and non-blocking re-projection
