@@ -7,7 +7,7 @@
 
 Formbase sits on top of [MorphDB](https://github.com/iyulab/MorphDB) (runtime-flexible relational storage) and adds the layer MorphDB deliberately leaves out: turning a stream of documents into a typed, queryable table on your terms. It is the engine realization of [Formology](https://github.com/iyulab/formology)'s three layers — humans write documents, the system derives data, and (in a later stage) intelligence grows an ontology.
 
-> Status: **core engine, in active development (0.1.x).** The raw-first intake, hint-driven projection, and MorphDB adapter are implemented and tested. The LLM-driven ontology layer is a deliberate future stage, wired for via a port but not yet built. See [Roadmap](#roadmap).
+> Status: **core engine, in active development (0.x).** The raw-first intake, hint-driven projection, and MorphDB adapter are implemented and tested. The LLM-driven ontology layer is a deliberate future stage, wired for via a port but not yet built. See [Roadmap](#roadmap).
 
 ## The idea
 
@@ -149,7 +149,7 @@ Planned (later stages, each its own effort):
 
 - **Richer declaration vocabulary** — resolve the deferred hint format so section structure and time-binding survive into the projection. Architectural; needs a decision, not just an implementation
 - **Ontology layer** — an `ISchemaProposer` that reads structure a form already declares, plus scheduled/threshold-driven projection triggers
-- **MorphDB live verification as a CI gate** — running the suite surfaced three defects below the adapter (a batch endpoint the client called but no server serves, record values handed back as `JsonElement`, and offsets that do not align to a page). All three are fixed and the suite passes 10/10, but the client fixes are not published yet, so this repository still references the released client and the CI gate waits on that release
+- **MorphDB live verification as a CI gate** — the `morphdb-live` job runs the live contract suite against the published server image on every push, watching for client/server drift
 - Input adapters (M3L and others) that produce `FormType` + `Document`
 - Richer querying (non-equality filters) and non-blocking re-projection
 
