@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Npgsql;
@@ -25,14 +24,11 @@ namespace Formbase.Postgres;
 /// EXISTS</c> is not atomic against the catalog — two instances cold-starting against a fresh shared
 /// schema could otherwise both create it and one would fail.</para>
 /// </remarks>
-public sealed partial class PostgresRawStore : IRawStore, IDisposable
+public sealed class PostgresRawStore : IRawStore, IDisposable
 {
     private readonly NpgsqlDataSource _dataSource;
-    private readonly string _schema;
-    private readonly long _appendLockKey;
+    private readonly PostgresSchemaBootstrap _bootstrap;
     private readonly TimeProvider _clock;
-    private readonly SemaphoreSlim _initGate = new(1, 1);
-    private volatile bool _initialized;
 
     /// <summary>
     /// Creates a store over <paramref name="dataSource"/> (whose lifetime the caller owns), isolated in
@@ -41,15 +37,9 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
     public PostgresRawStore(NpgsqlDataSource dataSource, string schema = "formbase", TimeProvider? clock = null)
     {
         ArgumentNullException.ThrowIfNull(dataSource);
-        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
-        if (!SchemaNamePattern().IsMatch(schema))
-        {
-            throw new ArgumentException($"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
-        }
 
         _dataSource = dataSource;
-        _schema = schema;
-        _appendLockKey = StableKey(schema);
+        _bootstrap = new PostgresSchemaBootstrap(dataSource, schema);
         _clock = clock ?? TimeProvider.System;
     }
 
@@ -65,7 +55,7 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
         // order equals commit order. Also closes the check-then-insert race for a duplicate id.
         await using (var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@k)", connection, transaction))
         {
-            lockCommand.Parameters.AddWithValue("k", _appendLockKey);
+            lockCommand.Parameters.AddWithValue("k", _bootstrap.AdvisoryLockKey);
             await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -80,8 +70,8 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
         var appendedAt = _clock.GetUtcNow();
         await using var insert = new NpgsqlCommand(
             $"""
-            INSERT INTO "{_schema}".raw_documents (id, form_type, body, watermark, appended_at)
-            VALUES (@id, @type, @body, nextval('"{_schema}".raw_watermark_seq'), @at)
+            INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at)
+            VALUES (@id, @type, @body, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), @at)
             RETURNING watermark
             """, connection, transaction);
         insert.Parameters.AddWithValue("id", id.Value);
@@ -111,7 +101,7 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
         await using var command = new NpgsqlCommand(
             $"""
             SELECT id, form_type, body, watermark, appended_at
-            FROM "{_schema}".raw_documents
+            FROM "{_bootstrap.Schema}".raw_documents
             WHERE form_type = @type AND watermark > @after
             ORDER BY watermark
             """, connection);
@@ -131,7 +121,7 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
-            $"""SELECT COALESCE(MAX(watermark), 0) FROM "{_schema}".raw_documents WHERE form_type = @type""",
+            $"""SELECT COALESCE(MAX(watermark), 0) FROM "{_bootstrap.Schema}".raw_documents WHERE form_type = @type""",
             connection);
         command.Parameters.AddWithValue("type", type.Value);
 
@@ -144,7 +134,7 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
         await using var command = new NpgsqlCommand(
             $"""
             SELECT id, form_type, body, watermark, appended_at
-            FROM "{_schema}".raw_documents WHERE id = @id
+            FROM "{_bootstrap.Schema}".raw_documents WHERE id = @id
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id.Value);
 
@@ -159,75 +149,23 @@ public sealed partial class PostgresRawStore : IRawStore, IDisposable
         new Watermark(reader.GetInt64(3)),
         reader.GetFieldValue<DateTimeOffset>(4));
 
-    private async ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)
-    {
-        if (_initialized)
-        {
-            return;
-        }
-
-        await _initGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_initialized)
-            {
-                return;
-            }
-
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            // Serialize DDL across connections/processes with the same schema-scoped advisory lock the
-            // appends use: CREATE ... IF NOT EXISTS is not atomic against the catalog, so two instances
-            // cold-starting against a fresh schema could otherwise both create it and one would throw.
-            await using (var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@k)", connection, transaction))
-            {
-                lockCommand.Parameters.AddWithValue("k", _appendLockKey);
-                await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            await using (var ddl = new NpgsqlCommand(
-                $"""
-                CREATE SCHEMA IF NOT EXISTS "{_schema}";
-                CREATE SEQUENCE IF NOT EXISTS "{_schema}".raw_watermark_seq AS bigint START 1 MINVALUE 1;
-                CREATE TABLE IF NOT EXISTS "{_schema}".raw_documents (
-                    id uuid PRIMARY KEY,
-                    form_type text NOT NULL,
-                    body jsonb NOT NULL,
-                    watermark bigint NOT NULL UNIQUE,
-                    appended_at timestamptz NOT NULL
-                );
-                CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
-                    ON "{_schema}".raw_documents (form_type, watermark);
-                """, connection, transaction))
-            {
-                await ddl.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            _initialized = true;
-        }
-        finally
-        {
-            _initGate.Release();
-        }
-    }
-
-    /// <summary>A stable 64-bit key (FNV-1a) so each schema serializes its appends independently.</summary>
-    private static long StableKey(string schema)
-    {
-        ulong hash = 14695981039346656037UL;
-        foreach (var b in System.Text.Encoding.UTF8.GetBytes(schema))
-        {
-            hash = (hash ^ b) * 1099511628211UL;
-        }
-
-        return unchecked((long)hash);
-    }
-
-    [GeneratedRegex("^[a-zA-Z_][a-zA-Z0-9_]*$")]
-    private static partial Regex SchemaNamePattern();
+    private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)
+        => _bootstrap.EnsureAsync(
+            $"""
+            CREATE SCHEMA IF NOT EXISTS "{_bootstrap.Schema}";
+            CREATE SEQUENCE IF NOT EXISTS "{_bootstrap.Schema}".raw_watermark_seq AS bigint START 1 MINVALUE 1;
+            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".raw_documents (
+                id uuid PRIMARY KEY,
+                form_type text NOT NULL,
+                body jsonb NOT NULL,
+                watermark bigint NOT NULL UNIQUE,
+                appended_at timestamptz NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
+                ON "{_bootstrap.Schema}".raw_documents (form_type, watermark);
+            """,
+            cancellationToken);
 
     /// <summary>Disposes the init gate. The injected data source is caller-owned and left untouched.</summary>
-    public void Dispose() => _initGate.Dispose();
+    public void Dispose() => _bootstrap.Dispose();
 }
