@@ -14,9 +14,9 @@ namespace Formbase.Core.Tests.Live.MorphDb;
 /// <see cref="BaseUrlVariable"/> points the suite at an already-running service instead (CI service
 /// container, local compose) and skips container management entirely.
 /// <para>
-/// MorphDB is multi-tenant: every schema/data request is scoped by a project (tenant) that must exist
-/// first, so the fixture provisions one and hands clients its id. MorphDB ensures its own global schema
-/// at startup and retries while its database is still coming up, so no ordering is forced here.
+/// Every MorphDB schema and data request is scoped to a project that must exist first, so the fixture
+/// provisions one and hands clients its id. MorphDB ensures its own global schema at startup and retries
+/// while its database is still coming up, so no ordering is forced here.
 /// </para>
 /// </summary>
 public sealed class MorphDbFixture : IAsyncLifetime
@@ -41,10 +41,10 @@ public sealed class MorphDbFixture : IAsyncLifetime
 
     public string BaseUrl { get; private set; }
 
-    /// <summary>The provisioned project every client is scoped to. MorphDB reads it as the tenant.</summary>
+    /// <summary>The provisioned project every client is scoped to.</summary>
     public Guid ProjectId { get; private set; }
 
-    public MorphDBClient CreateClient() => new(BaseUrl, new MorphDBClientOptions { TenantId = ProjectId });
+    public MorphDBClient CreateClient() => new(BaseUrl, new MorphDBClientOptions { ProjectId = ProjectId });
 
     public async Task InitializeAsync()
     {
@@ -84,7 +84,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Creates the project MorphDB provisions per-tenant schemas for. The name is unique per run so the
+    /// Creates the project MorphDB provisions schemas for. The name is unique per run so the
     /// external-service mode does not collide with leftovers from an earlier run.
     /// </summary>
     private async Task<Guid> ProvisionProjectAsync()

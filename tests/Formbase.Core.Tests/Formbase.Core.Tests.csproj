@@ -17,7 +17,7 @@
     the MorphDB one, whose adapter is not yet fully green (see below).
 
       dotnet test -p:IncludePostgresLiveTests=true   # needs Docker only — self-contained
-      dotnet test -p:IncludeMorphDbLiveTests=true    # needs Docker; the fixture provisions its own tenant
+      dotnet test -p:IncludeMorphDbLiveTests=true    # needs Docker; the fixture provisions its own project
       dotnet test -p:IncludeLiveTests=true           # umbrella: both
 
     Both fixtures are self-contained. Set FORMBASE_MORPHDB_URL to run the MorphDB suite against an

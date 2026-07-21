@@ -123,11 +123,11 @@ Live tests stand up real backing services via Testcontainers and are excluded fr
 
 ```bash
 dotnet test Formbase.slnx -p:IncludePostgresLiveTests=true   # Docker only — self-contained
-dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # Docker only — the fixture seeds its own tenant
+dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # Docker only — the fixture seeds its own project
 dotnet test Formbase.slnx -p:IncludeLiveTests=true           # umbrella: both
 ```
 
-Both suites are self-contained: each fixture starts what it needs and, for MorphDB, provisions the project (tenant) its requests are scoped to. Set `FORMBASE_MORPHDB_URL` to run the MorphDB suite against an already-running service instead of starting one. Readiness waits are bounded at two minutes, so an unreachable service fails the run rather than stalling it.
+Both suites are self-contained: each fixture starts what it needs and, for MorphDB, provisions the project its requests are scoped to. Set `FORMBASE_MORPHDB_URL` to run the MorphDB suite against an already-running service instead of starting one. Readiness waits are bounded at two minutes, so an unreachable service fails the run rather than stalling it.
 
 ## Roadmap
 
