@@ -1,7 +1,6 @@
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
 using Formbase.Postgres;
-using Npgsql;
 
 namespace Formbase.Core.Tests.Live.Postgres;
 

@@ -19,6 +19,9 @@ namespace Formbase.Postgres;
 /// <para><see cref="ColumnType"/> is stored <i>by name</i>. Storing the numeric value would make the
 /// meaning of every stored hint depend on the enum's declaration order — reordering it later would
 /// silently reinterpret data already on disk.</para>
+/// <para><c>declared_at</c> is write-only, deliberately: it is operator-facing forensic metadata (when
+/// was this declaration last made), not a value the engine reads back. Do not mistake it for a live
+/// feature, and do not delete it as dead code.</para>
 /// </remarks>
 public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 {
@@ -30,6 +33,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
     private readonly NpgsqlDataSource _dataSource;
     private readonly PostgresSchemaBootstrap _bootstrap;
     private readonly TimeProvider _clock;
+    private readonly string _initDdl;
 
     /// <summary>
     /// Creates the hint source over <paramref name="dataSource"/> (whose lifetime the caller owns),
@@ -42,6 +46,16 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         _dataSource = dataSource;
         _bootstrap = new PostgresSchemaBootstrap(dataSource, schema);
         _clock = clock ?? TimeProvider.System;
+        _initDdl =
+            $"""
+            CREATE SCHEMA IF NOT EXISTS "{_bootstrap.Schema}";
+            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".field_hints (
+                form_type   text PRIMARY KEY,
+                table_name  text NOT NULL,
+                fields      jsonb NOT NULL,
+                declared_at timestamptz NOT NULL
+            );
+            """;
     }
 
     /// <summary>Declares (or replaces) the field hints for a form type.</summary>
@@ -67,7 +81,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         {
             Value = JsonSerializer.Serialize(hints.Fields, FieldJson),
         });
-        command.Parameters.AddWithValue("at", _clock.GetUtcNow());
+        command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -94,17 +108,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
     }
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)
-        => _bootstrap.EnsureAsync(
-            $"""
-            CREATE SCHEMA IF NOT EXISTS "{_bootstrap.Schema}";
-            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".field_hints (
-                form_type   text PRIMARY KEY,
-                table_name  text NOT NULL,
-                fields      jsonb NOT NULL,
-                declared_at timestamptz NOT NULL
-            );
-            """,
-            cancellationToken);
+        => _bootstrap.EnsureAsync(_initDdl, cancellationToken);
 
     /// <summary>Disposes the init gate. The injected data source is caller-owned and left untouched.</summary>
     public void Dispose() => _bootstrap.Dispose();

@@ -29,6 +29,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
     private readonly NpgsqlDataSource _dataSource;
     private readonly PostgresSchemaBootstrap _bootstrap;
     private readonly TimeProvider _clock;
+    private readonly string _initDdl;
 
     /// <summary>
     /// Creates a store over <paramref name="dataSource"/> (whose lifetime the caller owns), isolated in
@@ -41,6 +42,20 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         _dataSource = dataSource;
         _bootstrap = new PostgresSchemaBootstrap(dataSource, schema);
         _clock = clock ?? TimeProvider.System;
+        _initDdl =
+            $"""
+            CREATE SCHEMA IF NOT EXISTS "{_bootstrap.Schema}";
+            CREATE SEQUENCE IF NOT EXISTS "{_bootstrap.Schema}".raw_watermark_seq AS bigint START 1 MINVALUE 1;
+            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".raw_documents (
+                id uuid PRIMARY KEY,
+                form_type text NOT NULL,
+                body jsonb NOT NULL,
+                watermark bigint NOT NULL UNIQUE,
+                appended_at timestamptz NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
+                ON "{_bootstrap.Schema}".raw_documents (form_type, watermark);
+            """;
     }
 
     public async Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default)
@@ -150,21 +165,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         reader.GetFieldValue<DateTimeOffset>(4));
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)
-        => _bootstrap.EnsureAsync(
-            $"""
-            CREATE SCHEMA IF NOT EXISTS "{_bootstrap.Schema}";
-            CREATE SEQUENCE IF NOT EXISTS "{_bootstrap.Schema}".raw_watermark_seq AS bigint START 1 MINVALUE 1;
-            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".raw_documents (
-                id uuid PRIMARY KEY,
-                form_type text NOT NULL,
-                body jsonb NOT NULL,
-                watermark bigint NOT NULL UNIQUE,
-                appended_at timestamptz NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
-                ON "{_bootstrap.Schema}".raw_documents (form_type, watermark);
-            """,
-            cancellationToken);
+        => _bootstrap.EnsureAsync(_initDdl, cancellationToken);
 
     /// <summary>Disposes the init gate. The injected data source is caller-owned and left untouched.</summary>
     public void Dispose() => _bootstrap.Dispose();

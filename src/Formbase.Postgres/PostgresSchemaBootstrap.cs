@@ -22,6 +22,7 @@ internal sealed partial class PostgresSchemaBootstrap : IDisposable
     private readonly NpgsqlDataSource _dataSource;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private volatile bool _initialized;
+    private volatile bool _disposed;
 
     /// <summary>
     /// Validates <paramref name="schema"/> and derives its advisory lock key. Touches no server —
@@ -101,6 +102,22 @@ internal sealed partial class PostgresSchemaBootstrap : IDisposable
     [GeneratedRegex("^[a-zA-Z_][a-zA-Z0-9_]*$")]
     private static partial Regex SchemaNamePattern();
 
-    /// <summary>Disposes the init gate. The injected data source is caller-owned and left untouched.</summary>
-    public void Dispose() => _gate.Dispose();
+    /// <summary>
+    /// Disposes the init gate. The injected data source is caller-owned and left untouched. Idempotent:
+    /// <see cref="PostgresFieldHintSource"/> is registered both concretely and behind
+    /// <see cref="Formbase.Core.Ports.IFieldHintSource"/> (see
+    /// <c>PostgresServiceCollectionExtensions.AddPostgresFieldHints</c>), so the container may resolve
+    /// and dispose the same instance twice — this guard makes that explicitly safe rather than relying
+    /// on <see cref="SemaphoreSlim.Dispose()"/> happening to tolerate a second call.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _gate.Dispose();
+    }
 }
