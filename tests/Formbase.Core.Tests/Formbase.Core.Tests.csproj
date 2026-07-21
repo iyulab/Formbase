@@ -22,9 +22,6 @@
 
     Both fixtures are self-contained. Set FORMBASE_MORPHDB_URL to run the MorphDB suite against an
     already-running service instead of starting one.
-
-    The MorphDB suite still has failing rows: MorphDB.Client's batch endpoint does not exist on the
-    service, so every insert-dependent case fails. Until that is fixed the suite is not a CI gate.
   -->
   <PropertyGroup Condition="'$(IncludeLiveTests)' == 'true'">
     <IncludePostgresLiveTests>true</IncludePostgresLiveTests>
@@ -37,6 +34,14 @@
 
   <ItemGroup Condition="'$(IncludeMorphDbLiveTests)' != 'true'">
     <Compile Remove="Live/MorphDb/**/*.cs" />
+  </ItemGroup>
+
+  <!--
+    The restart-survival suite needs both live services at once: formbase's own state must survive in
+    Postgres and the projected table must survive in MorphDB. So it compiles only when both gates are open.
+  -->
+  <ItemGroup Condition="'$(IncludePostgresLiveTests)' != 'true' or '$(IncludeMorphDbLiveTests)' != 'true'">
+    <Compile Remove="Live/Durable/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>
