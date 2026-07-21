@@ -17,6 +17,11 @@ public static class PostgresServiceCollectionExtensions
     /// Registers an <see cref="NpgsqlDataSource"/> built from <paramref name="connectionString"/> and the
     /// durable <see cref="IRawStore"/> backed by it, isolated in <paramref name="schema"/>. Pair with
     /// <c>AddFormbaseCore</c> and the remaining store ports to complete a durable-truth engine.
+    /// The data source is registered with <c>TryAddSingleton</c>, so if this helper runs after
+    /// <see cref="AddPostgresProjectionState(IServiceCollection, string, string)"/> or
+    /// <see cref="AddPostgresFieldHints(IServiceCollection, string, string)"/> already registered one
+    /// (even from a different connection string), that first data source wins and this
+    /// <paramref name="connectionString"/> is silently ignored for pooling purposes.
     /// </summary>
     public static IServiceCollection AddPostgresRawStore(this IServiceCollection services, string connectionString, string schema = "formbase")
     {
@@ -54,6 +59,11 @@ public static class PostgresServiceCollectionExtensions
     /// durable <see cref="IProjectionState"/> backed by it, isolated in <paramref name="schema"/>. Pair it
     /// with <see cref="AddPostgresFieldHints(IServiceCollection, string, string)"/>: a query resolves its
     /// table through the proposed schema, so durable state alone does not survive a restart.
+    /// The data source is registered with <c>TryAddSingleton</c>, so if this helper runs after
+    /// <see cref="AddPostgresRawStore(IServiceCollection, string, string)"/> or
+    /// <see cref="AddPostgresFieldHints(IServiceCollection, string, string)"/> already registered one
+    /// (even from a different connection string), that first data source wins and this
+    /// <paramref name="connectionString"/> is silently ignored for pooling purposes.
     /// </summary>
     public static IServiceCollection AddPostgresProjectionState(this IServiceCollection services, string connectionString, string schema = "formbase")
     {
@@ -84,6 +94,11 @@ public static class PostgresServiceCollectionExtensions
     /// durable <see cref="IFieldHintSource"/> backed by it, isolated in <paramref name="schema"/>. The
     /// concrete <see cref="PostgresFieldHintSource"/> is resolvable too, because declaring hints is not
     /// on the port.
+    /// The data source is registered with <c>TryAddSingleton</c>, so if this helper runs after
+    /// <see cref="AddPostgresRawStore(IServiceCollection, string, string)"/> or
+    /// <see cref="AddPostgresProjectionState(IServiceCollection, string, string)"/> already registered one
+    /// (even from a different connection string), that first data source wins and this
+    /// <paramref name="connectionString"/> is silently ignored for pooling purposes.
     /// </summary>
     public static IServiceCollection AddPostgresFieldHints(this IServiceCollection services, string connectionString, string schema = "formbase")
     {

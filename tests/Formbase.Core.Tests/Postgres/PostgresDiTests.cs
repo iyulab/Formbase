@@ -15,6 +15,7 @@ namespace Formbase.Core.Tests.Postgres;
 public class PostgresDiTests
 {
     private const string AnyConnString = "Host=localhost;Port=5432;Database=fb;Username=fb;Password=fb";
+    private const string OtherConnString = "Host=localhost;Port=5432;Database=other-fb;Username=fb;Password=fb";
 
     [Fact]
     public async Task AddPostgresRawStore_registers_the_postgres_backed_raw_store()
@@ -96,6 +97,22 @@ public class PostgresDiTests
         // Three registrations of NpgsqlDataSource would mean three connection pools against one
         // database, with the stores silently split across them.
         provider.GetServices<NpgsqlDataSource>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task The_first_registered_connection_string_wins_when_the_durable_helpers_disagree()
+    {
+        var services = new ServiceCollection();
+        // Different connection strings on purpose: TryAddSingleton means the FIRST data source
+        // registered wins, so AddPostgresFieldHints's OtherConnString below must be silently discarded
+        // in favor of AddPostgresRawStore's AnyConnString registered here first.
+        services.AddPostgresRawStore(AnyConnString);
+        services.AddPostgresFieldHints(OtherConnString);
+        await using var provider = services.BuildServiceProvider();
+
+        var dataSource = provider.GetRequiredService<NpgsqlDataSource>();
+
+        dataSource.ConnectionString.Should().Contain("Database=fb;").And.NotContain("other-fb");
     }
 
     [Fact]
