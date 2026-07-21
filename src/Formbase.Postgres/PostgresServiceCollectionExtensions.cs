@@ -1,5 +1,6 @@
 using Formbase.Core.Ports;
 using Formbase.Postgres;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 
 namespace Microsoft.Extensions.DependencyInjection;
@@ -37,8 +38,76 @@ public static class PostgresServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(dataSourceFactory);
         ArgumentException.ThrowIfNullOrWhiteSpace(schema);
 
-        services.AddSingleton(dataSourceFactory);
+        // TryAdd, not Add: the durable profile registers three stores that must share one connection
+        // pool. Plain Add would leave three data sources registered and resolve the last one, silently
+        // splitting the stores across pools. The trade is deliberate and documented on each helper:
+        // with TryAdd the FIRST registration wins, so three helpers given different connection strings
+        // all use the first. Detecting that would mean comparing opaque factory delegates; the honest
+        // fix is to say so where a caller reads it, which the XML docs below do.
+        services.TryAddSingleton(dataSourceFactory);
         services.AddSingleton<IRawStore>(sp => new PostgresRawStore(sp.GetRequiredService<NpgsqlDataSource>(), schema));
+        return services;
+    }
+
+    /// <summary>
+    /// Registers an <see cref="NpgsqlDataSource"/> built from <paramref name="connectionString"/> and the
+    /// durable <see cref="IProjectionState"/> backed by it, isolated in <paramref name="schema"/>. Pair it
+    /// with <see cref="AddPostgresFieldHints(IServiceCollection, string, string)"/>: a query resolves its
+    /// table through the proposed schema, so durable state alone does not survive a restart.
+    /// </summary>
+    public static IServiceCollection AddPostgresProjectionState(this IServiceCollection services, string connectionString, string schema = "formbase")
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
+        return services.AddPostgresProjectionState(_ => NpgsqlDataSource.Create(connectionString), schema);
+    }
+
+    /// <summary>
+    /// Registers the durable <see cref="IProjectionState"/> over an <see cref="NpgsqlDataSource"/> built by
+    /// <paramref name="dataSourceFactory"/>. The first registered data source wins, so the durable stores
+    /// share one pool. The state store is a singleton, isolated in <paramref name="schema"/>.
+    /// </summary>
+    public static IServiceCollection AddPostgresProjectionState(this IServiceCollection services, Func<IServiceProvider, NpgsqlDataSource> dataSourceFactory, string schema = "formbase")
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(dataSourceFactory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
+
+        services.TryAddSingleton(dataSourceFactory);
+        services.AddSingleton<IProjectionState>(sp => new PostgresProjectionState(sp.GetRequiredService<NpgsqlDataSource>(), schema));
+        return services;
+    }
+
+    /// <summary>
+    /// Registers an <see cref="NpgsqlDataSource"/> built from <paramref name="connectionString"/> and the
+    /// durable <see cref="IFieldHintSource"/> backed by it, isolated in <paramref name="schema"/>. The
+    /// concrete <see cref="PostgresFieldHintSource"/> is resolvable too, because declaring hints is not
+    /// on the port.
+    /// </summary>
+    public static IServiceCollection AddPostgresFieldHints(this IServiceCollection services, string connectionString, string schema = "formbase")
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
+        return services.AddPostgresFieldHints(_ => NpgsqlDataSource.Create(connectionString), schema);
+    }
+
+    /// <summary>
+    /// Registers the durable <see cref="IFieldHintSource"/> over an <see cref="NpgsqlDataSource"/> built by
+    /// <paramref name="dataSourceFactory"/>. The first registered data source wins, so the durable stores
+    /// share one pool. The concrete <see cref="PostgresFieldHintSource"/> resolves to the same singleton,
+    /// so callers can declare hints through it.
+    /// </summary>
+    public static IServiceCollection AddPostgresFieldHints(this IServiceCollection services, Func<IServiceProvider, NpgsqlDataSource> dataSourceFactory, string schema = "formbase")
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(dataSourceFactory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
+
+        services.TryAddSingleton(dataSourceFactory);
+        services.AddSingleton(sp => new PostgresFieldHintSource(sp.GetRequiredService<NpgsqlDataSource>(), schema));
+        services.AddSingleton<IFieldHintSource>(sp => sp.GetRequiredService<PostgresFieldHintSource>());
         return services;
     }
 }

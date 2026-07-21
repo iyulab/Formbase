@@ -1,4 +1,6 @@
+using Formbase.Core;
 using Formbase.Core.Ports;
+using Formbase.MorphDb;
 using Formbase.Postgres;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -58,5 +60,80 @@ public class PostgresDiTests
         var act = () => services.AddPostgresRawStore(connectionString: "  ");
 
         act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task AddPostgresProjectionState_registers_the_postgres_backed_state()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresProjectionState(AnyConnString);
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IProjectionState>().Should().BeOfType<PostgresProjectionState>();
+    }
+
+    [Fact]
+    public async Task AddPostgresFieldHints_registers_the_port_and_the_concrete_source()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresFieldHints(AnyConnString);
+        await using var provider = services.BuildServiceProvider();
+
+        // The concrete type must be resolvable too: DeclareAsync is not on the port.
+        var concrete = provider.GetRequiredService<PostgresFieldHintSource>();
+        provider.GetRequiredService<IFieldHintSource>().Should().BeSameAs(concrete);
+    }
+
+    [Fact]
+    public async Task The_durable_trio_shares_one_data_source()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresRawStore(AnyConnString);
+        services.AddPostgresProjectionState(AnyConnString);
+        services.AddPostgresFieldHints(AnyConnString);
+        await using var provider = services.BuildServiceProvider();
+
+        // Three registrations of NpgsqlDataSource would mean three connection pools against one
+        // database, with the stores silently split across them.
+        provider.GetServices<NpgsqlDataSource>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task The_durable_composition_resolves_an_engine()
+    {
+        var services = new ServiceCollection();
+        // The exact registration set the README tells consumers to copy. Each helper is covered in
+        // isolation above; this guards the combination — a missing port only shows up on resolve.
+        services.AddFormbaseCore();
+        services.AddPostgresRawStore(AnyConnString);
+        services.AddPostgresProjectionState(AnyConnString);
+        services.AddPostgresFieldHints(AnyConnString);
+        services.AddMorphDbProjectionStore("http://localhost:8080");
+        await using var provider = services.BuildServiceProvider();
+
+        // Resolution alone touches no server: every store initializes lazily.
+        provider.GetRequiredService<FormbaseEngine>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AddPostgresProjectionState_factory_overload_registers_state_over_the_supplied_data_source()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresProjectionState(_ => NpgsqlDataSource.Create(AnyConnString));
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IProjectionState>().Should().BeOfType<PostgresProjectionState>();
+        provider.GetRequiredService<NpgsqlDataSource>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task AddPostgresFieldHints_factory_overload_registers_source_over_the_supplied_data_source()
+    {
+        var services = new ServiceCollection();
+        services.AddPostgresFieldHints(_ => NpgsqlDataSource.Create(AnyConnString));
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IFieldHintSource>().Should().BeOfType<PostgresFieldHintSource>();
+        provider.GetRequiredService<NpgsqlDataSource>().Should().NotBeNull();
     }
 }
