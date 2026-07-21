@@ -102,7 +102,7 @@ Eight ports define the engine; everything else composes them.
 
 - `Formbase.Core` — primitives, the six ports, the projector/intake/query services, and in-memory implementations. **Zero external package dependencies.**
 - `Formbase.MorphDb` — `IProjectionStore` implemented over `MorphDB.Client`, plus `AddMorphDbProjectionStore`. A thin translation layer; all projection policy stays in the core.
-- `Formbase.Postgres` — the durable, append-only `IRawStore` over PostgreSQL (direct Npgsql, never through MorphDB), plus `AddPostgresRawStore`. Appends are serialized so watermark assignment order equals commit order.
+- `Formbase.Postgres` — the durable, append-only `IRawStore` over PostgreSQL (direct Npgsql, never through MorphDB), plus the durable `IProjectionState` and `IFieldHintSource` adapters. Registration helpers: `AddPostgresRawStore`, `AddPostgresProjectionState`, `AddPostgresFieldHints`. Appends are serialized so watermark assignment order equals commit order.
 - `Formbase.DependencyInjection` — `AddFormbaseCore` / `AddFormbaseInMemory` wiring. Each adapter package ships its own registration helper, so this package stays free of adapter dependencies.
 
 **Design decisions worth knowing**
@@ -111,6 +111,28 @@ Eight ports define the engine; everything else composes them.
 - **Raw lives in Formbase, not MorphDB.** Formbase owns its source of truth, so a MorphDB outage never blocks intake or document reads, and re-projection is a full scan Formbase controls rather than something tunneled through a REST API.
 - **`FormType` never reaches MorphDB.** Projected tables are generic; the form concept is a Formbase-internal string.
 - **Layout is outside; structure is inside.** How a form is laid out, rendered, or printed is an adapter/UI concern and never enters the engine. Which parts of a form define an entity boundary is *derivation policy* and belongs in the core. The declaration vocabulary that carries that distinction is still open — see Roadmap.
+
+### Durable composition
+
+The three Postgres registrations belong together. Registering only the raw store leaves the
+projection state and the field hints in process memory, so a restart forgets the projection —
+a query then answers `NotProjected` even though both databases still hold the data.
+
+```csharp
+services.AddFormbaseCore();
+services.AddPostgresRawStore(connectionString);        // raw = source of truth
+services.AddPostgresProjectionState(connectionString); // the engine's own ledger
+services.AddPostgresFieldHints(connectionString);      // what a form type projects into
+services.AddMorphDbProjectionStore(morphDbUrl);
+```
+
+Declare hints through the concrete source, since declaring is not on the port:
+
+```csharp
+var hints = provider.GetRequiredService<PostgresFieldHintSource>();
+await hints.DeclareAsync(new FormTypeHints(type, "qc_table",
+    [new FieldHint("serial", ColumnType.Text, Nullable: false)]));
+```
 
 ## Building and testing
 
@@ -135,6 +157,7 @@ Implemented:
 
 - Raw-first intake, append-only raw store, idempotent re-submission
 - **Durable Postgres raw store** — Formbase-owned source of truth over Npgsql, contract-verified against a real PostgreSQL (including concurrent appends); the in-memory raw store remains the reference implementation
+- **Durable Postgres projection state and field hints** — `PostgresProjectionState` and `PostgresFieldHintSource` survive a restart alongside the raw store, closing the gap where a restarted process forgot a projection that both databases still held
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection
 - Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — type- and API-verified; the projection-store contract has been run end-to-end against a real MorphDB service and passes with the client release that carries the batch and value-mapping fixes (see below)

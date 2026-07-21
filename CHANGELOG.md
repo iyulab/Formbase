@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `PostgresProjectionState` and `PostgresFieldHintSource` — the durable profile now survives a restart.
+  Register them alongside `AddPostgresRawStore`; with either one missing, a restarted process answers
+  `NotProjected` because a query resolves its table through the proposed schema.
+- `AddPostgresProjectionState` and `AddPostgresFieldHints` DI extensions. The Postgres data source is
+  now registered with `TryAddSingleton`, so the three stores share one connection pool.
+
 ## 0.3.0
 
 Follows MorphDB 0.7.0, which renamed the concept it had been calling a tenant.
