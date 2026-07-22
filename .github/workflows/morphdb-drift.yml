@@ -1,0 +1,41 @@
+# Drift watch, separated from CI by design (§3.10-C2): the regular pipeline pins the MorphDB image
+# to the compatibility pair (0.8.x) so a red build always means *our* defect, while this schedule
+# runs the same live contract suite against `latest` — a red run here means the server moved under
+# us, which is a signal to investigate, not a broken build.
+name: MorphDB Drift Watch
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC — weekly is enough for a signal, not a burn
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: 10.0.x
+
+jobs:
+  drift:
+    name: Live contract against morphdb:latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Test (MorphDB live contract, latest image)
+        env:
+          FORMBASE_MORPHDB_IMAGE: ghcr.io/iyulab/morphdb:latest
+        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true
