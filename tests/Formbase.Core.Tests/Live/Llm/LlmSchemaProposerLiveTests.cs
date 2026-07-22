@@ -1,12 +1,9 @@
-using System.ClientModel;
 using Formbase.Core.InMemory;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
 using Formbase.SchemaIntelligence;
-using Microsoft.Extensions.AI;
-using OpenAI;
 
 namespace Formbase.Core.Tests.Live.Llm;
 
@@ -22,21 +19,6 @@ public class LlmSchemaProposerLiveTests
 {
     private static readonly FormTypeRef Inspections = FormTypeRef.Create("inspections");
 
-    private static IChatClient CreateClient()
-    {
-        var endpoint = Environment.GetEnvironmentVariable("FORMBASE_LLM_ENDPOINT")
-            ?? throw new InvalidOperationException("FORMBASE_LLM_ENDPOINT is required for the LLM live suite.");
-        var apiKey = Environment.GetEnvironmentVariable("FORMBASE_LLM_API_KEY")
-            ?? throw new InvalidOperationException("FORMBASE_LLM_API_KEY is required for the LLM live suite.");
-        var model = Environment.GetEnvironmentVariable("FORMBASE_LLM_MODEL")
-            ?? throw new InvalidOperationException("FORMBASE_LLM_MODEL is required for the LLM live suite.");
-
-        var openAi = new OpenAIClient(
-            new ApiKeyCredential(apiKey),
-            new OpenAIClientOptions { Endpoint = new Uri(endpoint.TrimEnd('/') + "/v1") });
-        return openAi.GetChatClient(model).AsIChatClient();
-    }
-
     [Fact]
     public async Task A_real_model_proposes_a_projectable_schema_from_raw_documents()
     {
@@ -49,7 +31,7 @@ public class LlmSchemaProposerLiveTests
         await intake.AcceptAsync(Inspections, DocumentBody.Parse(
             """{"lot":"L-2024-003","qty":null,"passed":true,"inspected_at":"2026-07-03T11:15:00Z","note":"recheck"}"""));
 
-        using var client = CreateClient();
+        using var client = LlmLiveClient.Create();
         var proposer = new LlmSchemaProposer(raw, client);
 
         var schema = await proposer.ProposeAsync(Inspections);
