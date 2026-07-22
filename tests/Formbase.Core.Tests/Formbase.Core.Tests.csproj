@@ -37,6 +37,21 @@
   </ItemGroup>
 
   <!--
+    Real-model smoke for the LLM proposer spike. Needs a reachable OpenAI-compatible endpoint:
+      FORMBASE_LLM_ENDPOINT / FORMBASE_LLM_API_KEY / FORMBASE_LLM_MODEL
+      dotnet test -p:IncludeLlmLiveTests=true
+    Excluded from IncludeLiveTests on purpose: those suites are self-contained (Docker only),
+    this one depends on an external model being up.
+  -->
+  <ItemGroup Condition="'$(IncludeLlmLiveTests)' != 'true'">
+    <Compile Remove="Live/Llm/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IncludeLlmLiveTests)' == 'true'">
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+  </ItemGroup>
+
+  <!--
     The restart-survival suite needs both live services at once: formbase's own state must survive in
     Postgres and the projected table must survive in MorphDB. So it compiles only when both gates are open.
   -->
