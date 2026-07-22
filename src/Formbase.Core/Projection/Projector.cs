@@ -48,6 +48,7 @@ public sealed class Projector : IProjector
 
             var rows = new List<IReadOnlyDictionary<string, object?>>();
             var skips = new List<ProjectionSkip>();
+            var absentCounts = new Dictionary<string, int>(StringComparer.Ordinal);
 
             await foreach (var document in _rawStore.StreamAsync(type, Watermark.Zero, cancellationToken).ConfigureAwait(false))
             {
@@ -57,9 +58,13 @@ public sealed class Projector : IProjector
                     continue;
                 }
 
-                if (DocumentMapper.TryMap(document, schema.Columns, out var row, out var reason))
+                if (DocumentMapper.TryMap(document, schema.Columns, out var row, out var absentFields, out var reason))
                 {
                     rows.Add(row);
+                    foreach (var field in absentFields)
+                    {
+                        absentCounts[field] = absentCounts.GetValueOrDefault(field) + 1;
+                    }
                 }
                 else
                 {
@@ -75,7 +80,7 @@ public sealed class Projector : IProjector
             var stamp = new ProjectionStamp(rawHead, schema.TableName, schema.Fingerprint());
             await _projectionState.SetProjectedAsync(type, stamp, cancellationToken).ConfigureAwait(false);
 
-            return ProjectionResult.Completed(inserted, skips, rawHead);
+            return ProjectionResult.Completed(inserted, skips, absentCounts, rawHead);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `ProjectionResult.AbsentFieldCounts` — per declared column, how many projected rows came from
+  documents that did not carry the field at all. An explicit `null` is an answer and is not counted;
+  a field the document never had is a different fact. The projected NULL still conflates both in the
+  table (row-level distinction is a form-versioning concern, deliberately out of scope here) — the
+  counts make the conflation visible per projection instead of silent. `ProjectionResult.Completed`
+  gains the corresponding parameter (breaking only for direct factory callers).
+
+### Changed
+
+- A required-field skip now names which fact failed: `absent from the document` vs `is null`
+  (previously both read `is missing`).
+
 ## 0.4.0
 
 Pairs with MorphDB `0.8.x`: this release requires `MorphDB.Client 0.8.0`, so it is a minor for the

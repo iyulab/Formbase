@@ -148,11 +148,13 @@ public class ProjectionResultTests
     public void Completed_reports_counts_and_watermark()
     {
         var skips = new[] { new ProjectionSkip(DocumentId.New(), "unmappable") };
-        var result = ProjectionResult.Completed(inserted: 9, skipped: skips, watermark: new Watermark(9));
+        var absences = new Dictionary<string, int> { ["qty"] = 3 };
+        var result = ProjectionResult.Completed(inserted: 9, skipped: skips, absentFieldCounts: absences, watermark: new Watermark(9));
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(9);
         result.Skipped.Should().HaveCount(1);
+        result.AbsentFieldCounts.Should().Equal(absences);
         result.ProjectedWatermark.Should().Be(new Watermark(9));
     }
 }

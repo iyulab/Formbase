@@ -91,6 +91,62 @@ public class ProjectorTests
     }
 
     [Fact]
+    public async Task Absent_fields_are_counted_apart_from_explicit_nulls()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"L-1","qty":null}"""); // explicit null — the writer said "no value"
+        await h.Accept("""{"lot":"L-2"}""");            // absent — the field did not exist for this document
+        await h.Accept("""{"lot":"L-3","qty":3}""");
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        result.Inserted.Should().Be(3);
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 },
+            "an explicit null is an answer; a field the document never had is a different fact");
+    }
+
+    [Fact]
+    public async Task Absence_counts_cover_only_rows_that_landed()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"qty":1}"""); // skipped — required 'lot' absent; its absences are reported via the skip, not the counts
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        result.Skipped.Should().ContainSingle();
+        result.AbsentFieldCounts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_required_field_skip_names_absent_and_null_differently()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"qty":1}""");              // 'lot' absent
+        await h.Accept("""{"lot":null,"qty":2}""");   // 'lot' explicitly null
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        result.Skipped.Should().HaveCount(2);
+        result.Skipped[0].Reason.Should().Contain("absent");
+        result.Skipped[1].Reason.Should().Contain("null");
+    }
+
+    [Fact]
+    public async Task A_no_schema_result_reports_no_absences()
+    {
+        var h = new Harness();
+        await h.Accept("""{"lot":"L-1"}""");
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        result.Projected.Should().BeFalse();
+        result.AbsentFieldCounts.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task A_type_mismatch_skips_the_document()
     {
         var h = new Harness();

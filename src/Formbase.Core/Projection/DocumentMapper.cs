@@ -17,6 +17,7 @@ internal static class DocumentMapper
         StoredDocument document,
         IReadOnlyList<ColumnDef> domainColumns,
         out IReadOnlyDictionary<string, object?> row,
+        out IReadOnlyList<string> absentFields,
         out string reason)
     {
         var mapped = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -25,24 +26,32 @@ internal static class DocumentMapper
             [ProjectionSystemColumns.Watermark] = document.Watermark.Value,
         };
 
+        List<string>? absent = null;
         var root = document.Body.Root;
         foreach (var column in domainColumns)
         {
-            if (!TryConvert(root, column, out var value, out reason))
+            if (!TryConvert(root, column, out var value, out var fieldAbsent, out reason))
             {
                 row = mapped;
+                absentFields = [];
                 return false;
+            }
+
+            if (fieldAbsent)
+            {
+                (absent ??= []).Add(column.Name);
             }
 
             mapped[column.Name] = value;
         }
 
         row = mapped;
+        absentFields = absent ?? (IReadOnlyList<string>)[];
         reason = string.Empty;
         return true;
     }
 
-    private static bool TryConvert(JsonElement root, ColumnDef column, out object? value, out string reason)
+    private static bool TryConvert(JsonElement root, ColumnDef column, out object? value, out bool absent, out string reason)
     {
         value = null;
         reason = string.Empty;
@@ -50,6 +59,9 @@ internal static class DocumentMapper
         var present = root.ValueKind == JsonValueKind.Object
             && root.TryGetProperty(column.Name, out var element);
         var field = present ? root.GetProperty(column.Name) : default;
+        // A field the document never had is a different fact from an explicit null — the projected
+        // NULL conflates both, so the distinction is surfaced (absence counts, skip reasons).
+        absent = !present;
 
         if (!present || field.ValueKind == JsonValueKind.Null)
         {
@@ -58,7 +70,9 @@ internal static class DocumentMapper
                 return true;
             }
 
-            reason = $"required field '{column.Name}' is missing";
+            reason = present
+                ? $"required field '{column.Name}' is null"
+                : $"required field '{column.Name}' is absent from the document";
             return false;
         }
 
