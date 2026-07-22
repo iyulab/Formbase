@@ -99,6 +99,71 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task Redeclaring_columns_without_reprojecting_makes_the_query_stale()
+    {
+        // C1 case A: hints were redeclared (a column added) but ProjectAsync never re-ran. No new
+        // documents arrived, so the watermark alone would report "fresh" — a silent wrong answer.
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc);
+
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer, Nullable: true),
+            new FieldHint("inspector", ColumnType.Text),
+        ]));
+
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+
+        result.Stale.Should().BeTrue("the projected table no longer matches the declared shape");
+        result.Rows.Should().HaveCount(1, "the last projected snapshot still serves");
+    }
+
+    [Fact]
+    public async Task Redeclaring_the_table_name_without_reprojecting_throws_NotProjected()
+    {
+        // C1 case B: the declaration moved to a table that was never built. Reporting the missing
+        // table as ProjectionUnavailable would misdiagnose a re-projection gap as a backend outage.
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc);
+
+        h.Hints.Declare(new FormTypeHints(Qc, "qc_v2",
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer, Nullable: true),
+        ]));
+
+        var act = () => h.Query.QueryAsync(Qc, QuerySpec.All);
+
+        await act.Should().ThrowAsync<NotProjectedException>();
+    }
+
+    [Fact]
+    public async Task Reprojecting_after_a_redeclaration_restores_freshness()
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc);
+
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer, Nullable: true),
+            new FieldHint("inspector", ColumnType.Text),
+        ]));
+        await h.Projector.ProjectAsync(Qc);
+
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+
+        result.Stale.Should().BeFalse("re-projection materialized the redeclared shape");
+    }
+
+    [Fact]
     public async Task An_int_filter_matches_a_long_stored_value_via_coercion()
     {
         var h = new Harness();

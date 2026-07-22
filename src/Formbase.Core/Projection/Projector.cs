@@ -68,7 +68,12 @@ public sealed class Projector : IProjector
             }
 
             var inserted = await _projectionStore.BulkInsertAsync(schema.TableName, rows, cancellationToken).ConfigureAwait(false);
-            await _projectionState.SetProjectedAsync(type, rawHead, cancellationToken).ConfigureAwait(false);
+
+            // The stamp fingerprints the *proposed* schema (declared columns), not fullSchema: status
+            // evaluation compares it against the proposer's current output, which never carries the
+            // system columns.
+            var stamp = new ProjectionStamp(rawHead, schema.TableName, schema.Fingerprint());
+            await _projectionState.SetProjectedAsync(type, stamp, cancellationToken).ConfigureAwait(false);
 
             return ProjectionResult.Completed(inserted, skips, rawHead);
         }

@@ -9,6 +9,27 @@
   `NotProjected` because a query resolves its table through the proposed schema.
 - `AddPostgresProjectionState` and `AddPostgresFieldHints` DI extensions. The Postgres data source is
   now registered with `TryAddSingleton`, so the three stores share one connection pool.
+- `ProjectionStamp` — what a completed projection materialized: watermark, table name, and the schema
+  fingerprint (`TableSchema.Fingerprint()`). Recorded by the projector, compared by
+  `ProjectionStatus.Evaluate`.
+
+### Changed
+
+- **Staleness is now shape-aware** (fixes the "redeclaring hints leaves the projection silently
+  stale" gap). Redeclaring hints without re-projecting reads `Stale` even though no document
+  arrived; a declaration that moved to a new table name (or was removed) reads `NotProjected`, and a
+  record query answers it with `NotProjectedException` instead of `ProjectionUnavailableException` —
+  a projection gap is no longer misdiagnosed as a backend outage.
+- **Breaking — `IProjectionState`** stores a `ProjectionStamp` instead of a bare watermark:
+  `GetProjectedWatermarkAsync` → `GetAsync`, `SetProjectedAsync(type, watermark)` →
+  `SetProjectedAsync(type, stamp)`. Custom implementations must persist all three fields.
+- **Breaking — `ProjectionStatus.Evaluate(stamp, rawHead, currentSchema)`** takes the stamp and the
+  currently proposed schema (was `(projectedWatermark, rawHead)`).
+- **Breaking — `FormbaseEngine`** takes an `ISchemaProposer` (status derivation needs the current
+  declaration). DI consumers are unaffected; direct constructor calls gain one argument.
+- **Breaking — durable state schema**: `formbase.projection_state` gains `table_name` and
+  `schema_fingerprint` columns. The table ships unreleased (same cycle as `PostgresProjectionState`
+  itself), so no migration is provided; drop the table if you ran a pre-release build.
 
 ## 0.3.0
 

@@ -35,17 +35,24 @@ public sealed class RecordQuery : IRecordQuery
 
     public async Task<QueryResult> QueryAsync(FormTypeRef type, QuerySpec spec, CancellationToken cancellationToken = default)
     {
-        var projectedWatermark = await _projectionState.GetProjectedWatermarkAsync(type, cancellationToken).ConfigureAwait(false);
+        var stamp = await _projectionState.GetAsync(type, cancellationToken).ConfigureAwait(false);
         var schema = await _proposer.ProposeAsync(type, cancellationToken).ConfigureAwait(false);
 
-        if (projectedWatermark is null || schema is null)
+        if (stamp is null || schema is null)
         {
             // No projection (or its schema is gone): distinct from an empty result.
             throw new NotProjectedException(type);
         }
 
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
-        var status = ProjectionStatus.Evaluate(projectedWatermark, rawHead);
+        var status = ProjectionStatus.Evaluate(stamp, rawHead, schema);
+
+        if (status.State == ProjectionState.NotProjected)
+        {
+            // The current declaration's table was never built (e.g. the declaration moved to a new
+            // table name without a re-projection): a projection gap, not a backend outage.
+            throw new NotProjectedException(type);
+        }
         var coerced = WithDeterministicOrder(Coerce(spec, schema));
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;

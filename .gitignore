@@ -21,3 +21,6 @@ coverage*.xml
 ## Dev-tracking docs live in the umbrella, not the submodule (CLAUDE.md rule)
 claudedocs/
 CLAUDE.md
+
+# Serena (semantic tooling) project state
+.serena/

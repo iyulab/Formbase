@@ -18,19 +18,22 @@ public sealed class FormbaseEngine
     private readonly IProjector _projector;
     private readonly IRecordQuery _recordQuery;
     private readonly IProjectionState _projectionState;
+    private readonly ISchemaProposer _proposer;
 
     public FormbaseEngine(
         IIntakeService intake,
         IRawStore rawStore,
         IProjector projector,
         IRecordQuery recordQuery,
-        IProjectionState projectionState)
+        IProjectionState projectionState,
+        ISchemaProposer proposer)
     {
         _intake = intake;
         _rawStore = rawStore;
         _projector = projector;
         _recordQuery = recordQuery;
         _projectionState = projectionState;
+        _proposer = proposer;
     }
 
     /// <summary>Accepts a document into the raw store. Never requires a declaration.</summary>
@@ -52,8 +55,9 @@ public sealed class FormbaseEngine
     /// <summary>Reports whether a form type is projected, and if so whether the projection is current.</summary>
     public async Task<ProjectionStatus> GetProjectionStatusAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
-        var projectedWatermark = await _projectionState.GetProjectedWatermarkAsync(type, cancellationToken).ConfigureAwait(false);
+        var stamp = await _projectionState.GetAsync(type, cancellationToken).ConfigureAwait(false);
+        var schema = await _proposer.ProposeAsync(type, cancellationToken).ConfigureAwait(false);
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
-        return ProjectionStatus.Evaluate(projectedWatermark, rawHead);
+        return ProjectionStatus.Evaluate(stamp, rawHead, schema);
     }
 }

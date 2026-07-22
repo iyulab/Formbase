@@ -45,7 +45,7 @@ public class ProjectorTests
         var result = await h.Projector.ProjectAsync(Qc);
 
         result.Projected.Should().BeFalse();
-        (await h.State.GetProjectedWatermarkAsync(Qc)).Should().BeNull();
+        (await h.State.GetAsync(Qc)).Should().BeNull();
         (await h.Store.TableExistsAsync(Table)).Should().BeFalse();
     }
 
@@ -62,7 +62,7 @@ public class ProjectorTests
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(2);
         result.Skipped.Should().BeEmpty();
-        (await h.State.GetProjectedWatermarkAsync(Qc)).Should().Be(new Watermark(2));
+        (await h.State.GetAsync(Qc))?.Watermark.Should().Be(new Watermark(2));
 
         var rows = await h.Store.QueryAsync(Table, QuerySpec.All);
         rows.Should().HaveCount(2);
@@ -115,7 +115,7 @@ public class ProjectorTests
         var second = await h.Projector.ProjectAsync(Qc);
 
         second.Inserted.Should().Be(2, "drop-and-rebuild reprojects the whole raw stream, not just the delta");
-        (await h.State.GetProjectedWatermarkAsync(Qc)).Should().Be(new Watermark(2));
+        (await h.State.GetAsync(Qc))?.Watermark.Should().Be(new Watermark(2));
         (await h.Store.QueryAsync(Table, QuerySpec.All)).Should().HaveCount(2);
     }
 
@@ -145,7 +145,7 @@ public class ProjectorTests
         var act = () => projector.ProjectAsync(Qc);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().BeNull("a failed rebuild must not leave a projected watermark");
+        (await state.GetAsync(Qc)).Should().BeNull("a failed rebuild must not leave a projected stamp");
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class ProjectorTests
         result.Inserted.Should().Be(2, "only the documents at or below the captured head belong to this run");
         var lots = (await h.Store.QueryAsync(Table, QuerySpec.All)).Select(row => row["lot"]);
         lots.Should().BeEquivalentTo(["L-1", "L-2"]);
-        (await h.State.GetProjectedWatermarkAsync(Qc)).Should().Be(head,
+        (await h.State.GetAsync(Qc))?.Watermark.Should().Be(head,
             "the recorded watermark must describe the rows actually written, not raw's later head");
     }
 
@@ -186,7 +186,28 @@ public class ProjectorTests
         var second = await h.Projector.ProjectAsync(Qc);
 
         second.Inserted.Should().Be(2);
-        (await h.State.GetProjectedWatermarkAsync(Qc)).Should().Be(new Watermark(2));
+        (await h.State.GetAsync(Qc))?.Watermark.Should().Be(new Watermark(2));
+    }
+
+    [Fact]
+    public async Task The_recorded_stamp_fingerprints_the_declared_shape_not_the_augmented_table()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"L-1","qty":1}""");
+
+        await h.Projector.ProjectAsync(Qc);
+
+        var declared = new TableSchema(Table,
+        [
+            new ColumnDef("lot", ColumnType.Text, Nullable: false),
+            new ColumnDef("qty", ColumnType.Integer, Nullable: true),
+        ]);
+        var stamp = await h.State.GetAsync(Qc);
+        stamp!.TableName.Should().Be(Table);
+        // Status evaluation compares against the proposer's output, which never carries the system
+        // columns — a stamp fingerprinting the augmented physical shape would always read as drifted.
+        stamp.SchemaFingerprint.Should().Be(declared.Fingerprint());
     }
 
     /// <summary>

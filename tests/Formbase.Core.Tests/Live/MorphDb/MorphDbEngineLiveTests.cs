@@ -40,7 +40,8 @@ public sealed class MorphDbEngineLiveTests
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),
-            state);
+            state,
+            proposer);
 
         // 1) Accept without any declaration.
         for (var n = 1; n <= 5; n++)

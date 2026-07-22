@@ -32,7 +32,7 @@ public class CoreEngineIntegrationTests
             var proposer = new HintSchemaProposer(Hints);
             var projector = new Projector(Raw, proposer, Store, State);
             var recordQuery = new RecordQuery(Raw, proposer, Store, State);
-            Core = new FormbaseEngine(new IntakeService(Raw), Raw, projector, recordQuery, State);
+            Core = new FormbaseEngine(new IntakeService(Raw), Raw, projector, recordQuery, State, proposer);
         }
 
         public void DeclareHints() => Hints.Declare(new FormTypeHints(Qc, Table,

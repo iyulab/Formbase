@@ -1,4 +1,5 @@
 using Formbase.Core.Primitives;
+using Formbase.Core.Schema;
 
 namespace Formbase.Core.Projection;
 
@@ -11,17 +12,23 @@ public sealed record ProjectionStatus(
     Watermark RawHead)
 {
     /// <summary>
-    /// Derives the status from the projected watermark (null when never projected) and the
-    /// current raw head. Stale when the raw stream advanced past what was projected.
+    /// Derives the status from the last projection's stamp (null when never projected), the current
+    /// raw head, and the currently proposed schema (null when no declaration proposes one).
+    /// <para>Freshness has two axes. Data: stale when the raw stream advanced past what was
+    /// projected. Shape: stale when the declaration was re-declared (fingerprint drift) after the
+    /// projection ran — the watermark never moves on a redeclaration, so it alone cannot see this.
+    /// A declaration that moved to another table (or disappeared) is <see cref="ProjectionState.NotProjected"/>:
+    /// the current declaration's table was never built, which is a projection gap, not staleness.</para>
     /// </summary>
-    public static ProjectionStatus Evaluate(Watermark? projectedWatermark, Watermark rawHead)
+    public static ProjectionStatus Evaluate(ProjectionStamp? stamp, Watermark rawHead, TableSchema? currentSchema)
     {
-        if (projectedWatermark is not { } projected)
+        if (stamp is null || currentSchema is null || stamp.TableName != currentSchema.TableName)
         {
             return new ProjectionStatus(ProjectionState.NotProjected, Watermark.Zero, rawHead);
         }
 
-        var state = rawHead > projected ? ProjectionState.Stale : ProjectionState.Projected;
-        return new ProjectionStatus(state, projected, rawHead);
+        var drifted = stamp.SchemaFingerprint != currentSchema.Fingerprint();
+        var state = drifted || rawHead > stamp.Watermark ? ProjectionState.Stale : ProjectionState.Projected;
+        return new ProjectionStatus(state, stamp.Watermark, rawHead);
     }
 }

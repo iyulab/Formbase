@@ -1,5 +1,6 @@
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 
 namespace Formbase.Core.Tests.Contracts;
 
@@ -15,33 +16,37 @@ public abstract class ProjectionStateContractTests
     private static readonly FormTypeRef Qc = FormTypeRef.Create("qc");
     private static readonly FormTypeRef Work = FormTypeRef.Create("work");
 
+    private static ProjectionStamp Stamp(long watermark, string tableName = "qc", string fingerprint = "fp-1")
+        => new(new Watermark(watermark), tableName, fingerprint);
+
     [Fact]
-    public async Task Unprojected_form_type_has_no_watermark()
+    public async Task Unprojected_form_type_has_no_stamp()
     {
         var state = CreateState();
 
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().BeNull();
+        (await state.GetAsync(Qc)).Should().BeNull();
     }
 
     [Fact]
-    public async Task Set_then_get_returns_the_recorded_watermark()
+    public async Task Set_then_get_returns_the_recorded_stamp_whole()
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, new Watermark(7));
+        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "quality_checks", fingerprint: "fp-abc"));
 
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().Be(new Watermark(7));
+        var stamp = await state.GetAsync(Qc);
+        stamp.Should().Be(new ProjectionStamp(new Watermark(7), "quality_checks", "fp-abc"));
     }
 
     [Fact]
-    public async Task Clear_forgets_the_watermark()
+    public async Task Clear_forgets_the_stamp()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, new Watermark(7));
+        await state.SetProjectedAsync(Qc, Stamp(7));
 
         await state.ClearAsync(Qc);
 
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().BeNull();
+        (await state.GetAsync(Qc)).Should().BeNull();
     }
 
     [Fact]
@@ -55,39 +60,39 @@ public abstract class ProjectionStateContractTests
     }
 
     [Fact]
-    public async Task Setting_again_replaces_the_watermark_rather_than_adding_one()
+    public async Task Setting_again_replaces_the_stamp_rather_than_adding_one()
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, new Watermark(7));
-        await state.SetProjectedAsync(Qc, new Watermark(9));
+        await state.SetProjectedAsync(Qc, Stamp(7, fingerprint: "fp-old"));
+        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"));
 
         // A second row for the same form type would make the read ambiguous; the write is an upsert.
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().Be(new Watermark(9));
+        (await state.GetAsync(Qc)).Should().Be(Stamp(9, fingerprint: "fp-new"));
     }
 
     [Fact]
-    public async Task Form_types_keep_independent_watermarks()
+    public async Task Form_types_keep_independent_stamps()
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, new Watermark(7));
-        await state.SetProjectedAsync(Work, new Watermark(3));
+        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "qc"));
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"));
 
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().Be(new Watermark(7));
-        (await state.GetProjectedWatermarkAsync(Work)).Should().Be(new Watermark(3));
+        (await state.GetAsync(Qc)).Should().Be(Stamp(7, tableName: "qc"));
+        (await state.GetAsync(Work)).Should().Be(Stamp(3, tableName: "work"));
     }
 
     [Fact]
     public async Task Clearing_one_form_type_leaves_the_others_alone()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, new Watermark(7));
-        await state.SetProjectedAsync(Work, new Watermark(3));
+        await state.SetProjectedAsync(Qc, Stamp(7));
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"));
 
         await state.ClearAsync(Qc);
 
-        (await state.GetProjectedWatermarkAsync(Qc)).Should().BeNull();
-        (await state.GetProjectedWatermarkAsync(Work)).Should().Be(new Watermark(3));
+        (await state.GetAsync(Qc)).Should().BeNull();
+        (await state.GetAsync(Work)).Should().Be(Stamp(3, tableName: "work"));
     }
 }

@@ -78,6 +78,7 @@ public sealed class RestartSurvivalTests
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),
-            state);
+            state,
+            proposer);
     }
 }

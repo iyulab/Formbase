@@ -1,4 +1,5 @@
 using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Formbase.Core.Schema;
 using Formbase.Postgres;
 
@@ -40,12 +41,12 @@ public sealed class PostgresMixedColdStartRaceTests
 
         var act = async () => await Task.WhenAll(
             raw.HeadAsync(type),
-            state.SetProjectedAsync(type, new Watermark(1)),
+            state.SetProjectedAsync(type, new ProjectionStamp(new Watermark(1), "invoice_table", "fp-race")),
             hints.DeclareAsync(new FormTypeHints(type, "invoice_table", [new FieldHint("n", ColumnType.Integer)])));
 
         await act.Should().NotThrowAsync();
 
-        (await state.GetProjectedWatermarkAsync(type)).Should().Be(new Watermark(1));
+        (await state.GetAsync(type))?.Watermark.Should().Be(new Watermark(1));
         (await hints.GetHintsAsync(type)).Should().NotBeNull();
     }
 }

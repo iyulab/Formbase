@@ -159,6 +159,7 @@ Implemented:
 - **Durable Postgres raw store** — Formbase-owned source of truth over Npgsql, contract-verified against a real PostgreSQL (including concurrent appends); the in-memory raw store remains the reference implementation
 - **Durable Postgres projection state and field hints** — `PostgresProjectionState` and `PostgresFieldHintSource` survive a restart alongside the raw store, closing the gap where a restarted process forgot a projection that both databases still held
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection
+- **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
 - Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — type- and API-verified; the projection-store contract has been run end-to-end against a real MorphDB service and passes with the client release that carries the batch and value-mapping fixes (see below)
 - DI composition and contract test suites for the store ports
@@ -167,7 +168,6 @@ Known gaps (audited 2026-07-20 against Formology):
 
 - **Absent and null are indistinguishable in a projection.** `DocumentMapper` treats a field that was never in the document and a field explicitly written as `null` the same way — both become `null` in a nullable column. After a schema grows, re-projection therefore cannot tell *"left blank"* from *"that box did not exist yet."* Raw keeps the truth, but a query over the projection quietly conflates the two. Fix planned; raw is unaffected.
 - **The declaration vocabulary is flat.** A form type maps to one flat list of columns, so a child section (1:N), a reference to another entity (FK), and the time-binding of a value (is it true *now*, or was it true *then*?) have nowhere to be expressed. This is a known deferral — the richer format is the open question in the core design — and it is the single largest gap between this engine and the methodology it implements.
-- **Redeclaring hints without a new document leaves a stale projection unflagged.** `ProjectionStatus.Evaluate` decides staleness purely from watermarks. If you call `DeclareAsync` again for a form type that already has a projection — say, changing which columns it maps to — without appending any new document, the projected watermark and the raw head don't move. A query then reports `Stale == false` while reading the *old* table shape, or, if the declared table name changed, throws `ProjectionUnavailableException` — which reads like a transient outage rather than "your declaration moved." Call `ProjectAsync` again after any redeclaration to be sure the projection reflects it.
 
 Planned (later stages, each its own effort):
 

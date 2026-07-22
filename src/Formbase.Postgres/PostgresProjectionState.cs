@@ -1,5 +1,6 @@
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -40,41 +41,55 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
             $"""
             CREATE SCHEMA IF NOT EXISTS "{_bootstrap.Schema}";
             CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".projection_state (
-                form_type  text PRIMARY KEY,
-                watermark  bigint NOT NULL,
-                updated_at timestamptz NOT NULL
+                form_type          text PRIMARY KEY,
+                watermark          bigint NOT NULL,
+                table_name         text NOT NULL,
+                schema_fingerprint text NOT NULL,
+                updated_at         timestamptz NOT NULL
             );
             """;
     }
 
-    public async Task<Watermark?> GetProjectedWatermarkAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    public async Task<ProjectionStamp?> GetAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
-            $"""SELECT watermark FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type""",
+            $"""SELECT watermark, table_name, schema_fingerprint FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type""",
             connection);
         command.Parameters.AddWithValue("type", type.Value);
 
-        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return value is long watermark ? new Watermark(watermark) : null;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return new ProjectionStamp(new Watermark(reader.GetInt64(0)), reader.GetString(1), reader.GetString(2));
     }
 
-    public async Task SetProjectedAsync(FormTypeRef type, Watermark watermark, CancellationToken cancellationToken = default)
+    public async Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(stamp);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
             $"""
-            INSERT INTO "{_bootstrap.Schema}".projection_state (form_type, watermark, updated_at)
-            VALUES (@type, @watermark, @at)
-            ON CONFLICT (form_type) DO UPDATE SET watermark = EXCLUDED.watermark, updated_at = EXCLUDED.updated_at
+            INSERT INTO "{_bootstrap.Schema}".projection_state (form_type, watermark, table_name, schema_fingerprint, updated_at)
+            VALUES (@type, @watermark, @table, @fingerprint, @at)
+            ON CONFLICT (form_type) DO UPDATE
+                SET watermark = EXCLUDED.watermark,
+                    table_name = EXCLUDED.table_name,
+                    schema_fingerprint = EXCLUDED.schema_fingerprint,
+                    updated_at = EXCLUDED.updated_at
             """,
             connection);
         command.Parameters.AddWithValue("type", type.Value);
-        command.Parameters.AddWithValue("watermark", watermark.Value);
+        command.Parameters.AddWithValue("watermark", stamp.Watermark.Value);
+        command.Parameters.AddWithValue("table", stamp.TableName);
+        command.Parameters.AddWithValue("fingerprint", stamp.SchemaFingerprint);
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
