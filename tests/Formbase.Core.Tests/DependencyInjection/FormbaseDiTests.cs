@@ -49,6 +49,26 @@ public class FormbaseDiTests
     }
 
     [Fact]
+    public async Task The_registered_supervisor_projects_when_due()
+    {
+        var services = new ServiceCollection();
+        services.AddFormbaseInMemory();
+        await using var provider = services.BuildServiceProvider();
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        var hints = provider.GetRequiredService<InMemoryFieldHintSource>();
+        var supervisor = provider.GetRequiredService<Formbase.Core.Projection.ProjectionSupervisor>();
+
+        var qc = FormTypeRef.Create("qc");
+        hints.Declare(new FormTypeHints(qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
+        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+
+        var outcome = await supervisor.RunOnceAsync(qc);
+
+        outcome.Decision.ShouldProject.Should().BeTrue();
+        (await engine.QueryAsync(qc, QuerySpec.All)).Rows.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task AddFormbaseCore_alone_leaves_store_ports_unregistered()
     {
         var services = new ServiceCollection();

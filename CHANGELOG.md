@@ -4,6 +4,15 @@
 
 ### Added
 
+- `IProjectionTrigger` port + `WatermarkLagTrigger` + `ProjectionSupervisor` — projection
+  automation as a policy seam. The trigger decides whether a projection is due: a shape change
+  (redeclared fingerprint, moved table) fires immediately, pure data lag waits for a configurable
+  threshold (default 1), and nothing fires when no schema is proposable or a declared type has no
+  documents. The supervisor composes decision with action (`RunOnceAsync`) — the loop cadence
+  (timer, queue, after-intake hook) stays with the host. `AddFormbaseCore` registers both; override
+  the trigger registration to change policy. Decisions carry the `ProjectionStatus` they were
+  derived from, so a holding decision is observably policy, not ignorance.
+
 - `Formbase.SchemaIntelligence` (spike, not yet packaged) — `LlmSchemaProposer`, an LLM-backed
   `ISchemaProposer` over `Microsoft.Extensions.AI`'s provider-agnostic `IChatClient`. Samples up to
   20 raw documents and asks the model for a standard JSON Schema (draft 2020-12) proposal. The model

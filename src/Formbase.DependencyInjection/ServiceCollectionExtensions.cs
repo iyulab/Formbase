@@ -15,7 +15,7 @@ public static class FormbaseServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the store-agnostic engine services (schema proposer, intake, projector, record query,
-    /// and the <see cref="FormbaseEngine"/> facade). The pluggable store ports — <see cref="IRawStore"/>,
+    /// the projection trigger and supervisor, and the <see cref="FormbaseEngine"/> facade). The pluggable store ports — <see cref="IRawStore"/>,
     /// <see cref="IProjectionStore"/>, <see cref="IProjectionState"/>, <see cref="IFieldHintSource"/> —
     /// must be registered separately (or via <see cref="AddFormbaseInMemory"/>).
     /// </summary>
@@ -27,6 +27,13 @@ public static class FormbaseServiceCollectionExtensions
         services.AddSingleton<IIntakeService, IntakeService>();
         services.AddSingleton<IProjector, Projector>();
         services.AddSingleton<IRecordQuery, RecordQuery>();
+        // Default trigger policy: fire on any lag (threshold 1). Re-register IProjectionTrigger with
+        // a different threshold — or another policy — to override; the supervisor follows either way.
+        services.AddSingleton<IProjectionTrigger>(sp => new WatermarkLagTrigger(
+            sp.GetRequiredService<IRawStore>(),
+            sp.GetRequiredService<ISchemaProposer>(),
+            sp.GetRequiredService<IProjectionState>()));
+        services.AddSingleton<ProjectionSupervisor>();
         services.AddSingleton<FormbaseEngine>();
         return services;
     }
