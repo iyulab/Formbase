@@ -28,6 +28,30 @@ public static class MorphDbServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers a <see cref="MorphDBClient"/> scoped to <paramref name="projectId"/> and the
+    /// <see cref="IProjectionStore"/> backed by it. Every MorphDB schema and data request requires a
+    /// project scope, so this is the overload a working composition wants; the bare
+    /// <paramref name="baseUrl"/> overload leaves the client unscoped and the first projection fails
+    /// with the server's <c>MISSING_PROJECT</c>. Provisioning the project (a one-time
+    /// <c>POST /api/projects</c>) stays the consumer's responsibility — the engine never
+    /// administers MorphDB.
+    /// </summary>
+    public static IServiceCollection AddMorphDbProjectionStore(this IServiceCollection services, string baseUrl, Guid projectId)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+        if (projectId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "The project id must identify a provisioned MorphDB project; Guid.Empty can only be an unassigned value.",
+                nameof(projectId));
+        }
+
+        return services.AddMorphDbProjectionStore(
+            _ => new MorphDBClient(baseUrl, new MorphDBClientOptions { ProjectId = projectId }));
+    }
+
+    /// <summary>
     /// Registers the <see cref="IProjectionStore"/> backed by a <see cref="MorphDBClient"/> built by
     /// <paramref name="clientFactory"/> — use this overload when the client needs custom configuration.
     /// The client is registered as a singleton: MorphDB clients are long-lived and reuse a single

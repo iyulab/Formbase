@@ -37,6 +37,29 @@ public class MorphDbDiTests
     }
 
     [Fact]
+    public async Task AddMorphDbProjectionStore_project_overload_registers_a_scoped_client()
+    {
+        var services = new ServiceCollection();
+        services.AddMorphDbProjectionStore(AnyBaseUrl, Guid.NewGuid());
+        await using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IProjectionStore>().Should().BeOfType<MorphDbProjectionStore>();
+        provider.GetRequiredService<MorphDBClient>().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddMorphDbProjectionStore_project_overload_rejects_an_empty_project_id()
+    {
+        var services = new ServiceCollection();
+
+        // Guid.Empty can only come from an unassigned variable, never from provisioning — fail at
+        // registration rather than as a MISSING_PROJECT 400 on the first projection.
+        var act = () => services.AddMorphDbProjectionStore(AnyBaseUrl, Guid.Empty);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void AddMorphDbProjectionStore_rejects_a_blank_base_url()
     {
         var services = new ServiceCollection();

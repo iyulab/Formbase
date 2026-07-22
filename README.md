@@ -118,13 +118,27 @@ The three Postgres registrations belong together. Registering only the raw store
 projection state and the field hints in process memory, so a restart forgets the projection —
 a query then answers `NotProjected` even though both databases still hold the data.
 
+Every MorphDB schema and data request is scoped to a project, so the composition also needs a
+provisioned project: a one-time `POST /api/projects` (the response body carries the `id`),
+which stays the consumer's responsibility — the engine never administers MorphDB. Register the
+store with that id:
+
 ```csharp
 services.AddFormbaseCore();
 services.AddPostgresRawStore(connectionString);        // raw = source of truth
 services.AddPostgresProjectionState(connectionString); // the engine's own ledger
 services.AddPostgresFieldHints(connectionString);      // what a form type projects into
-services.AddMorphDbProjectionStore(morphDbUrl);
+services.AddMorphDbProjectionStore(morphDbUrl, provisionedProjectId);
 ```
+
+The bare `AddMorphDbProjectionStore(morphDbUrl)` overload leaves the client unscoped: intake
+still works (raw-first), but the first projection fails with the server's `MISSING_PROJECT`.
+Use it only when the client factory overload supplies the scope another way.
+
+One operational note: the durable stores share a connection pool, so an outage that fails a
+rebuild can also fail the state cleanup that follows. The caller always sees the original
+rebuild failure — the cleanup's own exception rides on `Exception.Data` under
+`Projector.ClearFailureDataKey`, where a host can log it.
 
 Declare hints through the concrete source, since declaring is not on the port:
 
