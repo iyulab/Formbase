@@ -12,6 +12,14 @@ namespace Formbase.Core.Projection;
 /// </summary>
 public sealed class Projector : IProjector
 {
+    /// <summary>
+    /// Key under which a failed rebuild's <see cref="Exception.Data"/> carries the exception the
+    /// state-cleanup path itself threw. Durable state shares infrastructure with the projection
+    /// store, so the outage that failed the rebuild often fails the cleanup too — the cleanup
+    /// failure rides along here instead of replacing the original cause.
+    /// </summary>
+    public const string ClearFailureDataKey = "Formbase.Projection.ClearFailure";
+
     private readonly IRawStore _rawStore;
     private readonly ISchemaProposer _proposer;
     private readonly IProjectionStore _projectionStore;
@@ -86,7 +94,16 @@ public sealed class Projector : IProjector
         {
             // The rebuild failed mid-flight; the table may be dropped or half-built. Make the recorded
             // state honestly report "not projected" so a Record query returns NotProjected, not stale data.
-            await _projectionState.ClearAsync(type, CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                await _projectionState.ClearAsync(type, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception clearFailure)
+            {
+                // The caller must always see the rebuild failure — a cleanup exception escaping here
+                // would replace it and hide the original cause.
+                ex.Data[ClearFailureDataKey] = clearFailure;
+            }
             throw;
         }
     }

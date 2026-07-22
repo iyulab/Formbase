@@ -205,6 +205,42 @@ public class ProjectorTests
     }
 
     [Fact]
+    public async Task A_clear_failure_does_not_replace_the_rebuild_failure()
+    {
+        var raw = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(new FormTypeHints(Qc, Table, [new FieldHint("lot", ColumnType.Text)]));
+        var state = new ThrowingProjectionState(new TimeoutException("state store unreachable"));
+        var projector = new Projector(raw, new HintSchemaProposer(hints), new ThrowingProjectionStore(), state);
+        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+
+        var act = () => projector.ProjectAsync(Qc);
+
+        // The durable state shares the store's connection pool, so the outage that failed the rebuild
+        // is likely to fail the cleanup too. The caller must still see the rebuild failure — a cleanup
+        // exception replacing it would hide the original cause entirely.
+        var thrown = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+        thrown.Message.Should().Contain("bulk insert failed");
+        thrown.Data[Projector.ClearFailureDataKey].Should().BeOfType<TimeoutException>(
+            "the cleanup failure must travel with the original cause, not vanish");
+    }
+
+    [Fact]
+    public async Task A_failed_rebuild_with_working_cleanup_carries_no_clear_failure()
+    {
+        var raw = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(new FormTypeHints(Qc, Table, [new FieldHint("lot", ColumnType.Text)]));
+        var projector = new Projector(raw, new HintSchemaProposer(hints), new ThrowingProjectionStore(), new InMemoryProjectionState());
+        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+
+        var act = () => projector.ProjectAsync(Qc);
+
+        var thrown = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+        thrown.Data.Contains(Projector.ClearFailureDataKey).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task A_document_arriving_mid_run_is_left_for_the_next_projection()
     {
         var h = new Harness();
@@ -284,6 +320,18 @@ public class ProjectorTests
             => inner.AppendAsync(type, id, body, cancellationToken);
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)
             => inner.GetAsync(id, cancellationToken);
+    }
+
+    /// <summary>A projection state whose cleanup path is down — standing in for a durable state store
+    /// hit by the same outage that failed the rebuild (shared connection pool).</summary>
+    private sealed class ThrowingProjectionState(Exception failure) : IProjectionState
+    {
+        public Task<ProjectionStamp?> GetAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+            => Task.FromResult<ProjectionStamp?>(null);
+        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+        public Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+            => Task.FromException(failure);
     }
 
     private sealed class ThrowingProjectionStore : IProjectionStore
