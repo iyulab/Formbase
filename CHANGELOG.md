@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+Pairs with MorphDB `0.9.x`: this release requires `MorphDB.Client 0.9.0`, so it is a minor for the
+same reason 0.3.0 and 0.4.0 were — anyone who pinned the client directly sees a conflict, and a
+`0.9.0` server answers differently (strict request envelopes, no `project_id` on any surface,
+`VALIDATION_FAILED` retired, the CHECK grammar narrowed to the enforced set). The pairing is
+`Formbase.* 0.4.0` with MorphDB `0.8.x`, and `Formbase.* 0.5.0` with MorphDB `0.9.x`.
 
 ### Added
 
