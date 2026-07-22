@@ -4,6 +4,14 @@
 
 ### Added
 
+- `Formbase.SchemaIntelligence` (spike, not yet packaged) — `LlmSchemaProposer`, an LLM-backed
+  `ISchemaProposer` over `Microsoft.Extensions.AI`'s provider-agnostic `IChatClient`. Samples up to
+  20 raw documents and asks the model for a standard JSON Schema (draft 2020-12) proposal. The model
+  only decides the shape: the table name derives from the form type, a proposed property that appears
+  in no sampled document is rejected (`SchemaProposalFormatException`), and a malformed proposal
+  throws instead of being repaired. Passes the same `ISchemaProposer` contract suite as
+  `HintSchemaProposer` — swapping schema intelligence touches nothing in the core.
+
 - `ProjectionResult.AbsentFieldCounts` — per declared column, how many projected rows came from
   documents that did not carry the field at all. An explicit `null` is an answer and is not counted;
   a field the document never had is a different fact. The projected NULL still conflates both in the

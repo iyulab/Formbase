@@ -7,6 +7,7 @@
     <!-- Composition / adapters -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.1" />
     <PackageVersion Include="MorphDB.Client" Version="0.8.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
   </ItemGroup>

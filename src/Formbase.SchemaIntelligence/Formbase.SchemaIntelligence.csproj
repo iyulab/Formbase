@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.SchemaIntelligence</RootNamespace>
+    <Description>LLM-backed schema proposer for formbase — observes raw documents and proposes a projection schema through the ISchemaProposer port.</Description>
+    <!--
+      Spike (P3-1): validates that an LLM-backed proposer satisfies the same port contract as
+      HintSchemaProposer. Not packaged until the spike graduates — flipping this flag is the
+      whole release decision.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Provider-agnostic LLM seam: any IChatClient implementation (OpenAI, Anthropic, Ollama, ...) plugs in. -->
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+    <!-- For the AddLlmSchemaProposer registration helper. Abstractions-only keeps the footprint minimal. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+</Project>
