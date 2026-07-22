@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.M3L</RootNamespace>
+    <Description>M3L input adapter spike for formbase — parses M3L declarations into field hints and measures what the flat declaration vocabulary cannot carry.</Description>
+    <!--
+      Spike (P3-3 preparation): exists to generate *measured* vocabulary demand — every M3L
+      construct the flat FieldHint vocabulary drops is recorded as a VocabularyGap, and that
+      generated table is the design input for the richer declaration vocabulary (design §10).
+      Not packaged; whether an M3L adapter ships at all is a separate product decision.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The canonical M3L parser (Rust core via P/Invoke). The adapter consumes its AST only. -->
+    <PackageReference Include="M3L.Native" />
+  </ItemGroup>
+
+</Project>

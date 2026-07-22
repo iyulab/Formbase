@@ -62,6 +62,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Formbase.Core\Formbase.Core.csproj" />
     <ProjectReference Include="..\..\src\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\src\Formbase.M3L\Formbase.M3L.csproj" />
     <ProjectReference Include="..\..\src\Formbase.MorphDb\Formbase.MorphDb.csproj" />
     <ProjectReference Include="..\..\src\Formbase.Postgres\Formbase.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Formbase.SchemaIntelligence\Formbase.SchemaIntelligence.csproj" />
