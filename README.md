@@ -177,17 +177,20 @@ Implemented:
 - Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
 - DI composition and contract test suites for the store ports
+- **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction is part of the vocabulary work below)
+- **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
+- **LLM schema proposer (spike)** — `Formbase.SchemaIntelligence` implements `ISchemaProposer` over any `IChatClient`, with strict parsing and a hallucination guard; unpackaged pending graduation
 
 Known gaps (audited 2026-07-20 against Formology):
 
-- **Absent and null are indistinguishable in a projection.** `DocumentMapper` treats a field that was never in the document and a field explicitly written as `null` the same way — both become `null` in a nullable column. After a schema grows, re-projection therefore cannot tell *"left blank"* from *"that box did not exist yet."* Raw keeps the truth, but a query over the projection quietly conflates the two. Fix planned; raw is unaffected.
-- **The declaration vocabulary is flat.** A form type maps to one flat list of columns, so a child section (1:N), a reference to another entity (FK), and the time-binding of a value (is it true *now*, or was it true *then*?) have nowhere to be expressed. This is a known deferral — the richer format is the open question in the core design — and it is the single largest gap between this engine and the methodology it implements.
+- **The declaration vocabulary is flat.** A form type maps to one flat list of columns, so a child section (1:N), a reference to another entity (FK), and the time-binding of a value (is it true *now*, or was it true *then*?) have nowhere to be expressed. This is the single largest gap between this engine and the methodology it implements. The `Formbase.M3L` spike (unpackaged) measures the loss concretely — it maps parsed M3L models onto today's vocabulary and records every construct that drops — and a design proposal to close the gap is under discussion.
+- **Per-row absent-vs-null** — the aggregate counts above do not yet mark *which* row predates a grown schema; the declaration-version piece of the vocabulary design covers this.
 
 Planned (later stages, each its own effort):
 
-- **Richer declaration vocabulary** — resolve the deferred hint format so section structure and time-binding survive into the projection. Architectural; needs a decision, not just an implementation
-- **Ontology layer** — an `ISchemaProposer` that reads structure a form already declares, plus scheduled/threshold-driven projection triggers
-- Input adapters (M3L and others) that produce `FormType` + `Document`
+- **Richer declaration vocabulary** — resolve the deferred hint format so relations, identity-vs-display naming, and time-binding survive into the projection. Architectural; a design proposal exists and needs a decision, not just an implementation
+- **Ontology layer** — proposals that read structure a form already declares, growing from the `ISchemaProposer` seam
+- Input adapters (M3L and others) that produce `FormType` + `Document` — the `Formbase.M3L` spike is the measurement predecessor, not the product
 - Richer querying (non-equality filters) and non-blocking re-projection
 
 ## License
