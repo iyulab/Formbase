@@ -67,6 +67,11 @@ public sealed class MorphDbEngineLiveTests
         all.Rows.Should().HaveCount(5);
         all.Stale.Should().BeFalse();
 
+        // The row contract against a real backend: exactly the declared fields. MorphDB materializes
+        // its own system columns (_id, project_id, _created_at, _updated_at, _version) and formbase
+        // adds fb_* bookkeeping — none of it may reach the consumer's rows.
+        all.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty"]);
+
         // 5) An equality filter (int coerced to the bigint column) round-trips through MorphDB.
         var filtered = await engine.QueryAsync(qc, new QuerySpec(
             Filters: new Dictionary<string, object?> { ["qty"] = 3 }));

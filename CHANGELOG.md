@@ -15,6 +15,12 @@
 
 ### Changed
 
+- **Query rows carry exactly the declared fields.** `RecordQuery` shapes every row to the proposed
+  schema before returning it: `fb_doc_id`/`fb_watermark` bookkeeping and backend system columns
+  (MorphDB's `_id`, `project_id`, `_created_at`, `_updated_at`, `_version`) no longer leak into
+  query results. A declared column the physical table lacks (a drifted, stale shape) reads `null`,
+  so the key set is unconditional. Consumers that read the leaked internals must stop — those
+  values were never part of the row contract.
 - **Staleness is now shape-aware** (fixes the "redeclaring hints leaves the projection silently
   stale" gap). Redeclaring hints without re-projecting reads `Stale` even though no document
   arrived; a declaration that moved to a new table name (or was removed) reads `NotProjected`, and a

@@ -99,6 +99,22 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task Query_rows_carry_exactly_the_declared_fields()
+    {
+        // The row contract is the declaration, nothing else: fb_* bookkeeping and any backend system
+        // columns are hidden layers. A consumer serializing rows onward must not be handed internals
+        // that then calcify into *its* public contract.
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc);
+
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+
+        result.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty"]);
+    }
+
+    [Fact]
     public async Task Redeclaring_columns_without_reprojecting_makes_the_query_stale()
     {
         // C1 case A: hints were redeclared (a column added) but ProjectAsync never re-ran. No new
@@ -119,6 +135,10 @@ public class RecordQueryTests
 
         result.Stale.Should().BeTrue("the projected table no longer matches the declared shape");
         result.Rows.Should().HaveCount(1, "the last projected snapshot still serves");
+        // The row contract holds even under drift: the declared key set, with the not-yet-projected
+        // column reading null rather than being absent.
+        result.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty", "inspector"]);
+        result.Rows[0]["inspector"].Should().BeNull();
     }
 
     [Fact]

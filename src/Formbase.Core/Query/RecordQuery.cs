@@ -66,7 +66,32 @@ public sealed class RecordQuery : IRecordQuery
             throw new ProjectionUnavailableException(type, ex);
         }
 
-        return new QueryResult(rows, status.State == ProjectionState.Stale);
+        return new QueryResult(Shape(rows, schema), status.State == ProjectionState.Stale);
+    }
+
+    /// <summary>
+    /// Shapes raw store rows to the row contract: exactly the declared fields, nothing else. Stores
+    /// return whatever their backend materializes — fb_* bookkeeping, backend system columns — and
+    /// none of that is the consumer's to see: an internal that leaks into rows a consumer serializes
+    /// onward calcifies into that consumer's public contract. A declared column the physical table
+    /// lacks (a stale, drifted shape) reads null, so the key set holds unconditionally.
+    /// </summary>
+    private static List<IReadOnlyDictionary<string, object?>> Shape(
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, TableSchema schema)
+    {
+        var shaped = new List<IReadOnlyDictionary<string, object?>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var projected = new Dictionary<string, object?>(schema.Columns.Count, StringComparer.Ordinal);
+            foreach (var column in schema.Columns)
+            {
+                projected[column.Name] = row.TryGetValue(column.Name, out var value) ? value : null;
+            }
+
+            shaped.Add(projected);
+        }
+
+        return shaped;
     }
 
     private static QuerySpec WithDeterministicOrder(QuerySpec spec)
