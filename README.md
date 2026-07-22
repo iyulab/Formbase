@@ -161,7 +161,7 @@ Implemented:
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection
 - **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
 - Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
-- MorphDB projection-store adapter — type- and API-verified; the projection-store contract has been run end-to-end against a real MorphDB service and passes with the client release that carries the batch and value-mapping fixes (see below)
+- MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
 - DI composition and contract test suites for the store ports
 
 Known gaps (audited 2026-07-20 against Formology):
@@ -173,7 +173,6 @@ Planned (later stages, each its own effort):
 
 - **Richer declaration vocabulary** — resolve the deferred hint format so section structure and time-binding survive into the projection. Architectural; needs a decision, not just an implementation
 - **Ontology layer** — an `ISchemaProposer` that reads structure a form already declares, plus scheduled/threshold-driven projection triggers
-- **MorphDB live verification as a CI gate** — the `morphdb-live` job runs the live contract suite against the published server image on every push, watching for client/server drift
 - Input adapters (M3L and others) that produce `FormType` + `Document`
 - Richer querying (non-equality filters) and non-blocking re-projection
 

@@ -72,7 +72,6 @@ public sealed class MorphDbFixture : IAsyncLifetime
         _morphdb = new ContainerBuilder("ghcr.io/iyulab/morphdb:latest")
             .WithNetwork(network)
             .WithEnvironment("ConnectionStrings__MorphDB", $"Host={PostgresAlias};Port=5432;Database=morphdb;Username=morph;Password=morph")
-            .WithEnvironment("Jwt__SecretKey", "MorphDB-Testcontainers-Secret-Key-Must-Be-At-Least-32-Characters")
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
             .WithPortBinding(8080, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer()

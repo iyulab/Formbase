@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## 0.4.0
+
+Pairs with MorphDB `0.8.x`: this release requires `MorphDB.Client 0.8.0`, so it is a minor for the
+same reason 0.2.0 and 0.3.0 were — anyone who pinned the client directly sees a conflict, and a
+`0.7.x` server refuses nothing but a `0.8.0` server answers differently (fail-loud unknown fields
+and operators, no authentication surface). The pairing is `Formbase.* 0.3.0` with MorphDB `0.7.x`,
+and `Formbase.* 0.4.0` with MorphDB `0.8.x`.
 
 ### Added
 
@@ -15,6 +21,8 @@
 
 ### Changed
 
+- **Requires `MorphDB.Client 0.8.0`** (was `0.7.1`). The client's credential options
+  (`ApiKey`/`JwtToken`) are gone with MorphDB's authentication sunset; Formbase never used them.
 - **Query rows carry exactly the declared fields.** `RecordQuery` shapes every row to the proposed
   schema before returning it: `fb_doc_id`/`fb_watermark` bookkeeping and backend system columns
   (MorphDB's `_id`, `project_id`, `_created_at`, `_updated_at`, `_version`) no longer leak into
