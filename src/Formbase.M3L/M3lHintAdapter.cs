@@ -48,51 +48,60 @@ public static class M3lHintAdapter
                 "Inherited fields are not resolved by the spike; the flat vocabulary has no composition either."));
         }
 
+        // The free-form Relations section is a distinct M3L construct the spike does not decode
+        // structurally (its entries are opaque here) — still a measured gap. Field-level @reference,
+        // which is structured, is filled below.
         foreach (var relation in model.Sections.Relations)
         {
-            gaps.Add(new VocabularyGap(model.Name, null, VocabularyGapKind.Relation,
-                $"relations: {relation}",
-                "A declared relation has no slot in FormTypeHints — Formology rule 3/4 demand."));
+            gaps.Add(new VocabularyGap(model.Name, null, VocabularyGapKind.Unresolved,
+                $"relations section: {relation}",
+                "The free-form Relations section is not decoded by the spike; use field @reference for structured relations."));
         }
 
         var fields = new List<FieldHint>();
+        var relations = new List<RelationHint>();
         foreach (var field in model.Fields)
         {
-            AdaptField(model, field, fields, gaps);
+            AdaptField(model, field, fields, relations, gaps);
         }
 
         return new FormTypeHints(
             FormTypeRef.Create(ToSnake(model.Name)),
             ToSnake(model.Name),
-            fields);
+            fields,
+            relations.Count > 0 ? relations : null);
     }
 
-    private static void AdaptField(ModelNode model, FieldNode field, List<FieldHint> fields, List<VocabularyGap> gaps)
+    private static void AdaptField(ModelNode model, FieldNode field, List<FieldHint> fields, List<RelationHint> relations, List<VocabularyGap> gaps)
     {
         if (field.Kind is FieldKind.Lookup or FieldKind.Rollup or FieldKind.Computed)
         {
             // Derived fields are not raw extraction keys: a lookup is "true now" across a
-            // relation, a rollup aggregates children — both presuppose the relation vocabulary.
+            // relation, a rollup aggregates children. These are a query-layer concern the
+            // declaration vocabulary deliberately does not carry — a genuine remaining gap.
             gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Derived,
                 field.Kind.ToString().ToLowerInvariant(),
-                "Derived fields cannot be declared as hints; they presuppose relations the vocabulary lacks."));
+                "Derived fields are query-layer, not stored declarations; the vocabulary does not carry them."));
             return;
         }
 
         if (field.Label is not null && field.Label != field.Name)
         {
-            // FieldHint.Name is simultaneously the extraction key and the display/column name —
-            // the identity/display split M3L carries has nowhere to go.
+            // The vocabulary's SourceKey/Name split is extraction-key-vs-column-name, both machine
+            // names; M3L's label is a human display string with no home in it — still a gap.
             gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.IdentityDisplay,
                 $"label \"{field.Label}\"",
-                "FieldHint.Name is both extraction key and display name; the label drops."));
+                "A human display label has no slot; SourceKey/Name are machine names, not labels."));
         }
 
+        // Time binding — FILLED: hard binding fixes the value then (Snapshot), soft reads true now
+        // (Reference). The declared target rides along as an EntityRef.
+        FieldBinding binding = FieldBinding.Stored;
+        EntityRef? target = null;
         if (field.Binding is not null)
         {
-            gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.TimeBinding,
-                $"binding {(field.Binding.IsHard ? "hard" : "soft")} → {field.Binding.Entity}.{field.Binding.Column}",
-                "Reference-vs-attachment (true now vs fixed then) has no axis in FieldHint — Formology rule 5 demand."));
+            binding = field.Binding.IsHard ? FieldBinding.Snapshot : FieldBinding.Reference;
+            target = new EntityRef(FormTypeRef.Create(ToSnake(field.Binding.Entity)), field.Binding.Column);
         }
 
         foreach (var attribute in field.Attributes)
@@ -100,9 +109,13 @@ public static class M3lHintAdapter
             switch (attribute.Name)
             {
                 case "reference":
-                    gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Relation,
-                        $"@reference({FirstArg(attribute)})",
-                        "The FK target entity drops; only the raw key column survives — Formology rule 4 demand."));
+                    // Relation — FILLED: the FK column survives as a normal field (below) and the
+                    // link is declared as a RelationHint. KeyField is this table's FK column.
+                    relations.Add(new RelationHint(
+                        field.Name,
+                        RelationKind.Reference,
+                        FormTypeRef.Create(ToSnake(RefTarget(attribute))),
+                        field.Name));
                     break;
                 case "unique" or "min" or "max" or "pk":
                     gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Constraint,
@@ -119,7 +132,7 @@ public static class M3lHintAdapter
                 "inline enum", "Enum membership degrades to Text; the value set drops."));
         }
 
-        fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable));
+        fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable, Binding: binding, Target: target));
     }
 
     private static ColumnType MapType(ModelNode model, FieldNode field, List<VocabularyGap> gaps)
@@ -155,8 +168,16 @@ public static class M3lHintAdapter
         }
     }
 
-    private static string FirstArg(FieldAttribute attribute)
-        => attribute.Args is { Count: > 0 } ? attribute.Args[0].ToString() : "?";
+    private static string RefTarget(FieldAttribute attribute)
+    {
+        if (attribute.Args is not { Count: > 0 })
+        {
+            return "unknown";
+        }
+
+        var arg = attribute.Args[0];
+        return arg.ValueKind == System.Text.Json.JsonValueKind.String ? arg.GetString()! : arg.ToString();
+    }
 
     private static string ToSnake(string name)
     {

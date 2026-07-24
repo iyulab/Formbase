@@ -64,16 +64,18 @@ public class M3lHintAdapterTests
     }
 
     [Fact]
-    public void The_reference_target_drops_and_is_measured()
+    public void The_reference_relation_is_filled_not_dropped()
     {
         var result = M3lHintAdapter.Adapt(InspectionForm);
 
         // The raw key column survives; the entity it points at does not — Formology rule 4.
+        // The vocabulary now carries the relation: the FK column survives AND the link is declared.
         result.Hints[0].Fields.Should().Contain(f => f.Name == "inspector_id");
-        result.Gaps.Should().Contain(g =>
-            g.Model == "Inspection" && g.Field == "inspector_id" && g.Kind == VocabularyGapKind.Relation);
-        result.Gaps.Should().Contain(g =>
-            g.Model == "InspectionDefect" && g.Field == "inspection_id" && g.Kind == VocabularyGapKind.Relation);
+        result.Hints[0].Relations.Should().ContainSingle(r =>
+            r.Name == "inspector_id" && r.Kind == RelationKind.Reference
+            && r.Target.Value == "employee" && r.KeyField == "inspector_id");
+        result.Gaps.Should().NotContain(g => g.Kind == VocabularyGapKind.Relation,
+            "the reference is filled now, not dropped");
     }
 
     [Fact]
@@ -97,14 +99,36 @@ public class M3lHintAdapterTests
     }
 
     [Fact]
-    public void Binding_modes_are_measured_as_the_time_axis()
+    public void Binding_modes_fill_the_time_axis_of_the_field()
     {
         var result = M3lHintAdapter.Adapt(InspectionForm);
 
-        result.Gaps.Should().Contain(g =>
-            g.Field == "unit" && g.Kind == VocabularyGapKind.TimeBinding && g.Construct.Contains("soft"));
-        result.Gaps.Should().Contain(g =>
-            g.Field == "approved_price" && g.Kind == VocabularyGapKind.TimeBinding && g.Construct.Contains("hard"));
+        var fields = result.Hints[0].Fields.ToDictionary(f => f.Name);
+        // soft binding => reads true now
+        fields["unit"].Binding.Should().Be(FieldBinding.Reference);
+        fields["unit"].Target!.Entity.Value.Should().Be("master_item");
+        fields["unit"].Target!.KeyField.Should().Be("Key");
+        // hard binding => fixed then
+        fields["approved_price"].Binding.Should().Be(FieldBinding.Snapshot);
+        fields["approved_price"].Target!.Entity.Value.Should().Be("price_book");
+
+        result.Gaps.Should().NotContain(g => g.Kind == VocabularyGapKind.TimeBinding,
+            "the binding axis is filled now, not dropped");
+    }
+
+    [Fact]
+    public void The_remaining_gaps_are_only_the_genuinely_uncarried_axes()
+    {
+        var result = M3lHintAdapter.Adapt(InspectionForm);
+
+        // After the vocabulary absorbed relations and time-binding, what remains a gap is what the
+        // declaration vocabulary genuinely does not carry: human labels, derived fields, and
+        // declared value constraints.
+        result.Gaps.Select(g => g.Kind).Distinct().Should().OnlyContain(k =>
+            k == VocabularyGapKind.IdentityDisplay
+            || k == VocabularyGapKind.Derived
+            || k == VocabularyGapKind.Constraint
+            || k == VocabularyGapKind.Unresolved);
     }
 
     [Fact]
