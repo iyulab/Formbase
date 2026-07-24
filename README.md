@@ -179,7 +179,7 @@ Implemented:
 - DI composition and contract test suites for the store ports
 - **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction is part of the vocabulary work below)
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
-- **LLM schema proposer (spike)** — `Formbase.SchemaIntelligence` implements `ISchemaProposer` over any `IChatClient`, with strict parsing and a hallucination guard; unpackaged pending graduation
+- **LLM schema proposer** — `Formbase.SchemaIntelligence` implements `ISchemaProposer` over any `IChatClient` (provider-agnostic via Microsoft.Extensions.AI), with strict proposal parsing and a hallucination guard; graduated from its spike after live-model quality measurement (100% parse/projection survival, zero required-flag violations across a six-shape catalog)
 
 Known gaps (audited 2026-07-20 against Formology):
 
