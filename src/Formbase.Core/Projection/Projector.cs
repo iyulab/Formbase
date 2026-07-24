@@ -47,7 +47,9 @@ public sealed class Projector : IProjector
         }
 
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
-        var fullSchema = new TableSchema(schema.TableName, [.. ProjectionSystemColumns.All, .. schema.Columns]);
+        // Augment with system columns but keep the declared relations and version — the store must
+        // receive the full declaration, not just the column list.
+        var fullSchema = schema with { Columns = [.. ProjectionSystemColumns.All, .. schema.Columns] };
 
         try
         {

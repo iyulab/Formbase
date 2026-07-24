@@ -56,9 +56,11 @@ internal static class DocumentMapper
         value = null;
         reason = string.Empty;
 
+        // Read from the extraction key (identity), not the projected column name (display): a
+        // renamed field keeps reading its original raw key, so its data follows the rename.
         var present = root.ValueKind == JsonValueKind.Object
-            && root.TryGetProperty(column.Name, out var element);
-        var field = present ? root.GetProperty(column.Name) : default;
+            && root.TryGetProperty(column.ExtractionKey, out var element);
+        var field = present ? root.GetProperty(column.ExtractionKey) : default;
         // A field the document never had is a different fact from an explicit null — the projected
         // NULL conflates both, so the distinction is surfaced (absence counts, skip reasons).
         absent = !present;
