@@ -174,23 +174,24 @@ Implemented:
 - **Durable Postgres projection state and field hints** — `PostgresProjectionState` and `PostgresFieldHintSource` survive a restart alongside the raw store, closing the gap where a restarted process forgot a projection that both databases still held
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection
 - **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
-- Record query with not-projected / stale / unavailable distinction, and deterministic ordering/paging
+- Record query with not-projected / stale / unverified / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
 - DI composition and contract test suites for the store ports
-- **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction is part of the vocabulary work below)
+- **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction awaits the declaration-version work below)
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
 - **LLM schema proposer** — `Formbase.SchemaIntelligence` implements `ISchemaProposer` over any `IChatClient` (provider-agnostic via Microsoft.Extensions.AI), with strict proposal parsing and a hallucination guard; graduated from its spike after live-model quality measurement (100% parse/projection survival, zero required-flag violations across a six-shape catalog)
+- **Declaration vocabulary** — a form type's hints carry four axes beyond name/type/nullability: identity-vs-display (`SourceKey`, so a renamed field keeps its data), time binding (`FieldBinding` Stored/Snapshot/Reference with a target), relations (`RelationHint`, each form type still its own table), and a declaration version. Each survives declaration → proposal → projection → fingerprint; defaults reproduce the pre-vocabulary shape
+- **Tri-state projection integrity** — if a failed rebuild's state cleanup also fails, the stamp is marked unverified and a query throws `ProjectionUnverifiedException` rather than serving a half-built table as fresh
 
 Known gaps (audited 2026-07-20 against Formology):
 
-- **The declaration vocabulary is flat.** A form type maps to one flat list of columns, so a child section (1:N), a reference to another entity (FK), and the time-binding of a value (is it true *now*, or was it true *then*?) have nowhere to be expressed. This is the single largest gap between this engine and the methodology it implements. The `Formbase.M3L` spike (unpackaged) measures the loss concretely — it maps parsed M3L models onto today's vocabulary and records every construct that drops — and a design proposal to close the gap is under discussion.
-- **Per-row absent-vs-null** — the aggregate counts above do not yet mark *which* row predates a grown schema; the declaration-version piece of the vocabulary design covers this.
+- **Per-row absent-vs-null** — the aggregate counts above do not yet mark *which* row predates a grown schema; the declaration version is now recorded, so the per-row distinction is the remaining step.
+- **Reference resolution is declared, not executed** — a `FieldBinding.Reference` (true-now) column carries its declared meaning but the engine does not yet resolve the referenced value; and the MorphDB adapter does not yet materialize declared relations as virtual FKs (its client exposes no relations API — the FK column data still projects normally).
 
 Planned (later stages, each its own effort):
 
-- **Richer declaration vocabulary** — resolve the deferred hint format so relations, identity-vs-display naming, and time-binding survive into the projection. Architectural; a design proposal exists and needs a decision, not just an implementation
 - **Ontology layer** — proposals that read structure a form already declares, growing from the `ISchemaProposer` seam
-- Input adapters (M3L and others) that produce `FormType` + `Document` — the `Formbase.M3L` spike is the measurement predecessor, not the product
+- Input adapters (M3L and others) that produce `FormType` + `Document` — the `Formbase.M3L` spike now fills the vocabulary axes it once measured as gaps; productizing it is a separate decision
 - Richer querying (non-equality filters) and non-blocking re-projection
 
 ## License
