@@ -27,6 +27,13 @@ public sealed record ProjectionStatus(
             return new ProjectionStatus(ProjectionState.NotProjected, Watermark.Zero, rawHead);
         }
 
+        if (!stamp.Verified)
+        {
+            // A failed rebuild left this stamp's integrity unconfirmed. It still names the current
+            // table, so it is not NotProjected — but it cannot be trusted as fresh.
+            return new ProjectionStatus(ProjectionState.Unverified, stamp.Watermark, rawHead);
+        }
+
         var drifted = stamp.SchemaFingerprint != currentSchema.Fingerprint();
         var state = drifted || rawHead > stamp.Watermark ? ProjectionState.Stale : ProjectionState.Projected;
         return new ProjectionStatus(state, stamp.Watermark, rawHead);

@@ -53,6 +53,13 @@ public sealed class RecordQuery : IRecordQuery
             // table name without a re-projection): a projection gap, not a backend outage.
             throw new NotProjectedException(type);
         }
+
+        if (status.State == ProjectionState.Unverified)
+        {
+            // A failed rebuild left the projection's integrity unconfirmed. Refuse rather than serve
+            // a possibly half-built table as if it were fresh.
+            throw new ProjectionUnverifiedException(type);
+        }
         var coerced = WithDeterministicOrder(Coerce(spec, schema));
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;

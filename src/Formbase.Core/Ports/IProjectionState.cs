@@ -20,4 +20,14 @@ public interface IProjectionState
 
     /// <summary>Forgets any projection state for a form type (e.g. after its table is dropped).</summary>
     Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks an existing stamp's integrity as unconfirmed (a no-op when none exists). The projector's
+    /// best-effort fallback when a failed rebuild's <see cref="ClearAsync"/> also fails: the recorded
+    /// stamp may now overclaim a half-built table as fresh, so a later query reads
+    /// <see cref="Projection.ProjectionState.Unverified"/> and refuses rather than serving partial
+    /// rows. Best-effort by nature — the outage that failed the clear may fail this too — but when it
+    /// succeeds it closes the silent-wrong-answer window.
+    /// </summary>
+    Task MarkUnverifiedAsync(FormTypeRef type, CancellationToken cancellationToken = default);
 }

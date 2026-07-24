@@ -20,6 +20,14 @@ public sealed class Projector : IProjector
     /// </summary>
     public const string ClearFailureDataKey = "Formbase.Projection.ClearFailure";
 
+    /// <summary>
+    /// Key under which a failed rebuild's <see cref="Exception.Data"/> carries the exception the
+    /// best-effort "mark unverified" fallback threw, when the state cleanup and this fallback both
+    /// fail (the same outage hits both). Its presence means the recorded state may still overclaim
+    /// integrity — the strongest signal available when every recovery path is down.
+    /// </summary>
+    public const string MarkUnverifiedFailureDataKey = "Formbase.Projection.MarkUnverifiedFailure";
+
     private readonly IRawStore _rawStore;
     private readonly ISchemaProposer _proposer;
     private readonly IProjectionStore _projectionStore;
@@ -105,6 +113,19 @@ public sealed class Projector : IProjector
                 // The caller must always see the rebuild failure — a cleanup exception escaping here
                 // would replace it and hide the original cause.
                 ex.Data[ClearFailureDataKey] = clearFailure;
+
+                // Clear failed, so a prior stamp may now overclaim this half-built table as fresh.
+                // Best-effort fallback: mark it unverified so a query refuses it. If this also fails
+                // (the same outage), we are no worse off — the original cause still carries the clear
+                // failure above.
+                try
+                {
+                    await _projectionState.MarkUnverifiedAsync(type, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception markFailure)
+                {
+                    ex.Data[MarkUnverifiedFailureDataKey] = markFailure;
+                }
             }
             throw;
         }

@@ -47,6 +47,11 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
                 schema_fingerprint text NOT NULL,
                 updated_at         timestamptz NOT NULL
             );
+            -- Integrity axis (tri-state). Added by migration so a table from before this column
+            -- gains it with every existing row defaulting to verified — those rows recorded
+            -- completed projections, so true is the honest default.
+            ALTER TABLE "{_bootstrap.Schema}".projection_state
+                ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT true;
             """;
     }
 
@@ -56,7 +61,7 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
-            $"""SELECT watermark, table_name, schema_fingerprint FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type""",
+            $"""SELECT watermark, table_name, schema_fingerprint, verified FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type""",
             connection);
         command.Parameters.AddWithValue("type", type.Value);
 
@@ -66,7 +71,7 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
             return null;
         }
 
-        return new ProjectionStamp(new Watermark(reader.GetInt64(0)), reader.GetString(1), reader.GetString(2));
+        return new ProjectionStamp(new Watermark(reader.GetInt64(0)), reader.GetString(1), reader.GetString(2), reader.GetBoolean(3));
     }
 
     public async Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, CancellationToken cancellationToken = default)
@@ -77,12 +82,13 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
             $"""
-            INSERT INTO "{_bootstrap.Schema}".projection_state (form_type, watermark, table_name, schema_fingerprint, updated_at)
-            VALUES (@type, @watermark, @table, @fingerprint, @at)
+            INSERT INTO "{_bootstrap.Schema}".projection_state (form_type, watermark, table_name, schema_fingerprint, verified, updated_at)
+            VALUES (@type, @watermark, @table, @fingerprint, @verified, @at)
             ON CONFLICT (form_type) DO UPDATE
                 SET watermark = EXCLUDED.watermark,
                     table_name = EXCLUDED.table_name,
                     schema_fingerprint = EXCLUDED.schema_fingerprint,
+                    verified = EXCLUDED.verified,
                     updated_at = EXCLUDED.updated_at
             """,
             connection);
@@ -90,6 +96,7 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         command.Parameters.AddWithValue("watermark", stamp.Watermark.Value);
         command.Parameters.AddWithValue("table", stamp.TableName);
         command.Parameters.AddWithValue("fingerprint", stamp.SchemaFingerprint);
+        command.Parameters.AddWithValue("verified", stamp.Verified);
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -104,6 +111,25 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
             $"""DELETE FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type""",
             connection);
         command.Parameters.AddWithValue("type", type.Value);
+
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task MarkUnverifiedAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        // UPDATE touches nothing when no row exists — the required no-op when a type was never projected.
+        await using var command = new NpgsqlCommand(
+            $"""
+            UPDATE "{_bootstrap.Schema}".projection_state
+                SET verified = false, updated_at = @at
+                WHERE form_type = @type
+            """,
+            connection);
+        command.Parameters.AddWithValue("type", type.Value);
+        command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }

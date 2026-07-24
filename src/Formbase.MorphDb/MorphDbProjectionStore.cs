@@ -40,6 +40,15 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
     public async Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default)
     {
+        // Only the generic column shape crosses into MorphDB — projected tables are generic by
+        // design (FormType never reaches MorphDB). The declaration axes stay formbase-internal:
+        // SourceKey is an extraction concern (the projected column is just Name), and Binding is
+        // declaration semantics MorphDB has no notion of. Declared relations are delivered to this
+        // port but NOT materialized as MorphDB virtual FKs at stage-1: the MorphDB.Client 0.9.0
+        // exposes no relations API to wrap, and whether a rebuildable projection should carry
+        // enforced FKs is an open design question. The FK column data still projects as a normal
+        // column, so the projection stays complete — only the optional relation link is absent.
+        // Tracked: claudedocs/morphdb/issues/ISSUE-morphdb-20260724-client-lacks-relations-api.md.
         var request = new CreateTableRequest
         {
             Name = schema.TableName,

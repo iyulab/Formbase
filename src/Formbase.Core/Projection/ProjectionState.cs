@@ -14,4 +14,8 @@ public enum ProjectionState
 
     /// <summary>A projection exists but raw documents were appended after it was built.</summary>
     Stale,
+
+    /// <summary>A projection was recorded but a later failure left its integrity unconfirmed — it
+    /// must not be trusted as fresh; re-project to restore a verified state.</summary>
+    Unverified,
 }

@@ -332,6 +332,10 @@ public class ProjectorTests
             => Task.CompletedTask;
         public Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromException(failure);
+        // The same outage that fails the cleanup fails the fallback too — the worst case, where the
+        // original rebuild cause must still be what the caller sees.
+        public Task MarkUnverifiedAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+            => Task.FromException(failure);
     }
 
     private sealed class ThrowingProjectionStore : IProjectionStore

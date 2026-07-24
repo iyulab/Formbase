@@ -95,4 +95,49 @@ public abstract class ProjectionStateContractTests
         (await state.GetAsync(Qc)).Should().BeNull();
         (await state.GetAsync(Work)).Should().Be(Stamp(3, tableName: "work"));
     }
+
+    [Fact]
+    public async Task A_recorded_stamp_is_verified()
+    {
+        var state = CreateState();
+
+        await state.SetProjectedAsync(Qc, Stamp(7));
+
+        (await state.GetAsync(Qc))!.Verified.Should().BeTrue("a completed projection records verified integrity");
+    }
+
+    [Fact]
+    public async Task Marking_unverified_flips_the_stamp_without_forgetting_it()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7));
+
+        await state.MarkUnverifiedAsync(Qc);
+
+        var stamp = await state.GetAsync(Qc);
+        stamp!.Verified.Should().BeFalse();
+        stamp.Watermark.Should().Be(new Watermark(7), "the mark changes integrity, not what was recorded");
+    }
+
+    [Fact]
+    public async Task Marking_an_unprojected_form_type_unverified_is_a_no_op()
+    {
+        var state = CreateState();
+
+        await state.MarkUnverifiedAsync(Qc);
+
+        (await state.GetAsync(Qc)).Should().BeNull("nothing was projected, so there is nothing to distrust");
+    }
+
+    [Fact]
+    public async Task Re_setting_a_projection_restores_verified()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7));
+        await state.MarkUnverifiedAsync(Qc);
+
+        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"));
+
+        (await state.GetAsync(Qc))!.Verified.Should().BeTrue("a fresh projection clears the unverified mark");
+    }
 }

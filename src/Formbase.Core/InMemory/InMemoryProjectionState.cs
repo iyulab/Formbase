@@ -24,4 +24,15 @@ public sealed class InMemoryProjectionState : IProjectionState
         _stamps.TryRemove(type, out _);
         return Task.CompletedTask;
     }
+
+    public Task MarkUnverifiedAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        // Only flip a stamp that exists — a type never projected has nothing to overclaim.
+        if (_stamps.TryGetValue(type, out var stamp))
+        {
+            _stamps.TryUpdate(type, stamp with { Verified = false }, stamp);
+        }
+
+        return Task.CompletedTask;
+    }
 }
