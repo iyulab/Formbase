@@ -46,6 +46,11 @@ public sealed class WatermarkLagTrigger : IProjectionTrigger
             ProjectionState.NotProjected when schema is not null && rawHead > Watermark.Zero
                 => ProjectionTriggerReason.FirstProjection,
 
+            // A failed rebuild left the projection unverified — rebuild to restore integrity, no
+            // threshold applies. Without this the automation would never repair a suspect projection.
+            ProjectionState.Unverified when schema is not null
+                => ProjectionTriggerReason.Unverified,
+
             // Stale covers two different urgencies. Shape drift means every already-projected row is
             // shaped wrong — no threshold applies. Data lag is quantitative and waits for the knob.
             ProjectionState.Stale when stamp!.SchemaFingerprint != schema!.Fingerprint()

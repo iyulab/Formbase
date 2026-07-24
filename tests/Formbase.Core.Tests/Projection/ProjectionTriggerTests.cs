@@ -181,6 +181,39 @@ public class ProjectionTriggerTests
     }
 
     [Fact]
+    public async Task Fires_to_restore_an_unverified_projection()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"L-1"}""");
+        await h.Projector.ProjectAsync(Qc);
+        // A failed rebuild's fallback left the projection unverified: the trigger must rebuild it,
+        // not hold — otherwise a suspect projection is never repaired by the automation.
+        await h.State.MarkUnverifiedAsync(Qc);
+
+        var decision = await h.Trigger().EvaluateAsync(Qc);
+
+        decision.ShouldProject.Should().BeTrue();
+        decision.Reason.Should().Be(ProjectionTriggerReason.Unverified);
+    }
+
+    [Fact]
+    public async Task The_supervisor_restores_an_unverified_projection_to_verified()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"L-1"}""");
+        await h.Projector.ProjectAsync(Qc);
+        await h.State.MarkUnverifiedAsync(Qc);
+
+        var run = await h.Supervisor().RunOnceAsync(Qc);
+
+        run.Decision.ShouldProject.Should().BeTrue();
+        run.Projection.Should().NotBeNull();
+        (await h.State.GetAsync(Qc))!.Verified.Should().BeTrue("a rebuild restores verified integrity");
+    }
+
+    [Fact]
     public async Task The_supervisor_projects_when_due_and_converges()
     {
         var h = new Harness();

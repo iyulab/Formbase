@@ -14,6 +14,9 @@ public enum ProjectionTriggerReason
 
     /// <summary>The raw stream advanced past the projected watermark by at least the policy's threshold.</summary>
     DataLag = 3,
+
+    /// <summary>A failed rebuild left the projection's integrity unconfirmed — rebuild to restore a verified state, no threshold applies.</summary>
+    Unverified = 4,
 }
 
 /// <summary>
