@@ -40,6 +40,22 @@ public sealed class ReadmeInstallParityTests
     }
 
     [Fact]
+    public void The_pair_statement_names_the_same_version_the_install_section_does()
+    {
+        // The release version is stated twice in the same section — once as the current release and
+        // again inside the compatibility pair. Only the first was held, so the second could go stale
+        // on its own, which is how a reader ends up pinning a version the pair line disagrees with.
+        var declared = Regex.Match(
+            File.ReadAllText(Path.Combine(RepoRoot, "Directory.Build.props")),
+            @"<Version>(?<v>[^<]+)</Version>").Groups["v"].Value;
+
+        var inPair = Regex.Match(Readme, @"`Formbase\.\* (?<v>\d+\.\d+\.\d+)` pairs with").Groups["v"].Value;
+
+        inPair.Should().Be(declared,
+            "the pair line carries the same fact as `Current release:` and drifts unless it is held too");
+    }
+
+    [Fact]
     public void Every_packable_project_is_listed_and_nothing_else_is()
     {
         var packable = Directory

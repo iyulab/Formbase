@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 ### Documentation
 
+- **The compatibility pair line is held to the released version.** The version is stated twice in
+  the Install section — as the current release and again inside the pair — and only the first was
+  gated, so the second could go stale on its own and send a reader pinning a version the two lines
+  disagree about.
 - **The README's quickstart now carries the `using` its own sample needs.** `ISchemaProposer` lives
   in `Formbase.Core.Ports`, which the import list omitted, so anyone copying the "reading a
   declaration back" sample got `CS0246` on their first build. The samples are now compiled and run
