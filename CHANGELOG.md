@@ -31,6 +31,11 @@
 
 > **Upgrade note.** If you declared a reference binding and relied on the projected column holding
 > the document's copy, declare it as `Snapshot` instead — that is what the data actually was.
+>
+> This reaches generated hints too: the M3L adapter (spike, not packaged) maps a *soft* binding to
+> `Reference` and a *hard* one to `Snapshot`, so columns from soft-bound fields are now empty as
+> well. That is the intended reading of a soft binding — it names the target's current value, which
+> this stage does not evaluate — but it is a visible change for anything projecting adapter output.
 
 ## 0.5.0
 
