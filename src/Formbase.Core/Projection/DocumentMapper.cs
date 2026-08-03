@@ -56,6 +56,17 @@ internal static class DocumentMapper
         value = null;
         reason = string.Empty;
 
+        if (column.Binding == FieldBinding.Reference)
+        {
+            // A reference reads true *now* — the target's current value — which this stage cannot
+            // evaluate. The document's own copy is fixed-then, so answering with it would be a
+            // wrong value wearing a plausible face; the box stays empty instead and the projection
+            // result names the column. Absence counts stay out of it: this box was never the
+            // document's to fill, so "the document never carried it" is not the fact being recorded.
+            absent = false;
+            return true;
+        }
+
         // Read from the extraction key (identity), not the projected column name (display): a
         // renamed field keeps reading its original raw key, so its data follows the rename.
         var present = root.ValueKind == JsonValueKind.Object

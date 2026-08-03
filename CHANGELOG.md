@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A column declared `FieldBinding.Reference` no longer projects the document's own copy of the
+  value.** A reference reads true *now* — the target's current value — which this stage does not
+  evaluate yet. The projector was falling back to whatever the document itself carried, which is
+  fixed-then data: declaring the same target as `Snapshot` and as `Reference` produced identical
+  columns, and when the target later changed, the reference column silently kept the old value with
+  nothing marking it stale (no skip, `Projected`, not `Stale`). The column is now left empty
+  instead. An empty box can still be filled; a wrong value is never found.
+
+### Added
+
+- `ProjectionResult.UnresolvedReferences` — the declared columns whose reference binding the engine
+  did not resolve, in declared order. Emptying a box without saying so is the same silence in a
+  quieter form, so the projection result names them. `ProjectionResult.Completed` gains the
+  corresponding parameter (breaking only for direct factory callers).
+
+### Changed
+
+- An unresolved reference column is created **nullable** even when declared `Nullable: false`.
+  The engine leaves the column empty, so carrying the declared NOT NULL through to the table would
+  have the store reject every row the engine itself emptied. The declaration is unchanged — only
+  the physical column this stage can honor.
+- Unresolved reference columns no longer appear in `ProjectionResult.AbsentFieldCounts`. That count
+  records "the document never carried this field", which was never the fact in question here: the
+  box was not the document's to fill.
+
+> **Upgrade note.** If you declared a reference binding and relied on the projected column holding
+> the document's copy, declare it as `Snapshot` instead — that is what the data actually was.
+
 ## 0.5.0
 
 Pairs with MorphDB `0.9.x`: this release requires `MorphDB.Client 0.9.0`, so it is a minor for the

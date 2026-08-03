@@ -149,7 +149,7 @@ public class ProjectionResultTests
     {
         var skips = new[] { new ProjectionSkip(DocumentId.New(), "unmappable") };
         var absences = new Dictionary<string, int> { ["qty"] = 3 };
-        var result = ProjectionResult.Completed(inserted: 9, skipped: skips, absentFieldCounts: absences, watermark: new Watermark(9));
+        var result = ProjectionResult.Completed(inserted: 9, skipped: skips, absentFieldCounts: absences, unresolvedReferences: [], watermark: new Watermark(9));
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(9);

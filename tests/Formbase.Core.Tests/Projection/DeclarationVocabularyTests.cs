@@ -142,6 +142,89 @@ public class DeclarationVocabularyTests
     }
 
     [Fact]
+    public async Task A_reference_binding_does_not_project_the_documents_own_copy()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(FormTypeRef.Create("items"), "master_items",
+        [
+            new FieldHint("key", ColumnType.Text),
+        ]));
+        h.Hints.Declare(new FormTypeHints(Qc, "qc",
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("unit_price", ColumnType.Decimal,
+                Binding: FieldBinding.Reference,
+                Target: new EntityRef(FormTypeRef.Create("items"), "price")),
+        ]));
+        // The document carries a copy of the referenced value — forms routinely do.
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+
+        await h.Projector.ProjectAsync(Qc);
+
+        var rows = await h.Store.QueryAsync("qc", QuerySpec.All);
+        rows[0]["unit_price"].Should().BeNull(
+            "a true-now declaration must not be answered with the document's fixed-then copy — "
+            + "an empty box can still be filled, a wrong value is never found");
+    }
+
+    [Fact]
+    public async Task An_unresolved_reference_is_reported_on_the_projection_result()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, "qc",
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("unit_price", ColumnType.Decimal,
+                Binding: FieldBinding.Reference,
+                Target: new EntityRef(FormTypeRef.Create("items"), "price")),
+        ]));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        result.UnresolvedReferences.Should().Equal(["unit_price"],
+            "leaving the box empty without saying so is the same silence in a quieter form");
+    }
+
+    [Fact]
+    public async Task An_unresolved_reference_column_is_created_nullable_even_when_declared_required()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, "qc",
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("unit_price", ColumnType.Decimal, Nullable: false,
+                Binding: FieldBinding.Reference,
+                Target: new EntityRef(FormTypeRef.Create("items"), "price")),
+        ]));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        var created = h.Store.CreatedSchemas.Single(s => s.TableName == "qc");
+        created.Columns.Single(c => c.Name == "unit_price").Nullable.Should().BeTrue(
+            "the engine leaves an unresolved reference empty, so declaring the column NOT NULL "
+            + "would make the store reject every row the engine itself emptied");
+        result.Inserted.Should().Be(1, "the document is fine — it is the reference the engine cannot resolve");
+    }
+
+    [Fact]
+    public async Task A_stored_field_is_never_reported_as_an_unresolved_reference()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, "qc",
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+        ]));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+
+        var result = await h.Projector.ProjectAsync(Qc);
+
+        result.Inserted.Should().Be(1);
+        result.UnresolvedReferences.Should().BeEmpty("only a Reference binding is unresolved");
+    }
+
+    [Fact]
     public async Task An_undeclared_relation_target_falls_back_to_its_type_name()
     {
         var h = new Harness();

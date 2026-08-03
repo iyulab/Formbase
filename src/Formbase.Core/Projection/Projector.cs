@@ -56,8 +56,20 @@ public sealed class Projector : IProjector
 
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
         // Augment with system columns but keep the declared relations and version — the store must
-        // receive the full declaration, not just the column list.
-        var fullSchema = schema with { Columns = [.. ProjectionSystemColumns.All, .. schema.Columns] };
+        // receive the full declaration, not just the column list. An unresolved reference column is
+        // relaxed to nullable on the way: the engine leaves it empty, so carrying the declared NOT
+        // NULL through would have the store reject every row the engine itself emptied. The
+        // declaration is unchanged — only the physical column this stage can honor.
+        var fullSchema = schema with
+        {
+            Columns =
+            [
+                .. ProjectionSystemColumns.All,
+                .. schema.Columns.Select(c => c.Binding == FieldBinding.Reference && !c.Nullable
+                    ? c with { Nullable = true }
+                    : c),
+            ],
+        };
 
         try
         {
@@ -67,6 +79,12 @@ public sealed class Projector : IProjector
             var rows = new List<IReadOnlyDictionary<string, object?>>();
             var skips = new List<ProjectionSkip>();
             var absentCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            // A declaration-level fact, not a per-row one: every row leaves the same columns empty,
+            // so this is read off the schema rather than accumulated while mapping.
+            var unresolvedReferences = schema.Columns
+                .Where(c => c.Binding == FieldBinding.Reference)
+                .Select(c => c.Name)
+                .ToArray();
 
             await foreach (var document in _rawStore.StreamAsync(type, Watermark.Zero, cancellationToken).ConfigureAwait(false))
             {
@@ -98,7 +116,7 @@ public sealed class Projector : IProjector
             var stamp = new ProjectionStamp(rawHead, schema.TableName, schema.Fingerprint());
             await _projectionState.SetProjectedAsync(type, stamp, cancellationToken).ConfigureAwait(false);
 
-            return ProjectionResult.Completed(inserted, skips, absentCounts, rawHead);
+            return ProjectionResult.Completed(inserted, skips, absentCounts, unresolvedReferences, rawHead);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

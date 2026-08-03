@@ -14,11 +14,18 @@ namespace Formbase.Core.Projection;
 /// conflation visible per projection). Covers only rows that landed; skipped documents report their
 /// own reasons via <see cref="Skipped"/>.
 /// </param>
+/// <param name="UnresolvedReferences">
+/// Declared columns whose <see cref="Schema.FieldBinding.Reference"/> binding the engine did not
+/// resolve, in declared order. A reference reads true *now*, which the engine cannot yet evaluate,
+/// so the column is left empty rather than filled with the document's own fixed-then copy — and
+/// named here, because leaving it empty without saying so is the same silence in a quieter form.
+/// </param>
 public sealed record ProjectionResult(
     bool Projected,
     int Inserted,
     IReadOnlyList<ProjectionSkip> Skipped,
     IReadOnlyDictionary<string, int> AbsentFieldCounts,
+    IReadOnlyList<string> UnresolvedReferences,
     Watermark ProjectedWatermark)
 {
     private static readonly IReadOnlyDictionary<string, int> NoAbsences =
@@ -26,13 +33,14 @@ public sealed record ProjectionResult(
 
     /// <summary>No schema was proposed (e.g. no field hints yet); nothing was projected.</summary>
     public static ProjectionResult NoSchema() =>
-        new(Projected: false, Inserted: 0, Array.Empty<ProjectionSkip>(), NoAbsences, Watermark.Zero);
+        new(Projected: false, Inserted: 0, Array.Empty<ProjectionSkip>(), NoAbsences, [], Watermark.Zero);
 
     /// <summary>A projection completed, reaching <paramref name="watermark"/>.</summary>
     public static ProjectionResult Completed(
         int inserted,
         IReadOnlyList<ProjectionSkip> skipped,
         IReadOnlyDictionary<string, int> absentFieldCounts,
+        IReadOnlyList<string> unresolvedReferences,
         Watermark watermark) =>
-        new(Projected: true, inserted, skipped, absentFieldCounts, watermark);
+        new(Projected: true, inserted, skipped, absentFieldCounts, unresolvedReferences, watermark);
 }
