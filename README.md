@@ -46,6 +46,27 @@ A document's life:
    - *"Show me this document"* → the raw store, always available.
    - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic.
 
+## Install
+
+Current release: **0.6.0**. Formbase projects into MorphDB over its client, so the two move
+together — **`Formbase.* 0.6.0` pairs with MorphDB `0.9.x`**. Pin the MorphDB server image to
+that line (`ghcr.io/iyulab/morphdb:0.9.0`); the compatible pair is stated with every release in
+[CHANGELOG.md](CHANGELOG.md).
+
+Start with the core and the DI helpers, then add only the adapters you actually run:
+
+```bash
+dotnet add package Formbase.Core                 # engine, ports, in-memory implementations
+dotnet add package Formbase.DependencyInjection  # AddFormbaseCore / AddFormbaseInMemory
+dotnet add package Formbase.MorphDb              # IProjectionStore over MorphDB
+dotnet add package Formbase.Postgres             # durable raw store, projection state, field hints
+dotnet add package Formbase.SchemaIntelligence   # optional: LLM-backed ISchemaProposer
+```
+
+`Formbase.Core` has zero external package dependencies, and the in-memory profile below needs
+nothing else — the adapters are what bring in Npgsql, the MorphDB client, and
+`Microsoft.Extensions.AI`.
+
 ## Quick start
 
 ```csharp
@@ -100,7 +121,7 @@ Eight ports define the engine; everything else composes them.
 
 **Projects**
 
-- `Formbase.Core` — primitives, the six ports, the projector/intake/query services, and in-memory implementations. **Zero external package dependencies.**
+- `Formbase.Core` — primitives, the ports above, the projector/intake/query services, and in-memory implementations. **Zero external package dependencies.**
 - `Formbase.MorphDb` — `IProjectionStore` implemented over `MorphDB.Client`, plus `AddMorphDbProjectionStore`. A thin translation layer; all projection policy stays in the core.
 - `Formbase.Postgres` — the durable, append-only `IRawStore` over PostgreSQL (direct Npgsql, never through MorphDB), plus the durable `IProjectionState` and `IFieldHintSource` adapters. Registration helpers: `AddPostgresRawStore`, `AddPostgresProjectionState`, `AddPostgresFieldHints`. Appends are serialized so watermark assignment order equals commit order.
 - `Formbase.DependencyInjection` — `AddFormbaseCore` / `AddFormbaseInMemory` wiring. Each adapter package ships its own registration helper, so this package stays free of adapter dependencies.
@@ -110,7 +131,42 @@ Eight ports define the engine; everything else composes them.
 - **`ISchemaProposer` is where the ontology layer will live.** The current `HintSchemaProposer` reads declared field hints. A later proposer plugs into the same port — no core change. Its job is to **read what a form already declares**, not to invent structure from values: looking at a `product_name` column alone can never tell you whether it is a snapshot, a denormalization, or a mistake. The form can — a "filled-in" box and an "attached" box are different boxes.
 - **Raw lives in Formbase, not MorphDB.** Formbase owns its source of truth, so a MorphDB outage never blocks intake or document reads, and re-projection is a full scan Formbase controls rather than something tunneled through a REST API.
 - **`FormType` never reaches MorphDB.** Projected tables are generic; the form concept is a Formbase-internal string.
-- **Layout is outside; structure is inside.** How a form is laid out, rendered, or printed is an adapter/UI concern and never enters the engine. Which parts of a form define an entity boundary is *derivation policy* and belongs in the core. The declaration vocabulary that carries that distinction is still open — see Roadmap.
+- **Layout is outside; structure is inside.** How a form is laid out, rendered, or printed is an adapter/UI concern and never enters the engine. Which parts of a form define an entity boundary is *derivation policy* and belongs in the core; the vocabulary that carries the distinction is declared through `FieldHint`/`RelationHint` (see below).
+
+### Reading a declaration back
+
+A form type's declared vocabulary — the identity/display split (`SourceKey`), the time binding
+(`FieldBinding` plus its target), relations, and the declaration version — travels declaration →
+proposal → projection → fingerprint. To read it back, resolve the proposer the engine itself
+projects through:
+
+```csharp
+var proposer = provider.GetRequiredService<ISchemaProposer>();
+var schema   = await proposer.ProposeAsync(qc);   // null when nothing is declared yet
+
+foreach (var column in schema!.Columns)
+{
+    // column.Name          — the projected column
+    // column.ExtractionKey — the raw key it reads from (SourceKey when it differs)
+    // column.Binding       — Stored / Snapshot / Reference
+    // column.BindingTarget — "table.column" for a bound field
+}
+// schema.Relations, schema.DeclarationVersion
+```
+
+What that call does and does not answer:
+
+- It reports **what the current declaration proposes**, not what the projected table currently
+  holds. `engine.GetProjectionStatusAsync(qc)` closes the gap: a redeclaration changes the
+  fingerprint, so the status reads `Stale` even when no new document arrived.
+- With `Formbase.SchemaIntelligence` registered the same call returns declaration and inference
+  composed — declared axes carried through unchanged, undeclared columns answered by the model,
+  the declaration winning on conflict. The read-back is the same call either way.
+- A `FieldBinding.Reference` column is declared but **not yet resolved**: it projects empty, and
+  each `ProjectAsync` names those columns in `ProjectionResult.UnresolvedReferences`.
+
+Declaring is deliberately not on this port — it belongs to whichever `IFieldHintSource` you
+registered (see the durable composition below).
 
 ### Durable composition
 
@@ -180,7 +236,7 @@ Implemented:
 - **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction awaits the declaration-version work below)
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
 - **LLM schema proposer** — `Formbase.SchemaIntelligence` implements `ISchemaProposer` over any `IChatClient` (provider-agnostic via Microsoft.Extensions.AI), with strict proposal parsing and a hallucination guard; graduated from its spike after live-model quality measurement (100% parse/projection survival, zero required-flag violations across a six-shape catalog). Registering it **composes** over the declared structure rather than replacing it — the declaration answers for what it states, the model for the rest, and the declaration wins on conflict, because a proposer that reads values never held the fact
-- **Declaration vocabulary** — a form type's hints carry four axes beyond name/type/nullability: identity-vs-display (`SourceKey`, so a renamed field keeps its data), time binding (`FieldBinding` Stored/Snapshot/Reference with a target), relations (`RelationHint`, each form type still its own table), and a declaration version. Each survives declaration → proposal → projection → fingerprint; defaults reproduce the pre-vocabulary shape
+- **Declaration vocabulary** — a form type's hints carry four axes beyond name/type/nullability: identity-vs-display (`SourceKey`, so a renamed field keeps its data), time binding (`FieldBinding` Stored/Snapshot/Reference with a target), relations (`RelationHint`, each form type still its own table), and a declaration version. Each survives declaration → proposal → projection → fingerprint, and is readable back through the proposer (see [Reading a declaration back](#reading-a-declaration-back)); defaults reproduce the pre-vocabulary shape
 - **Tri-state projection integrity** — if a failed rebuild's state cleanup also fails, the stamp is marked unverified and a query throws `ProjectionUnverifiedException` rather than serving a half-built table as fresh
 
 Known gaps (audited 2026-07-20 against Formology):

@@ -48,7 +48,6 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         // exposes no relations API to wrap, and whether a rebuildable projection should carry
         // enforced FKs is an open design question. The FK column data still projects as a normal
         // column, so the projection stays complete — only the optional relation link is absent.
-        // Tracked: claudedocs/morphdb/issues/ISSUE-morphdb-20260724-client-lacks-relations-api.md.
         var request = new CreateTableRequest
         {
             Name = schema.TableName,

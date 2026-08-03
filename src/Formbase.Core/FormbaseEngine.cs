@@ -6,7 +6,7 @@ using Formbase.Core.Query;
 namespace Formbase.Core;
 
 /// <summary>
-/// The core engine surface a consumer (host, adapter) drives. A thin composition over the six ports:
+/// The core engine surface a consumer (host, adapter) drives. A thin composition over the ports:
 /// accept documents (raw-first, no declaration required), read a document (the human's question),
 /// project a form type, query records (the system's question), and inspect projection status.
 /// Holds no logic of its own beyond wiring and status derivation.

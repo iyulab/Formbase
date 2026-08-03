@@ -4,11 +4,10 @@
     <RootNamespace>Formbase.SchemaIntelligence</RootNamespace>
     <Description>LLM-backed schema proposer for formbase — observes raw documents and proposes a projection schema through the ISchemaProposer port. Provider-agnostic via Microsoft.Extensions.AI (any IChatClient), with strict proposal parsing and a hallucination guard.</Description>
     <!--
-      Graduated from the P3-1 spike (2026-07-24): live-model quality measurement passed all
-      four proposed criteria (parse 30/30, projection 30/30, required-flag violations 0,
-      type agreement 98.1% — claudedocs/Formbase/reports/2026-07-23-llm-proposer-quality.md
-      in the umbrella). Packaged like every other adapter; central Directory.Build.props
-      supplies the metadata.
+      Graduated from a spike (2026-07-24) once live-model measurement met all four criteria set
+      for it beforehand: strict-parse 30/30, projection survival 30/30, required-flag violations 0,
+      and 98.1% type agreement across a six-shape catalog repeated five times. Packaged like every
+      other adapter; the central Directory.Build.props supplies the metadata.
     -->
   </PropertyGroup>
 
