@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Documentation
+
+- **The README's quickstart now carries the `using` its own sample needs.** `ISchemaProposer` lives
+  in `Formbase.Core.Ports`, which the import list omitted, so anyone copying the "reading a
+  declaration back" sample got `CS0246` on their first build. The samples are now compiled and run
+  as tests — including the results they claim, such as the filtered query returning the second
+  document and the proposer answering `null` before anything is declared — so a renamed method or a
+  changed signature breaks the suite rather than a reader's first five minutes.
+
 ### Fixed
 
 - **Turning on LLM schema intelligence no longer discards the declaration.** `AddLlmSchemaProposer`
