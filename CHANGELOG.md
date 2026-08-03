@@ -57,6 +57,29 @@
 > keep the model answering for everything, register `LlmSchemaProposer` as the `ISchemaProposer`
 > yourself instead of calling the extension.
 
+### Documentation
+
+- The README now has an **Install** section — the five published packages, the current version, and
+  the MorphDB line they pair with. That last fact had to be reconstructed from this changelog by a
+  consumer once; it is now stated where it is looked for, and three tests hold the README to the
+  version, the package set, and the server image the live suite runs against.
+- **Reading a declaration back** is documented rather than left to be discovered: resolve
+  `ISchemaProposer` and the declared axes come back, with or without schema intelligence
+  registered. The section also states what the call does not answer — it reports what the
+  declaration proposes, not what the projected table currently holds.
+
+### Internal
+
+- The release workflow creates the GitHub release itself instead of relying on someone doing it by
+  hand — 0.6.0 shipped without one and nothing said so for ten days — and refuses to publish a
+  version this changelog does not describe.
+
+### Dependencies
+
+- `M3L.Native` 0.6.1, `Microsoft.Extensions.AI.*` 10.8.3, and the test packages
+  (`Microsoft.NET.Test.Sdk` 18.8.1, `Testcontainers` 4.13.0, `AwesomeAssertions` 9.5.0). Patch and
+  minor only; no vulnerability advisories were open against the previous set.
+
 ## 0.6.0
 
 Pairs with MorphDB `0.9.x`, unchanged from 0.5.0 — this is a formbase-only minor, so a `0.9.x`
