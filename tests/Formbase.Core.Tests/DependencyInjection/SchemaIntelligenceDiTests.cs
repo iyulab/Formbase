@@ -136,6 +136,50 @@ public class SchemaIntelligenceDiTests
         row["note"].Should().Be("n", "and the inferred column carries data like any other");
     }
 
+    /// <summary>
+    /// The declared side is usually not hand-written — an input adapter generates it. Generated
+    /// hints split source key from name on their own terms, so the composition has to hold up
+    /// against names it did not choose.
+    /// </summary>
+    [Fact]
+    public async Task Generated_hints_compose_with_inference_the_same_way()
+    {
+        const string form =
+            """
+            ## Inspection
+
+            - lot_no(로트 번호): string(50)
+            - qty: integer @min(0)
+            - unit: string? # MasterItem.Key
+            - approved_price: decimal(10,2) # PriceBook.Amount!
+            """;
+        var inspection = M3L.M3lHintAdapter.Adapt(form).Hints[0];
+
+        var services = new ServiceCollection();
+        services.AddFormbaseInMemory();
+        // The model sees a field the form never declared, and one it did.
+        services.AddSingleton<IChatClient>(new ScriptedChatClient(
+            """{"type":"object","properties":{"lot_no":{"type":"string"},"remark":{"type":"string"}},"required":[]}"""));
+        services.AddLlmSchemaProposer();
+        await using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<InMemoryFieldHintSource>().Declare(inspection);
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        await engine.AcceptAsync(inspection.Type, DocumentBody.Parse(
+            """{"lot_no":"L-1","qty":7,"unit":"EA","approved_price":12.5,"remark":"r"}"""));
+
+        var result = await engine.ProjectAsync(inspection.Type);
+
+        result.UnresolvedReferences.Should().Equal(["unit"],
+            "the adapter maps a soft binding to Reference, which this stage does not resolve");
+        var row = (await engine.QueryAsync(inspection.Type, QuerySpec.All)).Rows.Should().ContainSingle().Subject;
+        row.Keys.Should().Equal(["lot_no", "qty", "unit", "approved_price", "remark"],
+            "the declared columns keep their generated order and none is proposed twice");
+        row["lot_no"].Should().Be("L-1");
+        row["approved_price"].Should().Be(12.5m, "a hard binding is a snapshot — the value written then");
+        row["unit"].Should().BeNull();
+        row["remark"].Should().Be("r", "the form declares nothing about it, so inference answers");
+    }
+
     [Fact]
     public async Task An_undeclared_form_type_is_proposed_by_the_model_alone()
     {
