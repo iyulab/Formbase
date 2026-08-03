@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **Turning on LLM schema intelligence no longer discards the declaration.** `AddLlmSchemaProposer`
+  replaced whichever `ISchemaProposer` was registered before it, so the hint-reading proposer
+  registered by `AddFormbaseCore` was gone and with it every declared axis — source keys, time
+  bindings and their targets, relations, the table name and the declaration version. A proposal
+  carries no record of what it did not carry, so nothing said so. The registration now composes
+  over the earlier proposer instead of replacing it.
+
 - **A column declared `FieldBinding.Reference` no longer projects the document's own copy of the
   value.** A reference reads true *now* — the target's current value — which this stage does not
   evaluate yet. The projector was falling back to whatever the document itself carried, which is
@@ -14,6 +21,13 @@
 
 ### Added
 
+- `DeclaredFirstSchemaProposer` — composes two proposers under one rule: the declaration is carried
+  through unchanged and inference answers only for what was never declared. It knows nothing about
+  LLMs; `AddLlmSchemaProposer` is one arrangement of it. A declared column claims both the raw key
+  it reads and the name it lands under, so a field already declared under another name is not
+  proposed a second time, and declared columns keep their position because column order is part of
+  the schema fingerprint. On conflict the declaration wins — not as a preference between
+  implementations, but because a proposer that observes documents never held the fact.
 - `ProjectionResult.UnresolvedReferences` — the declared columns whose reference binding the engine
   did not resolve, in declared order. Emptying a box without saying so is the same silence in a
   quieter form, so the projection result names them. `ProjectionResult.Completed` gains the
@@ -36,6 +50,51 @@
 > `Reference` and a *hard* one to `Snapshot`, so columns from soft-bound fields are now empty as
 > well. That is the intended reading of a soft binding — it names the target's current value, which
 > this stage does not evaluate — but it is a visible change for anything projecting adapter output.
+>
+> If you use `AddLlmSchemaProposer` *and* declare field hints for the same form type, the proposed
+> schema changes shape: it is now the declared one, extended with whatever the model found that the
+> declaration did not mention. That is a new fingerprint, so the next projection is a rebuild. To
+> keep the model answering for everything, register `LlmSchemaProposer` as the `ISchemaProposer`
+> yourself instead of calling the extension.
+
+## 0.6.0
+
+Pairs with MorphDB `0.9.x`, unchanged from 0.5.0 — this is a formbase-only minor, so a `0.9.x`
+server and `MorphDB.Client 0.9.0` stay as they are and only the `Formbase.*` packages move.
+
+`Formbase.SchemaIntelligence` is published for the first time in this release, graduating from
+spike to package after a quality measurement against a live model.
+
+### Added
+
+- **The declaration vocabulary carries four axes**, each surviving declaration → proposal →
+  projection → fingerprint. `FieldHint` gains `SourceKey` (the raw extraction key, split from the
+  projected name, so renaming a field carries its data through reprojection), `Binding`
+  (`Stored`/`Snapshot`/`Reference`) and `Target`; `FormTypeHints` gains `Relations` and
+  `DeclarationVersion`. Every default reproduces the previous shape exactly, so a declaration that
+  uses none of them projects and fingerprints as before. Stage-1 semantics are preserve,
+  fingerprint and deliver — `Reference` resolution is not executed.
+- `Formbase.SchemaIntelligence` as a published package: `LlmSchemaProposer`, an `ISchemaProposer`
+  over `Microsoft.Extensions.AI`'s `IChatClient`, with strict parsing and a hallucination guard.
+
+### Changed
+
+- **Breaking — record queries can now throw `ProjectionUnverifiedException`.** When a failed
+  rebuild could not even be cleaned up, the projection is marked unverified and refused rather than
+  served as if fresh. Catching the base `FormbaseException` already covers it; code that catches
+  concrete types needs this one added. Reprojection is the answer, and the trigger performs it.
+- **Breaking — `ProjectionState` gains `Unverified`.** An exhaustive switch over
+  `GetProjectionStatusAsync().State` needs the new case. `QueryResult` exposes only `Stale`, so
+  most query consumers are unaffected.
+- **Breaking — Postgres `projection_state` gains a `verified` column.** Added by automatic
+  migration (`ADD COLUMN IF NOT EXISTS … DEFAULT true`); existing rows read verified, which is the
+  honest default for a completed projection. No consumer action.
+
+### Fixed
+
+- The projection trigger now rebuilds an unverified projection. It compared watermarks only, so a
+  projection marked unverified stayed unverified while queries kept being refused — the automatic
+  recovery the tri-state depends on never fired.
 
 ## 0.5.0
 
