@@ -42,6 +42,24 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION"
 
+      # A release nobody wrote down is one the repository cannot answer questions about later.
+      # This gate runs *before* anything is published: a missing section fails the run while it is
+      # still free to fix. Checked after the push it could only be a warning, and a warning about
+      # an already-published version is exactly the record gap this step exists to close.
+      - name: Verify the changelog records this version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          awk -v heading="## $VERSION" '
+            $0 == heading { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
+            echo "::error::CHANGELOG.md has no '## $VERSION' section. Record the release before publishing it."
+            exit 1
+          fi
+          echo "Release notes: $(wc -l < "$RUNNER_TEMP/release-notes.md") lines"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -65,8 +83,8 @@ jobs:
       - name: Test
         run: dotnet test Formbase.slnx --no-build --configuration Release --verbosity normal
 
-      # Packs every IsPackable project in the solution:
-      # Formbase.Core, Formbase.MorphDb, Formbase.Postgres, Formbase.DependencyInjection.
+      # Packs every IsPackable project in the solution: Formbase.Core, Formbase.MorphDb,
+      # Formbase.Postgres, Formbase.DependencyInjection, Formbase.SchemaIntelligence.
       - name: Pack
         run: dotnet pack Formbase.slnx --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 
@@ -92,3 +110,20 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
+
+      # The other half of the same record. Packages and the tag were automated while the release
+      # notes were written by hand, so the hand half is the one that went missing — 0.4.0 and 0.5.0
+      # have a release, 0.6.0 shipped without one and nobody noticed for ten days. Automating it
+      # here means the three can no longer drift apart.
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, leaving it alone."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "Formbase ${{ steps.version.outputs.version }}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
