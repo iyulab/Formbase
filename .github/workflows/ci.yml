@@ -115,6 +115,47 @@ jobs:
       - name: Test (MorphDB live contract)
         run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true
 
+  durable-live:
+    name: Durable Live Contract
+    runs-on: ubuntu-latest
+    # Same gating as the other live jobs: don't burn container minutes on a build that already failed.
+    needs: build
+    # The durable suite is the only one that needs BOTH gates open, because it needs both services at
+    # once -- formbase's own state in Postgres and the projected table in MorphDB. Neither of the
+    # other live jobs opens both, so until this job existed these tests compiled nowhere in CI and
+    # ran only on a developer's machine.
+    #
+    # It stands up three containers (its own Postgres, plus MorphDB and that one's Postgres), so it
+    # gets the widest bound.
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      # Filtered to the durable namespace on purpose. Opening both gates compiles every live suite,
+      # and running them all here would repeat what the two jobs above already cover -- twice the
+      # container minutes for no extra signal.
+      #
+      # The filter is the weak point: a run that matches nothing still exits zero, so renaming the
+      # namespace would leave this job green and covering nothing. If you move these tests, move this
+      # line with them.
+      - name: Test (durable live contract)
+        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeLiveTests=true --filter "FullyQualifiedName~Live.Durable"
+
   quality:
     name: Format & Vulnerability Scan
     runs-on: ubuntu-latest
