@@ -13,6 +13,7 @@ precondition they must satisfy.
 POST   /formtypes/{type}/documents     # Accept a document
 GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
+PUT    /formtypes/{type}/declaration   # Put a declaration in force
 POST   /formtypes/{type}/projection    # Rebuild the projected table
 GET    /formtypes/{type}/projection    # Read projection state
 GET    /formtypes/{type}/records       # Query projected records
@@ -142,7 +143,47 @@ This is the shape the next projection run will build. A form type with no declar
 - **`kind`** on a relation — `child` (an owned entity whose key field points back here) or
   `reference` (a link out).
 
-Writing a declaration is not on this surface yet.
+### Putting a declaration in force
+
+```http
+PUT /formtypes/orders/declaration
+{
+  "tableName": "orders",
+  "declarationVersion": 2,
+  "expectedDeclarationVersion": 1,
+  "fields": [ { "name": "total", "type": "integer", "nullable": false } ]
+}
+```
+
+**Say which version you are replacing.** `expectedDeclarationVersion` is the version you believe is
+in force; omit it only for a form type that has none. Two opposite mistakes answer `409`
+`/problems/declaration-version-conflict`: expecting a version when none is in force, and omitting one
+when there is. A blind overwrite is how one consumer silently discards another's declaration, so the
+surface does not offer it.
+
+The declaration's own `declarationVersion` is yours to choose — it is what the *next* writer will
+have to expect.
+
+A first declaration answers `201`; a replacement answers `200`. Both carry the declaration as it
+will now read back, together with what the write did to the projection:
+
+```json
+{
+  "declaration": { "formType": "orders", "declarationVersion": 2, "…": "…" },
+  "projection": { "state": "stale", "projectedWatermark": 12, "rawHead": 12 }
+}
+```
+
+**Nothing is rebuilt.** A declaration whose shape changed leaves an existing projection `stale`
+without any document arriving — that is the shape axis of staleness, and the watermarks alone cannot
+show it. Run a projection when you want the table to match; a rebuild drops and refills the whole
+table, which is not a cost to spend on your behalf without being asked.
+
+A declaration is refused with `400` `/problems/invalid-declaration` when it names no table, carries
+no fields, or declares one field twice — each would otherwise land as a projected table nobody meant
+to declare.
+
+Deleting a declaration is not on this surface yet.
 
 ---
 
@@ -260,11 +301,13 @@ which is stable; `title` and `detail` are prose.
 | 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
 | 400 | `/problems/invalid-request` | The body was not JSON, or the idempotency key was not a UUID |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read |
+| 400 | `/problems/invalid-declaration` | A declaration named no table, carried no fields, or declared one twice |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
 | 404 | `/problems/unknown-namespace` | The request named a namespace this host does not serve |
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
+| 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
 

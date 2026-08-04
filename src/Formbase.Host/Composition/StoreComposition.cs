@@ -1,5 +1,6 @@
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
+using Formbase.Host.Declarations;
 
 namespace Formbase.Host.Composition;
 
@@ -67,6 +68,7 @@ internal static class StoreComposition
         services.AddSingleton<IRawStore, InMemoryRawStore>();
         services.AddSingleton<IProjectionStore, InMemoryProjectionStore>();
         services.AddSingleton<IProjectionState, InMemoryProjectionState>();
+        services.AddSingleton<IDeclarationWriter, InMemoryDeclarationWriter>();
         return services;
     }
 
@@ -102,6 +104,7 @@ internal static class StoreComposition
         // registers it and points IFieldHintSource at it. Registering it again here, by casting the
         // interface back, made the two resolve each other: a cycle the container follows until the
         // stack runs out, which ends the process rather than throwing.
+        services.AddSingleton<IDeclarationWriter, PostgresDeclarationWriter>();
         return services;
     }
 

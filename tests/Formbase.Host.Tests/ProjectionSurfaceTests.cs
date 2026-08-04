@@ -2,12 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
-using Formbase.Core.Schema;
 using Formbase.Host.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Formbase.Host.Tests;
 
@@ -22,12 +19,10 @@ namespace Formbase.Host.Tests;
 /// </summary>
 public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
 
     public ProjectionSurfaceTests(WebApplicationFactory<Program> factory)
     {
-        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -53,7 +48,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task A_declared_form_type_projects_its_documents_and_reports_current()
     {
         var type = NewFormType();
-        Declare(type, "total");
+        await DeclareAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":2}""");
 
@@ -72,7 +67,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task A_document_appended_after_the_run_makes_the_projection_stale()
     {
         var type = NewFormType();
-        Declare(type, "total");
+        await DeclareAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
         await _client.PostAsync($"/formtypes/{type}/projection", null);
 
@@ -92,7 +87,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task Running_a_projection_twice_leaves_the_same_table()
     {
         var type = NewFormType();
-        Declare(type, "total");
+        await DeclareAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":2}""");
 
@@ -141,16 +136,21 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
 
     private static string NewFormType() => $"proj{Guid.NewGuid():N}"[..16];
 
-    private void Declare(string type, params string[] fields)
+    /// <summary>
+    /// Declares through the surface a consumer has. It used to reach the hint source directly,
+    /// because there was no other way; keeping that once there is one would mean these tests
+    /// exercised a path nobody outside the process can take.
+    /// </summary>
+    private async Task DeclareAsync(string type, params string[] fields)
     {
-        // Declarations have no HTTP surface yet, so they are made where a host operator makes them
-        // today: through the hint source the running host resolved. This is that host's real
-        // declaration path, not a stand-in for it.
-        _factory.Services.GetRequiredService<Formbase.Core.InMemory.InMemoryFieldHintSource>()
-            .Declare(new FormTypeHints(
-                FormTypeRef.Create(type),
-                type,
-                [.. fields.Select(f => new FieldHint(f, ColumnType.Integer))]));
+        var response = await _client.PutAsJsonAsync($"/formtypes/{type}/declaration", new
+        {
+            tableName = type,
+            declarationVersion = 1,
+            fields = fields.Select(f => new { name = f, type = "integer" }).ToArray(),
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
     }
 
     private async Task AcceptAsync(string type, string body)

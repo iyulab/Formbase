@@ -55,6 +55,68 @@ public sealed record DeclaredRelationResponse(
     string Target,
     string KeyField);
 
+
+/// <summary>
+/// A declaration to put in force. The shape mirrors what a read returns, so a caller can read one,
+/// change a field and send it back.
+/// </summary>
+/// <param name="TableName">The table the projection builds. Required — it is part of the shape.</param>
+/// <param name="DeclarationVersion">
+/// The caller's own version for this declaration. It is also the concurrency token: whoever replaces
+/// this declaration next has to say they expected this number.
+/// </param>
+/// <param name="ExpectedDeclarationVersion">
+/// The version the caller believes is currently in force. Omit it only when declaring for the first
+/// time — a form type that already has a declaration cannot be replaced without naming the version
+/// being replaced, because a blind overwrite is how one consumer silently discards another's.
+/// </param>
+/// <param name="Fields">The declared fields, in the order they should appear.</param>
+/// <param name="Relations">Declared links to other form types.</param>
+public sealed record DeclarationRequest(
+    string TableName,
+    int DeclarationVersion,
+    int? ExpectedDeclarationVersion,
+    IReadOnlyList<DeclaredFieldRequest> Fields,
+    IReadOnlyList<DeclaredRelationRequest>? Relations);
+
+/// <param name="Name">The projected column's name.</param>
+/// <param name="Type">The column's declared type.</param>
+/// <param name="Nullable">Whether the projected column accepts null. Defaults to true.</param>
+/// <param name="SourceKey">The document key this field reads, when it differs from the column name.</param>
+/// <param name="Binding">When in time the value is read from. Defaults to <c>stored</c>.</param>
+/// <param name="Target">What a bound field points at.</param>
+public sealed record DeclaredFieldRequest(
+    string Name,
+    DeclaredColumnType Type,
+    bool Nullable = true,
+    string? SourceKey = null,
+    DeclaredBinding Binding = DeclaredBinding.Stored,
+    DeclaredTargetResponse? Target = null);
+
+/// <param name="Name">The relation's declared name.</param>
+/// <param name="Kind">Whether the target is owned or merely referenced.</param>
+/// <param name="Target">The form type the relation points at.</param>
+/// <param name="KeyField">The field carrying the link.</param>
+public sealed record DeclaredRelationRequest(
+    string Name,
+    DeclaredRelationKind Kind,
+    string Target,
+    string KeyField);
+
+/// <summary>
+/// What a write answers: the declaration now in force, and what it did to the projection.
+/// </summary>
+/// <param name="Declaration">The declaration as it will now be read back.</param>
+/// <param name="Projection">
+/// The projection's state after the write. A declaration whose shape changed leaves an existing
+/// projection <c>stale</c> without moving a watermark — nothing is rebuilt here, because a rebuild
+/// drops and refills the whole table and that is not a cost to spend on a caller's behalf without
+/// being asked.
+/// </param>
+public sealed record DeclarationWriteResponse(
+    DeclarationResponse Declaration,
+    ProjectionStatusResponse Projection);
+
 /// <summary>Column types as the wire names them.</summary>
 [SuppressMessage(
     "Naming",
@@ -135,6 +197,32 @@ internal static class DeclarationWireMapping
     {
         RelationKind.Child => DeclaredRelationKind.Child,
         RelationKind.Reference => DeclaredRelationKind.Reference,
+    };
+
+    // The way back. Same reason for having no fallback arm: a wire value the engine has no term for
+    // must fail the build rather than be silently mapped to a neighbour.
+    public static ColumnType ToEngine(this DeclaredColumnType type) => type switch
+    {
+        DeclaredColumnType.Text => ColumnType.Text,
+        DeclaredColumnType.Integer => ColumnType.Integer,
+        DeclaredColumnType.Decimal => ColumnType.Decimal,
+        DeclaredColumnType.Boolean => ColumnType.Boolean,
+        DeclaredColumnType.Timestamp => ColumnType.Timestamp,
+        DeclaredColumnType.Uuid => ColumnType.Uuid,
+        DeclaredColumnType.Jsonb => ColumnType.Jsonb,
+    };
+
+    public static FieldBinding ToEngine(this DeclaredBinding binding) => binding switch
+    {
+        DeclaredBinding.Stored => FieldBinding.Stored,
+        DeclaredBinding.Snapshot => FieldBinding.Snapshot,
+        DeclaredBinding.Reference => FieldBinding.Reference,
+    };
+
+    public static RelationKind ToEngine(this DeclaredRelationKind kind) => kind switch
+    {
+        DeclaredRelationKind.Child => RelationKind.Child,
+        DeclaredRelationKind.Reference => RelationKind.Reference,
     };
 #pragma warning restore CS8524
 }
