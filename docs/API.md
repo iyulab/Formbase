@@ -14,6 +14,7 @@ POST   /formtypes/{type}/documents     # Accept a document
 GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
 PUT    /formtypes/{type}/declaration   # Put a declaration in force
+DELETE /formtypes/{type}/declaration   # Remove it, and the projection it built
 POST   /formtypes/{type}/projection    # Rebuild the projected table
 GET    /formtypes/{type}/projection    # Read projection state
 GET    /formtypes/{type}/records       # Query projected records
@@ -183,7 +184,25 @@ A declaration is refused with `400` `/problems/invalid-declaration` when it name
 no fields, or declares one field twice — each would otherwise land as a projected table nobody meant
 to declare.
 
-Deleting a declaration is not on this surface yet.
+### Removing a declaration
+
+```http
+DELETE /formtypes/orders/declaration
+```
+
+`204` when it is gone, `404` when there was none.
+
+**The projection goes with it** — the projected table is dropped and the projection state forgotten,
+so the form type goes back to having documents and no shape. Leaving the table behind would be the
+unsafe choice: the form type would read `notProjected` while its rows sat there.
+
+**The raw stream is untouched**, which is what makes this safe. Declare again, project, and the table
+comes back as it was — including any documents accepted in the meantime, because they were always in
+raw. That is the difference between deleting a shape and deleting data, and only the first is on
+offer here.
+
+If dropping the table fails, the declaration is left in place so you can retry: removing it first
+would leave a table nothing points at and no way to ask for it again.
 
 ---
 

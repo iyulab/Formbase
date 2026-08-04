@@ -1,4 +1,5 @@
 using Formbase.Core.InMemory;
+using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
 using Formbase.Postgres;
 
@@ -21,6 +22,11 @@ namespace Formbase.Host.Declarations;
 internal interface IDeclarationWriter
 {
     Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes a form type's declaration, answering whether one was there.
+    /// </summary>
+    Task<bool> DeleteAsync(FormTypeRef type, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The in-process profile's writer — the same singleton the engine reads through.</summary>
@@ -35,6 +41,9 @@ internal sealed class InMemoryDeclarationWriter : IDeclarationWriter
         _hints.Declare(hints);
         return Task.CompletedTask;
     }
+
+    public Task<bool> DeleteAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_hints.Remove(type));
 }
 
 /// <summary>The durable profile's writer — the same singleton the engine reads through.</summary>
@@ -46,4 +55,7 @@ internal sealed class PostgresDeclarationWriter : IDeclarationWriter
 
     public Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default) =>
         _hints.DeclareAsync(hints, cancellationToken);
+
+    public Task<bool> DeleteAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+        _hints.DeleteAsync(type, cancellationToken);
 }

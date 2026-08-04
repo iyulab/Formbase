@@ -17,7 +17,10 @@ namespace Formbase.Host.Endpoints;
 /// leaves any existing projection stale.
 /// </para>
 /// <para>
-/// Deleting a declaration is not here yet.
+/// Deleting one takes the projection with it. That is safe in a way it would not be in most systems:
+/// the raw stream is the source of truth and is never touched here, so a deleted declaration can be
+/// declared again and re-projected back to exactly what it was. Leaving the table behind would be
+/// the unsafe choice — the form type would read <c>notProjected</c> while its rows sat there.
 /// </para>
 /// </summary>
 internal static class DeclarationEndpoints
@@ -48,6 +51,18 @@ internal static class DeclarationEndpoints
             .Produces<DeclarationWriteResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status409Conflict);
+
+        routes.MapDelete("/formtypes/{type}/declaration", DeleteAsync)
+            .WithName("DeleteDeclaration")
+            .WithSummary("Removes a declaration and the projection it built")
+            .WithDescription(
+                "The projected table is dropped and the projection state forgotten, so the form type " +
+                "goes back to having documents and no shape. The raw stream is untouched: declare " +
+                "again and project, and the table comes back as it was. Documents accepted in the " +
+                "meantime are included, because they were always in raw.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         return routes;
     }
@@ -103,6 +118,43 @@ internal static class DeclarationEndpoints
         return existing is null
             ? Results.Created($"/formtypes/{formType}/declaration", body)
             : Results.Ok(body);
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        string type,
+        IFieldHintSource hints,
+        IDeclarationWriter writer,
+        IProjectionStore projections,
+        IProjectionState state,
+        CancellationToken cancellationToken)
+    {
+        var formType = FormTypeRef.Create(type);
+
+        if (await hints.GetHintsAsync(formType, cancellationToken).ConfigureAwait(false) is null)
+        {
+            return Results.Problem(
+                detail: $"Form type '{formType}' has no declaration to remove.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "The form type has no declaration",
+                type: "/problems/no-declaration");
+        }
+
+        // The stamp names the table that was actually built, which is not always the one the current
+        // declaration names — a redeclaration can move it. Dropping what exists is the only reading
+        // that leaves nothing behind.
+        var stamp = await state.GetAsync(formType, cancellationToken).ConfigureAwait(false);
+
+        // Order matters. The table goes first: if dropping it fails, the declaration that names it is
+        // still there and the caller can retry. Removing the declaration first would leave a table
+        // nothing points at and no way to ask for it again.
+        if (stamp is not null)
+        {
+            await projections.DropTableAsync(stamp.TableName, cancellationToken).ConfigureAwait(false);
+            await state.ClearAsync(formType, cancellationToken).ConfigureAwait(false);
+        }
+
+        await writer.DeleteAsync(formType, cancellationToken).ConfigureAwait(false);
+        return Results.NoContent();
     }
 
     /// <summary>

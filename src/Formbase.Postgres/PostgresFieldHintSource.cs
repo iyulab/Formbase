@@ -58,6 +58,24 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
             """;
     }
 
+    /// <summary>
+    /// Removes a form type's declaration, answering whether one was there. Returning the fact rather
+    /// than swallowing it lets a caller tell "removed" from "there was nothing" — deleting a
+    /// declaration is usually paired with dropping what it built, and those are different situations.
+    /// </summary>
+    public async Task<bool> DeleteAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            $"""DELETE FROM "{_bootstrap.Schema}".field_hints WHERE form_type = @type""",
+            connection);
+        command.Parameters.AddWithValue("type", type.Value);
+
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) > 0;
+    }
+
     /// <summary>Declares (or replaces) the field hints for a form type.</summary>
     public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
     {
