@@ -18,11 +18,42 @@ DELETE /formtypes/{type}/declaration   # Remove it, and the projection it built
 POST   /formtypes/{type}/projection    # Rebuild the projected table
 GET    /formtypes/{type}/projection    # Read projection state
 GET    /formtypes/{type}/records       # Query projected records
+GET    /settings                       # What this instance was composed as
 GET    /openapi/v1.json                # The generated OpenAPI document
 ```
 
 The OpenAPI document is generated from the endpoints themselves, so it is the machine-readable form
 of this page and cannot drift from what is served.
+
+---
+
+## What this instance is
+
+```http
+GET /settings
+```
+
+```json
+{
+  "namespace": "default",
+  "storeProfile": "durable",
+  "durable": true,
+  "schemaIntelligence": { "installed": true, "model": "gpt-4o-mini" }
+}
+```
+
+Deployment choices, fixed when the process started — so this is a read. A settings write would be
+offering to change what stores are behind the ports of a running host, and the answer to that is a
+new process.
+
+**`durable` is the one to check.** An in-process host answers every request exactly as a durable one
+does and loses the documents at the next restart; nothing else about a response distinguishes them.
+
+**`schemaIntelligence` is an extension, not a requirement.** Supply a model endpoint, key and name
+and the engine infers structure for fields nobody declared; supply none and every other capability is
+unchanged — the host starts without model credentials, always. Supplying only some of the three is
+the one thing refused at startup: a host with half of them looks like it has intelligence installed
+and fails on the first proposal. Credentials are never reported back.
 
 ---
 

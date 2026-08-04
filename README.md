@@ -92,6 +92,22 @@ would leave the host running, answering, and losing every document on restart �
 operator would meet as missing data long after the configuration that caused it. Provisioning the
 MorphDB project stays theirs: the engine never administers MorphDB.
 
+**Schema intelligence is an extension.** Supply a model endpoint, key and name and the engine infers
+structure for fields nobody declared; supply none and every other capability is unchanged — the host
+starts without model credentials, always.
+
+```bash
+Formbase__Llm__Endpoint=https://api.openai.com Formbase__Llm__ApiKey=… Formbase__Llm__Model=gpt-4o-mini dotnet run --project src/Formbase.Host
+```
+
+`FORMBASE_LLM_ENDPOINT` / `_API_KEY` / `_MODEL` work too — the same names the LLM live suite reads,
+so an endpoint you have already pointed that at works here unchanged. Supplying only some of the
+three is refused at startup: a host with half of them looks like it has intelligence installed and
+fails on the first proposal.
+
+`GET /settings` reports what an instance was composed as — its namespace, whether it is durable, and
+whether intelligence is installed. Credentials are never reported back.
+
 A container image and a compose file are not here yet.
 
 ## Quick start

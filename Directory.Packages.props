@@ -8,7 +8,8 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.3" />
-    <!-- Test-only: real-model smoke for the LLM proposer spike (any OpenAI-compatible endpoint). -->
+    <!-- The host's optional schema-intelligence extension, and the LLM live suite. Any
+         OpenAI-compatible endpoint. -->
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
     <PackageVersion Include="M3L.Native" Version="0.6.1" />
     <PackageVersion Include="MorphDB.Client" Version="0.9.0" />

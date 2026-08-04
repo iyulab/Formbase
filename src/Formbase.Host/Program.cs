@@ -12,6 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 // deployment sets Formbase:Store=Durable and supplies what that profile needs.
 builder.Services.AddFormbaseStores(builder.Configuration);
 
+// Optional, like a database extension: supply model settings and the engine infers structure for
+// what nobody declared. Supply none and the host runs exactly as it does now — the invariant is that
+// it starts without model credentials.
+builder.Services.AddSchemaIntelligence(builder.Configuration);
+
 // Errors answer as RFC 9457 problem details, including the ones no endpoint catches.
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
@@ -44,6 +49,7 @@ app.MapDocumentEndpoints();
 app.MapProjectionEndpoints();
 app.MapRecordEndpoints();
 app.MapDeclarationEndpoints();
+app.MapSettingsEndpoints();
 
 app.Run();
 

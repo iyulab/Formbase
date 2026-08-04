@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +21,7 @@
     <ProjectReference Include="..\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
     <ProjectReference Include="..\Formbase.MorphDb\Formbase.MorphDb.csproj" />
     <ProjectReference Include="..\Formbase.Postgres\Formbase.Postgres.csproj" />
+    <ProjectReference Include="..\Formbase.SchemaIntelligence\Formbase.SchemaIntelligence.csproj" />
   </ItemGroup>
 
   <ItemGroup>
