@@ -235,11 +235,9 @@ append advisory lock은 성능을 포기하고 정합성을 샀다(`PostgresRawS
 
 - 이슈는 **발견자 리포의 초안 파일로만** 기록한다.
   **GitHub/업스트림 트래커에 직접 등록하지 않는다.** 등록 여부는 사람이 결정한다.
-- 위치: 타깃이 다른 리포면 `claudedocs/upstream-issues/`, 자기 리포면 `claudedocs/issues/`.
-  파일명 `ISSUE-<target>-<timestamp>-<slug>.md`.
-- 엄브렐러 하위 서브모듈에서 발견했으면 문서는 **엄브렐러**의 `claudedocs/<Submodule>/` 로 간다.
-  OSS 서브모듈에는 정제된 `docs/` 만 남긴다.
-- 해소되면 같은 폴더 하위 `closed/` 로 이동한다.
+- 초안은 **이 리포 밖의 개발 과정 문서 자리**에 둔다. 타깃 리포와 발견 시점을 파일명에 담고
+  (`ISSUE-<target>-<timestamp>-<slug>.md`), 해소되면 `closed/` 하위로 옮긴다.
+  **이 리포에는 정제된 `docs/` 만 남는다** — 소비자가 열 수 없는 경로를 규범이 가리키지 않는다.
 
 ### 변경 크기별 승인 절차
 
