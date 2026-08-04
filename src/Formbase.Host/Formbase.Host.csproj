@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.Host</RootNamespace>
+    <!--
+      The host is a deployable, not a library. The rest of the repo ships as packages and stays
+      that way: a consumer that embeds the engine must keep being able to, so this project is the
+      packaging of the surface rather than a replacement for it.
+    -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.OpenApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
+    <ProjectReference Include="..\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Formbase.Host.Tests" />
+  </ItemGroup>
+
+</Project>

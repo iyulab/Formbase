@@ -13,6 +13,13 @@
     <PackageVersion Include="M3L.Native" Version="0.6.1" />
     <PackageVersion Include="MorphDB.Client" Version="0.9.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <!-- Host: the HTTP surface and its OpenAPI document -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!--
+      Pinned above the version Microsoft.AspNetCore.OpenApi resolves transitively: 2.0.0 carries
+      GHSA-v5pm-xwqc-g5wc, and the vulnerability scan in CI fails the build on it.
+    -->
+    <PackageVersion Include="Microsoft.OpenApi" Version="2.11.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,5 +32,6 @@
     <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
     <PackageVersion Include="Testcontainers" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
   </ItemGroup>
 </Project>

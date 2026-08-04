@@ -1,0 +1,109 @@
+using System.Text.Json;
+using Formbase.Core;
+using Formbase.Core.Primitives;
+using Formbase.Host.Contracts;
+
+namespace Formbase.Host.Endpoints;
+
+/// <summary>
+/// Intake and raw reads — the two operations that hold whatever a form type's declaration and
+/// projection are doing. Accepting a document never requires a declaration, and reading one back is
+/// always available, so these are the endpoints a caller can rely on before anything else exists.
+/// </summary>
+internal static class DocumentEndpoints
+{
+    /// <summary>
+    /// The idempotency key travels in a header rather than in the body because the body is stored
+    /// verbatim: a key written into it would become part of the document the caller sent.
+    /// </summary>
+    internal const string IdempotencyKeyHeader = "Idempotency-Key";
+
+    public static IEndpointRouteBuilder MapDocumentEndpoints(this IEndpointRouteBuilder routes)
+    {
+        routes.MapPost("/formtypes/{type}/documents", AcceptAsync)
+            .WithName("AcceptDocument")
+            .WithSummary("Accepts a document into the raw store")
+            .WithDescription(
+                "The document is stored verbatim; no declaration is required and none is consulted. " +
+                "Send an Idempotency-Key header to make re-submission safe: the same key returns the " +
+                "same document without appending a second copy.")
+            .Produces<AcceptedDocumentResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        routes.MapGet("/documents/{id:guid}", GetAsync)
+            .WithName("GetDocument")
+            .WithSummary("Reads a stored document")
+            .WithDescription(
+                "Reads from the raw store, which is the source of truth. This answers whether or not " +
+                "the form type has ever been projected.")
+            .Produces<StoredDocumentResponse>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        return routes;
+    }
+
+    private static async Task<IResult> AcceptAsync(
+        string type,
+        HttpRequest request,
+        FormbaseEngine engine,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(type))
+        {
+            return Problem(StatusCodes.Status400BadRequest, "The form type must be a non-empty identifier.");
+        }
+
+        DocumentId? idempotencyId = null;
+        if (request.Headers.TryGetValue(IdempotencyKeyHeader, out var supplied) && supplied.Count > 0)
+        {
+            if (!Guid.TryParse(supplied[^1], out var key))
+            {
+                return Problem(
+                    StatusCodes.Status400BadRequest,
+                    $"The {IdempotencyKeyHeader} header must be a UUID. It becomes the document's " +
+                    "identity, so a value that cannot be one would silently stop deduplicating.");
+            }
+
+            idempotencyId = DocumentId.From(key);
+        }
+
+        DocumentBody body;
+        try
+        {
+            using var document = await JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            body = DocumentBody.From(document.RootElement);
+        }
+        catch (JsonException ex)
+        {
+            return Problem(StatusCodes.Status400BadRequest, $"The request body is not valid JSON: {ex.Message}");
+        }
+
+        var id = await engine.AcceptAsync(FormTypeRef.Create(type), body, idempotencyId, cancellationToken)
+            .ConfigureAwait(false);
+
+        // A repeat of an accepted key answers exactly as the first call did — that identity is the
+        // whole point of the key, so the reply must not encode which attempt this was.
+        return Results.Created($"/documents/{id.Value}", new AcceptedDocumentResponse(id.Value, type));
+    }
+
+    private static async Task<IResult> GetAsync(
+        Guid id,
+        FormbaseEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var stored = await engine.GetDocumentAsync(DocumentId.From(id), cancellationToken).ConfigureAwait(false);
+
+        return stored is null
+            ? Problem(StatusCodes.Status404NotFound, $"No document with id '{id}'.")
+            : Results.Ok(new StoredDocumentResponse(
+                stored.Id.Value,
+                stored.Type.Value,
+                stored.Watermark.Value,
+                stored.AppendedAt,
+                stored.Body.Root));
+    }
+
+    private static IResult Problem(int status, string detail) =>
+        Results.Problem(detail: detail, statusCode: status);
+}
