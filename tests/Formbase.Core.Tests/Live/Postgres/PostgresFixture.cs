@@ -19,7 +19,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// built over separate pools share no in-process state, which is how a multi-process cold start is
     /// approximated in a single test host. The caller disposes what it creates.
     /// </summary>
-    public NpgsqlDataSource CreateIndependentDataSource() => NpgsqlDataSource.Create(_postgres.GetConnectionString());
+    public NpgsqlDataSource CreateIndependentDataSource() => NpgsqlDataSource.Create(ConnectionString);
+
+    /// <summary>
+    /// The container's connection string. Exposed for callers that configure something else to
+    /// connect — a host reading it from configuration cannot be handed a data source.
+    /// </summary>
+    public string ConnectionString => _postgres.GetConnectionString();
 
     public async Task InitializeAsync()
     {

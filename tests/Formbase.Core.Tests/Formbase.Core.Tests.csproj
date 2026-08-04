@@ -64,6 +64,7 @@
     <ProjectReference Include="..\..\src\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
     <ProjectReference Include="..\..\src\Formbase.M3L\Formbase.M3L.csproj" />
     <ProjectReference Include="..\..\src\Formbase.MorphDb\Formbase.MorphDb.csproj" />
+    <ProjectReference Include="..\..\src\Formbase.Host\Formbase.Host.csproj" />
     <ProjectReference Include="..\..\src\Formbase.Postgres\Formbase.Postgres.csproj" />
     <ProjectReference Include="..\..\src\Formbase.SchemaIntelligence\Formbase.SchemaIntelligence.csproj" />
   </ItemGroup>
@@ -76,6 +77,7 @@
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 

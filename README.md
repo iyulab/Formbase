@@ -263,6 +263,11 @@ dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # Docker only — t
 dotnet test Formbase.slnx -p:IncludeLiveTests=true           # umbrella: both
 ```
 
+The durable suite also runs **the HTTP host itself** over both live services — intake, declaration,
+projection, query and removal, plus a second host over the same databases seeing everything the first
+one did. Testing the surface against the in-process stores proves it is wired to *a* store; this is
+what proves it works over the ones a deployment runs.
+
 Both suites are self-contained: each fixture starts what it needs and, for MorphDB, provisions the project its requests are scoped to. Set `FORMBASE_MORPHDB_URL` to run the MorphDB suite against an already-running service instead of starting one. Readiness waits are bounded at two minutes, so an unreachable service fails the run rather than stalling it.
 
 ## Roadmap

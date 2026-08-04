@@ -25,6 +25,15 @@ public sealed class DurableFixture : IAsyncLifetime
 
     public MorphDBClient CreateMorphDbClient() => _morphdb.CreateClient();
 
+    /// <summary>The coordinates a host needs in configuration, as opposed to objects it can be handed.</summary>
+    public string PostgresConnectionString => _postgres.ConnectionString;
+
+    /// <inheritdoc cref="PostgresConnectionString"/>
+    public string MorphDbUrl => _morphdb.BaseUrl;
+
+    /// <inheritdoc cref="PostgresConnectionString"/>
+    public Guid MorphDbProjectId => _morphdb.ProjectId;
+
     public async Task InitializeAsync()
     {
         await _postgres.InitializeAsync();
