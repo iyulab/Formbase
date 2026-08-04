@@ -1,0 +1,92 @@
+using Formbase.Core.Projection;
+
+namespace Formbase.Host.Contracts;
+
+/// <summary>
+/// What a projection run reports. A run that found no declaration is not an error — the engine
+/// accepts documents without one — so it answers with <c>projected: false</c> rather than a failure
+/// the caller has to distinguish from a real one.
+/// </summary>
+/// <param name="Projected">False when no declaration proposed a schema, so nothing was built.</param>
+/// <param name="Inserted">Rows that landed in the projected table.</param>
+/// <param name="ProjectedWatermark">The raw position the run reached.</param>
+/// <param name="Skipped">Documents that could not be mapped, with the reason for each.</param>
+/// <param name="AbsentFieldCounts">
+/// Per declared column, how many projected rows came from documents that did not carry the field at
+/// all. An explicit null in a document is an answer and is not counted here — the projected NULL
+/// conflates the two, and these counts are what makes the conflation visible.
+/// </param>
+/// <param name="UnresolvedReferences">
+/// Declared columns left empty because their binding could not be resolved. Named rather than
+/// silently blank: an empty column with no explanation reads as absent data.
+/// </param>
+public sealed record ProjectionRunResponse(
+    bool Projected,
+    int Inserted,
+    long ProjectedWatermark,
+    IReadOnlyList<SkippedDocumentResponse> Skipped,
+    IReadOnlyDictionary<string, int> AbsentFieldCounts,
+    IReadOnlyList<string> UnresolvedReferences);
+
+/// <param name="DocumentId">The document that was not mapped.</param>
+/// <param name="Reason">Why it could not be mapped into the declared shape.</param>
+public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason);
+
+/// <summary>
+/// Whether a form type has a queryable projection and whether it can be trusted, with the two
+/// watermarks that justify the answer.
+/// </summary>
+/// <param name="State">See <see cref="ProjectionStateWire"/> — a caller must branch on all four.</param>
+/// <param name="ProjectedWatermark">The raw position the projection reached.</param>
+/// <param name="RawHead">The current head of the form type's raw stream.</param>
+public sealed record ProjectionStatusResponse(
+    ProjectionStateWire State,
+    long ProjectedWatermark,
+    long RawHead);
+
+/// <summary>
+/// The projection states as the wire names them. Declared here rather than serializing the engine's
+/// own enum: the engine is free to rename or reorder its states, and a wire that followed would
+/// change a published contract without anyone deciding to.
+/// <para>
+/// <c>unverified</c> is the value callers miss. A projection exists and names the current table, but
+/// a failed rebuild left its integrity unconfirmed — treating it as <c>projected</c> means reading
+/// rows nothing vouches for.
+/// </para>
+/// </summary>
+public enum ProjectionStateWire
+{
+    /// <summary>No projected table exists for this form type.</summary>
+    NotProjected,
+
+    /// <summary>A projection exists and reflects the current raw head and declaration.</summary>
+    Projected,
+
+    /// <summary>A projection exists but raw documents, or the declaration, moved on after it ran.</summary>
+    Stale,
+
+    /// <summary>A projection exists but a failed rebuild left its integrity unconfirmed.</summary>
+    Unverified,
+}
+
+internal static class ProjectionStateWireMapping
+{
+    /// <summary>
+    /// Total by construction: no default arm, so a state added to the engine fails this build rather
+    /// than reaching the wire under a name nobody chose. That is the whole reason the two enums are
+    /// separate — the compiler is the only gate here whose reach is complete.
+    /// </summary>
+    // CS8524 asks for a fallback arm covering values outside the declared set — reachable only by
+    // casting an arbitrary integer. Adding one would also swallow a state genuinely added to the
+    // engine, which is the case this mapping exists to catch, so the warning is refused here
+    // deliberately. An out-of-range cast still fails, at the point of the cast's own mistake.
+#pragma warning disable CS8524
+    public static ProjectionStateWire ToWire(this ProjectionState state) => state switch
+    {
+        ProjectionState.NotProjected => ProjectionStateWire.NotProjected,
+        ProjectionState.Projected => ProjectionStateWire.Projected,
+        ProjectionState.Stale => ProjectionStateWire.Stale,
+        ProjectionState.Unverified => ProjectionStateWire.Unverified,
+    };
+#pragma warning restore CS8524
+}

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Formbase.Host.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +13,12 @@ builder.Services.AddFormbaseInMemory();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 
+// Enum values cross as names. Ordinals would let a reordering of the wire enum change what every
+// stored client believes it is reading, without any request or response changing shape.
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.Converters.Add(
+        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -18,6 +26,7 @@ app.UseStatusCodePages();
 
 app.MapOpenApi();
 app.MapDocumentEndpoints();
+app.MapProjectionEndpoints();
 
 app.Run();
 
