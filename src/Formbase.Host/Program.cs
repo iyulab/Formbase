@@ -1,15 +1,16 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Formbase.Host.Composition;
 using Formbase.Host.Endpoints;
 using Formbase.Host.ErrorHandling;
 using Formbase.Host.Namespaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// The engine, wired to the in-process stores. The durable profile is a composition choice the host
-// will take from configuration once it has one to offer; until then the host runs self-contained,
-// which is also what lets its own tests exercise the real surface without standing anything up.
-builder.Services.AddFormbaseInMemory();
+// The engine, over whichever stores the configuration selects. In-process by default, which is
+// what lets the host's own tests exercise the real surface without standing anything up; a
+// deployment sets Formbase:Store=Durable and supplies what that profile needs.
+builder.Services.AddFormbaseStores(builder.Configuration);
 
 // Errors answer as RFC 9457 problem details, including the ones no endpoint catches.
 builder.Services.AddProblemDetails();

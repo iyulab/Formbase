@@ -76,8 +76,23 @@ the packages above are unchanged by its existence.
 dotnet run --project src/Formbase.Host
 ```
 
-It currently composes the in-process stores, so state does not survive a restart; the durable
-composition below is what a deployment will take.
+By default it composes the in-process stores, which needs nothing else running and loses everything
+on restart. A deployment selects the durable profile instead:
+
+```bash
+Formbase__Store=Durable ConnectionStrings__Formbase='Host=db;Database=formbase;Username=formbase;Password=…' Formbase__MorphDb__Url=http://morphdb:8080 Formbase__MorphDb__ProjectId=<the id POST /api/projects returned> dotnet run --project src/Formbase.Host
+```
+
+PostgreSQL then holds the raw stream, the projection state and the declarations; MorphDB holds the
+projected tables. `Formbase__Schema` (default `formbase`) isolates the Postgres side, and
+`FORMBASE_MORPHDB_URL` overrides the MorphDB address for a run.
+
+**A durable profile missing any of those refuses to start.** Falling back to the in-process stores
+would leave the host running, answering, and losing every document on restart — a failure the
+operator would meet as missing data long after the configuration that caused it. Provisioning the
+MorphDB project stays theirs: the engine never administers MorphDB.
+
+A container image and a compose file are not here yet.
 
 ## Quick start
 

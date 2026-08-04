@@ -19,6 +19,7 @@
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>

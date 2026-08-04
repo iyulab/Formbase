@@ -41,6 +41,11 @@ The name comes from configuration (`Formbase:Namespace`, `default` when unset). 
 surface even where the selection is degenerate, because one added later would mean rewriting every
 request written without it.
 
+The namespace's contents are the triple the host was composed with — the PostgreSQL connection and
+schema holding the raw stream, and the MorphDB project holding the projected tables. A host running
+the in-process stores has that triple only notionally, and loses it on restart; see the README for
+selecting the durable profile.
+
 > Authentication and authorization are not on this surface. Namespacing says *which data*, not *who
 > you are* — put the host behind a proxy that answers the second question.
 
