@@ -20,7 +20,8 @@ builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
 // composition time is fixed before any configuration source added later can be seen.
 builder.Services.AddSingleton(sp => new NamespaceSelector(
     sp.GetRequiredService<IConfiguration>()["Formbase:Namespace"] ?? NamespaceSelector.Default));
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+    options.AddDocumentTransformer<NamespaceHeaderDocumentTransformer>());
 
 // Enum values cross as names. Ordinals would let a reordering of the wire enum change what every
 // stored client believes it is reading, without any request or response changing shape.

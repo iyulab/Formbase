@@ -48,6 +48,17 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 "The document could not be written to the raw store",
                 e.Message),
 
+            // A form type is a validated primitive, so a blank one is refused where it is
+            // constructed rather than at the edge — which means every route taking one from the
+            // path raises this. Translating it here rather than guarding five times is the point of
+            // having a handler ahead of the endpoints: the route most likely to be missing a guard
+            // is the one added after the guards were written.
+            ArgumentException e => Problem(
+                StatusCodes.Status400BadRequest,
+                "invalid-form-type",
+                "The request named something the engine cannot use",
+                e.Message),
+
             _ => null
         };
 

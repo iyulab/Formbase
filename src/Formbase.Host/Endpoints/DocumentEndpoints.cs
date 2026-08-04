@@ -2,6 +2,7 @@ using System.Text.Json;
 using Formbase.Core;
 using Formbase.Core.Primitives;
 using Formbase.Host.Contracts;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Formbase.Host.Endpoints;
 
@@ -44,22 +45,19 @@ internal static class DocumentEndpoints
 
     private static async Task<IResult> AcceptAsync(
         string type,
+        [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
         HttpRequest request,
         FormbaseEngine engine,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(type))
-        {
-            return Problem(StatusCodes.Status400BadRequest, "The form type must be a non-empty identifier.");
-        }
-
+        // A blank form type is refused by FormTypeRef.Create below and translated by the problem
+        // handler, so it is not guarded here — one answer, not two that can drift.
         DocumentId? idempotencyId = null;
-        if (request.Headers.TryGetValue(IdempotencyKeyHeader, out var supplied) && supplied.Count > 0)
+        if (!string.IsNullOrEmpty(idempotencyKey))
         {
-            if (!Guid.TryParse(supplied[^1], out var key))
+            if (!Guid.TryParse(idempotencyKey, out var key))
             {
                 return Problem(
-                    StatusCodes.Status400BadRequest,
                     $"The {IdempotencyKeyHeader} header must be a UUID. It becomes the document's " +
                     "identity, so a value that cannot be one would silently stop deduplicating.");
             }
@@ -76,7 +74,7 @@ internal static class DocumentEndpoints
         }
         catch (JsonException ex)
         {
-            return Problem(StatusCodes.Status400BadRequest, $"The request body is not valid JSON: {ex.Message}");
+            return Problem($"The request body is not valid JSON: {ex.Message}");
         }
 
         var id = await engine.AcceptAsync(FormTypeRef.Create(type), body, idempotencyId, cancellationToken)
@@ -95,7 +93,11 @@ internal static class DocumentEndpoints
         var stored = await engine.GetDocumentAsync(DocumentId.From(id), cancellationToken).ConfigureAwait(false);
 
         return stored is null
-            ? Problem(StatusCodes.Status404NotFound, $"No document with id '{id}'.")
+            ? Results.Problem(
+                detail: $"No document with id '{id}'.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "No such document",
+                type: "/problems/no-such-document")
             : Results.Ok(new StoredDocumentResponse(
                 stored.Id.Value,
                 stored.Type.Value,
@@ -104,6 +106,10 @@ internal static class DocumentEndpoints
                 stored.Body.Root));
     }
 
-    private static IResult Problem(int status, string detail) =>
-        Results.Problem(detail: detail, statusCode: status);
+    private static IResult Problem(string detail) =>
+        Results.Problem(
+            detail: detail,
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "The request could not be read",
+            type: "/problems/invalid-request");
 }

@@ -252,7 +252,10 @@ which is stable; `title` and `detail` are prose.
 
 | Status | `type` | When |
 |---|---|---|
+| 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
+| 400 | `/problems/invalid-request` | The body was not JSON, or the idempotency key was not a UUID |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read |
+| 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
 | 404 | `/problems/unknown-namespace` | The request named a namespace this host does not serve |
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
@@ -261,8 +264,12 @@ which is stable; `title` and `detail` are prose.
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
 
 The three refusals a query can meet are deliberately separate, because their remedies are: run a
-projection, rebuild it, or retry later. A malformed request body or an unknown document id answers
-with the framework's own problem response — a `400` and a `404` respectively.
+projection, rebuild it, or retry later.
+
+**A caller's mistake is never a `5xx`.** A form type is validated where it is constructed, so every
+route that takes one from the path can meet the same refusal; it is translated in one place rather
+than guarded at each endpoint, because the route most likely to be missing a guard is the one added
+after the guards were written.
 
 `type` is a relative reference. It identifies the problem stably and resolves against whatever host
 is serving, rather than naming a site that may not exist.
