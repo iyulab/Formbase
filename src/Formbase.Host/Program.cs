@@ -41,6 +41,7 @@ app.MapOpenApi();
 app.MapDocumentEndpoints();
 app.MapProjectionEndpoints();
 app.MapRecordEndpoints();
+app.MapDeclarationEndpoints();
 
 app.Run();
 
