@@ -67,6 +67,18 @@ dotnet add package Formbase.SchemaIntelligence   # optional: LLM-backed ISchemaP
 nothing else — the adapters are what bring in Npgsql, the MorphDB client, and
 `Microsoft.Extensions.AI`.
 
+**Or run it as a service.** `Formbase.Host` serves the engine over HTTP so a consumer does not have
+to be a .NET process in the same container — see [docs/API.md](docs/API.md). The host is a packaging
+of the library rather than a replacement for it: embedding the engine directly stays supported, and
+the packages above are unchanged by its existence.
+
+```bash
+dotnet run --project src/Formbase.Host
+```
+
+It currently composes the in-process stores, so state does not survive a restart; the durable
+composition below is what a deployment will take.
+
 ## Quick start
 
 ```csharp
@@ -233,6 +245,7 @@ Implemented:
 - **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
 - Record query with not-projected / stale / unverified / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
+- **HTTP surface** (`Formbase.Host`) — intake with a first-class idempotency key, raw reads, declaration reads, projection runs and state, and record queries, described by a generated OpenAPI document and held to [docs/API.md](docs/API.md) by a parity gate. Writing a declaration is not on the surface yet, and neither is a container image.
 - DI composition and contract test suites for the store ports
 - **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction awaits the declaration-version work below)
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
