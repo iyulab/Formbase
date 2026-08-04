@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Formbase.Host.Endpoints;
+using Formbase.Host.ErrorHandling;
+using Formbase.Host.Namespaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,13 @@ builder.Services.AddFormbaseInMemory();
 
 // Errors answer as RFC 9457 problem details, including the ones no endpoint catches.
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
+
+// The namespace this host serves. One host, one namespace; the selector is how a caller names it.
+// Resolved from the container's configuration rather than read while composing: a value read at
+// composition time is fixed before any configuration source added later can be seen.
+builder.Services.AddSingleton(sp => new NamespaceSelector(
+    sp.GetRequiredService<IConfiguration>()["Formbase:Namespace"] ?? NamespaceSelector.Default));
 builder.Services.AddOpenApi();
 
 // Enum values cross as names. Ordinals would let a reordering of the wire enum change what every
@@ -24,9 +33,14 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+// Ahead of routing: a request addressed elsewhere must not reach an endpoint that would answer
+// from this host's own data.
+app.UseMiddleware<NamespaceSelectorMiddleware>();
+
 app.MapOpenApi();
 app.MapDocumentEndpoints();
 app.MapProjectionEndpoints();
+app.MapRecordEndpoints();
 
 app.Run();
 
