@@ -1,0 +1,134 @@
+name: Release Docker Image
+
+# Same file-version trigger as the NuGet release: bumping <Version> in Directory.Build.props and
+# pushing to main publishes that version. One number covers the packages, the tag, the release and
+# this image, so a consumer pins the host the same way it pins everything else in the tree.
+#
+# The host is not a packable project, so nothing it ships reaches NuGet — this workflow is the only
+# way it becomes something a consumer can pull.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Directory.Build.props'
+  workflow_dispatch:
+
+concurrency:
+  group: release-docker
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build & Publish Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version and prepare image name
+        id: version
+        run: |
+          VERSION=$(grep -oP '<Version>\K[^<]+' Directory.Build.props)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read <Version> from Directory.Build.props"
+            exit 1
+          fi
+          IMAGE=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$(echo "$VERSION" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION, image: $IMAGE"
+
+      # Two gates guard this publish, one per kind of defect: dotnet test catches code that is
+      # wrong, the start-up probe below catches an image that is wrong. Neither implies the other,
+      # and a green suite in a sibling workflow is not a gate on this one — the two runs succeed
+      # and fail independently, so each publishes only what it verified itself.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: dotnet test Formbase.slnx --configuration Release --verbosity normal
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publishing is irreversible: `latest` moves the moment the push lands, and every consumer
+      # following it gets whatever we shipped. So the image proves it starts here, before the push
+      # step — not in a workflow that happens to run alongside this one.
+      - name: Build amd64 locally for verification
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Formbase.Host/Dockerfile
+          load: true
+          tags: formbase:verify
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The image carries no HEALTHCHECK on purpose: it has neither curl nor wget, and the host has
+      # no self-probe mode to invoke instead, so a healthcheck would report unhealthy for a reason
+      # that has nothing to do with the service. Readiness is observed the way the Dockerfile says
+      # it is — from outside, over the published port.
+      #
+      # Started bare, with no store and no engine configured. The question here is whether the
+      # artifact runs at all; a bare host reports `"durable": false` and says so plainly. That a
+      # document outlives the process is a *different* claim about a *different* arrangement, and
+      # scripts/compose-durability-check.sh is what makes it.
+      - name: Verify the image answers on its published port
+        run: |
+          set -u
+          docker run -d --name verify-host -p 127.0.0.1:8080:8080 formbase:verify
+
+          for attempt in $(seq 40); do
+            running=$(docker inspect -f '{{.State.Running}}' verify-host)
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/settings || true)
+            echo "attempt ${attempt}: running=${running} http=${code}"
+            if [ "${code}" = "200" ]; then
+              echo "Image answers on its published port."
+              exit 0
+            fi
+            # A container that has already exited will not start answering, so stop waiting on it
+            # rather than spending the whole budget polling a dead port.
+            [ "${running}" = "true" ] || break
+            sleep 3
+          done
+
+          echo "::error::The image never answered on its published port. Refusing to publish."
+          docker logs verify-host || true
+          exit 1
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Formbase.Host/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.major_minor }}
+            ${{ steps.version.outputs.image }}:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
