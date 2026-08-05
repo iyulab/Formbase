@@ -24,8 +24,14 @@ services:
       retries: 10
 
   morphdb:
-    # Pinned, not `latest`: the compatibility pair is a contract, and a bundle that follows a moving
-    # tag changes what it deployed without anything in this file changing.
+    # Pinned, not `latest`: a bundle that follows a moving tag changes what it deployed without
+    # anything in this file changing.
+    #
+    # This is ahead of the compatibility pair the README states, and deliberately: the start-up step
+    # below creates the project under an id it chooses, and the first MorphDB that honours a chosen
+    # id is 0.10.0. An earlier one answers 201 and generates its own, leaving the host scoped to a
+    # project that does not exist. Embedding the engine still pairs as the README says — this line
+    # is the bundle's own floor, not a change to that pair.
     image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.10.0}
     environment:
       ASPNETCORE_ENVIRONMENT: Production

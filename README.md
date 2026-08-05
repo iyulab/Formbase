@@ -274,6 +274,11 @@ depend on a neighbour staying out of reach.
 Point the host at a MorphDB you already run with `FORMBASE_MORPHDB_URL`. The project named in
 `.env` is then created on that instance, and the bundled one can come out of the file.
 
+The bundle pins a MorphDB **ahead of the pair stated under [Install](#install)**, and that is not a
+change to the pair: embedding the engine still works against the line named there. Creating a
+project under a chosen id is what needs the newer server — an earlier one answers the same `201`
+and generates its own id, which leaves the host scoped to a project that is not there.
+
 ## Building and testing
 
 ```bash

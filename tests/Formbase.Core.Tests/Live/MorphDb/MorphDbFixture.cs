@@ -69,7 +69,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
             .Build();
         await _postgres.StartAsync();
 
-        // Pinned to the compatibility pair (Formbase.* 0.5.x ↔ MorphDB 0.9.x): CI must test the
+        // Pinned to the compatibility pair (Formbase.* 0.7.x ↔ MorphDB 0.9.x): CI must test the
         // contract this code actually targets, not whatever `latest` became overnight. Drift against
         // newer server releases is watched separately (the scheduled morphdb-drift workflow runs
         // this same suite with FORMBASE_MORPHDB_IMAGE=ghcr.io/iyulab/morphdb:latest).
