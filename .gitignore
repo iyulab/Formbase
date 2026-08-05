@@ -24,3 +24,7 @@ CLAUDE.md
 
 # Serena (semantic tooling) project state
 .serena/
+
+# Compose environment — .env.example is the template that ships; the copy an operator fills in
+# carries their credentials.
+.env

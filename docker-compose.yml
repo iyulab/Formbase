@@ -1,0 +1,110 @@
+# The deployable shape of a Formbase instance: the host, the MorphDB it projects into, and the
+# PostgreSQL both keep their state in. It is the same assembly the live test suite stands up, written
+# down — so a deployment and the suite that vouches for it are the same three things in the same
+# order, rather than two arrangements that agree until one of them changes.
+#
+# Copy .env.example to .env before the first run.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: morph
+      POSTGRES_PASSWORD: morph
+      POSTGRES_DB: morphdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Creates the second database and its owner. Only read on an empty data directory: changing
+      # this file does not reach a volume that already exists.
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morph -d morphdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  morphdb:
+    # Pinned, not `latest`: the compatibility pair is a contract, and a bundle that follows a moving
+    # tag changes what it deployed without anything in this file changing.
+    image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.10.0}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # Loopback on purpose: nothing here authenticates. Serving other machines is a reverse proxy's
+      # job, and this port is published only so an operator can look at what the host projects into.
+      - "127.0.0.1:${MORPHDB_PORT:-8081}:8080"
+
+  # Creates the project the host projects into, under the id both this service and the host are
+  # configured with. It runs to completion before the host starts and is a no-op on every run after
+  # the first, so `up` is repeatable rather than first-run-only.
+  morphdb-project:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      morphdb:
+        condition: service_started
+    environment:
+      MORPHDB_URL: ${FORMBASE_MORPHDB_URL:-http://morphdb:8080}
+      PROJECT_ID: ${FORMBASE_MORPHDB_PROJECT_ID}
+      PROJECT_NAME: ${FORMBASE_MORPHDB_PROJECT_NAME:-formbase}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        # MorphDB has no readiness gate of its own here, so wait for one to answer rather than
+        # assuming the container being up means the service is listening.
+        i=0
+        until curl -sf -o /dev/null "$$MORPHDB_URL/health"; do
+          i=$$((i + 1))
+          [ "$$i" -lt 60 ] || { echo "MorphDB did not become ready at $$MORPHDB_URL"; exit 1; }
+          sleep 2
+        done
+
+        code=$$(curl -s -o /dev/null -w '%{http_code}' -X POST "$$MORPHDB_URL/api/projects" \
+          -H 'Content-Type: application/json' \
+          -d "{\"projectId\":\"$$PROJECT_ID\",\"name\":\"$$PROJECT_NAME\"}")
+
+        case "$$code" in
+          201) echo "created project $$PROJECT_ID" ;;
+          409) echo "project $$PROJECT_ID already exists" ;;
+          *) echo "MorphDB answered $$code to the project creation request"; exit 1 ;;
+        esac
+
+        # The status code alone does not prove the project carries the id we asked for: a MorphDB
+        # that ignores a chosen id answers 201 just the same, and the host would then start against
+        # a project that does not exist. Ask for it by id.
+        curl -sf -o /dev/null "$$MORPHDB_URL/api/projects/$$PROJECT_ID" || {
+          echo "MorphDB created a project but not under $$PROJECT_ID — this bundle needs a MorphDB" \
+               "that accepts a caller-supplied project id."
+          exit 1
+        }
+
+  formbase:
+    build:
+      context: .
+      dockerfile: src/Formbase.Host/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      morphdb-project:
+        condition: service_completed_successfully
+    environment:
+      # Durable, stated explicitly. Left unset the host runs its in-process stores, answers every
+      # request, and loses the documents at the next restart — so this is the one line in the file
+      # whose absence looks like success.
+      Formbase__Store: Durable
+      ConnectionStrings__Formbase: Host=postgres;Port=5432;Database=formbase;Username=formbase;Password=formbase
+      Formbase__MorphDb__Url: ${FORMBASE_MORPHDB_URL:-http://morphdb:8080}
+      Formbase__MorphDb__ProjectId: ${FORMBASE_MORPHDB_PROJECT_ID}
+      # Optional, like a database extension. Leave unset and the host starts without them.
+      FORMBASE_LLM_ENDPOINT: ${FORMBASE_LLM_ENDPOINT:-}
+      FORMBASE_LLM_API_KEY: ${FORMBASE_LLM_API_KEY:-}
+      FORMBASE_LLM_MODEL: ${FORMBASE_LLM_MODEL:-}
+    ports:
+      - "127.0.0.1:${FORMBASE_PORT:-8080}:8080"
+
+volumes:
+  postgres_data:

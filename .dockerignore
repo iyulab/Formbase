@@ -1,0 +1,16 @@
+# Build output belongs to the machine that produced it. Copied into the image it does not just waste
+# a layer — restore and build read what is already in obj/, so a stale or foreign-platform artifact
+# is used in preference to the one this build would have produced.
+**/bin/
+**/obj/
+
+.git/
+.github/
+.vs/
+.idea/
+tests/
+docs/
+claudedocs/
+
+# README.md is deliberately not ignored: Directory.Build.props includes the repo-root readme as a
+# packaging item for every project, and the build reads that item list whether or not it packs.

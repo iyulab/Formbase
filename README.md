@@ -248,6 +248,32 @@ await hints.DeclareAsync(new FormTypeHints(type, "qc_table",
     [new FieldHint("serial", ColumnType.Text, Nullable: false)]));
 ```
 
+### Running the whole instance
+
+Embedding the engine is one way to use it. The other is to run it: `docker-compose.yml` stands up
+the host, the MorphDB it projects into, and the PostgreSQL both keep their state in.
+
+```bash
+cp .env.example .env
+docker compose up -d
+curl http://127.0.0.1:8080/settings
+```
+
+Two things about the shape are worth knowing, because both are decisions rather than defaults.
+
+**The project id is written down, not discovered.** `POST /api/projects` answers with the id it
+generated, but a manifest is authored before anything runs and has nowhere to put a value that
+appears at startup. So `.env` names the id, the start-up step creates the project under it, and the
+host is configured with the same constant. Re-running is a no-op rather than a second project.
+
+**The two services are split by database, not by schema.** MorphDB creates, drops and rebuilds
+physical schemas — that is what it is for — and Formbase keeps the raw stream those projections are
+rebuilt from. Both still run in one PostgreSQL container; the boundary costs nothing and does not
+depend on a neighbour staying out of reach.
+
+Point the host at a MorphDB you already run with `FORMBASE_MORPHDB_URL`. The project named in
+`.env` is then created on that instance, and the bundled one can come out of the file.
+
 ## Building and testing
 
 ```bash
@@ -269,6 +295,17 @@ one did. Testing the surface against the in-process stores proves it is wired to
 what proves it works over the ones a deployment runs.
 
 Both suites are self-contained: each fixture starts what it needs and, for MorphDB, provisions the project its requests are scoped to. Set `FORMBASE_MORPHDB_URL` to run the MorphDB suite against an already-running service instead of starting one. Readiness waits are bounded at two minutes, so an unreachable service fails the run rather than stalling it.
+
+The deployable shape has a check of its own:
+
+```bash
+scripts/compose-durability-check.sh    # Docker only — stands the compose file up and tears it down
+```
+
+It writes a document, restarts the host, and reads the document back. That sequence is the point:
+leave `Formbase__Store` out of the compose file and the host starts on its in-process stores and
+answers every request exactly as a durable one does — the only difference visible from outside is
+what is still there after a restart.
 
 ## Roadmap
 
