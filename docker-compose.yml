@@ -28,10 +28,10 @@ services:
     # anything in this file changing.
     #
     # This is ahead of the compatibility pair the README states, and deliberately: the start-up step
-    # below creates the project under an id it chooses, and the first MorphDB that honours a chosen
-    # id is 0.10.0. An earlier one answers 201 and generates its own, leaving the host scoped to a
-    # project that does not exist. Embedding the engine still pairs as the README says — this line
-    # is the bundle's own floor, not a change to that pair.
+    # below creates the project under an id it chooses, and the first MorphDB that accepts a chosen
+    # id is 0.10.0. An earlier one refuses the request outright — it rejects JSON members it does not
+    # know — so lowering this stops the bundle at start-up rather than misconfiguring it. Embedding
+    # the engine still pairs as the README says; this line is the bundle's floor, not a new pair.
     image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.10.0}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
@@ -79,12 +79,14 @@ services:
           *) echo "MorphDB answered $$code to the project creation request"; exit 1 ;;
         esac
 
-        # The status code alone does not prove the project carries the id we asked for: a MorphDB
-        # that ignores a chosen id answers 201 just the same, and the host would then start against
-        # a project that does not exist. Ask for it by id.
+        # 201 says a project was created, not that it carries the id we asked for. Servers that
+        # predate the field refuse the request instead, so this does not fire against them — it is
+        # here for the shape those servers do not have: one that accepts the field and ignores it.
+        # The host would start against a project that is not there, and the first projection, not
+        # the start-up, would be what reported it.
         curl -sf -o /dev/null "$$MORPHDB_URL/api/projects/$$PROJECT_ID" || {
-          echo "MorphDB created a project but not under $$PROJECT_ID — this bundle needs a MorphDB" \
-               "that accepts a caller-supplied project id."
+          echo "MorphDB answered 201 but no project exists under $$PROJECT_ID — the chosen id was" \
+               "accepted and not used. This bundle needs a MorphDB that honours it."
           exit 1
         }
 

@@ -276,8 +276,9 @@ Point the host at a MorphDB you already run with `FORMBASE_MORPHDB_URL`. The pro
 
 The bundle pins a MorphDB **ahead of the pair stated under [Install](#install)**, and that is not a
 change to the pair: embedding the engine still works against the line named there. Creating a
-project under a chosen id is what needs the newer server — an earlier one answers the same `201`
-and generates its own id, which leaves the host scoped to a project that is not there.
+project under a chosen id is what needs the newer server. An older one refuses the request rather
+than misreading it, so lowering the pin stops `docker compose up` at that step instead of leaving
+you with a host scoped to a project that was never created.
 
 ## Building and testing
 
