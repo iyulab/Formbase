@@ -21,6 +21,12 @@ builder.Services.AddSchemaIntelligence(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
 
+// A parameter that will not bind has to reach the handler above, and by default it only does so
+// while developing: outside Development the framework answers the short-circuit itself, with a
+// `type` that is not in the documented table. That made the error surface depend on the name the
+// instance was started under, and the name it ships under was the one where it was wrong.
+builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+
 // The namespace this host serves. One host, one namespace; the selector is how a caller names it.
 // Resolved from the container's configuration rather than read while composing: a value read at
 // composition time is fixed before any configuration source added later can be seen.
