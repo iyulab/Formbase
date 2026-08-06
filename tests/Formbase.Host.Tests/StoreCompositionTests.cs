@@ -66,12 +66,12 @@ public class StoreCompositionTests
         services.GetServices<Npgsql.NpgsqlDataSource>().Should().ContainSingle();
     }
 
-    public static TheoryData<string> DurableKeys() =>
-    [
+    public static TheoryData<string> DurableKeys() => new()
+    {
         "ConnectionStrings:Formbase",
         "Formbase:MorphDb:Url",
         "Formbase:MorphDb:ProjectId",
-    ];
+    };
 
     [Theory]
     [MemberData(nameof(DurableKeys))]
