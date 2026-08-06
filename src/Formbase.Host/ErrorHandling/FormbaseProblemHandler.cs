@@ -48,6 +48,23 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 "The document could not be written to the raw store",
                 e.Message),
 
+            InvalidQueryException e => Problem(
+                StatusCodes.Status400BadRequest,
+                "invalid-query",
+                "The query could not be read",
+                e.Message),
+
+            // Binding fails before any endpoint runs, so nothing downstream can answer for it. Left
+            // to the framework it surfaced as a 500: the caller sent an unreadable value and was
+            // told the host had broken, which is the opposite instruction. The status comes from
+            // the exception rather than a constant because the same failure carries 413 and 431 for
+            // a body or headers that are too large, and those are still the caller's to act on.
+            BadHttpRequestException e => Problem(
+                e.StatusCode,
+                "invalid-request",
+                "The request could not be read",
+                e.Message),
+
             // A form type is a validated primitive, so a blank one is refused where it is
             // constructed rather than at the edge — which means every route taking one from the
             // path raises this. Translating it here rather than guarding five times is the point of

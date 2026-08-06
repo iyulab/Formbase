@@ -60,6 +60,7 @@ public sealed class RecordQuery : IRecordQuery
             // a possibly half-built table as if it were fresh.
             throw new ProjectionUnverifiedException(type);
         }
+        RefuseUndeclaredColumns(type, spec, schema);
         var coerced = WithDeterministicOrder(Coerce(spec, schema));
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
@@ -99,6 +100,36 @@ public sealed class RecordQuery : IRecordQuery
         }
 
         return shaped;
+    }
+
+    /// <summary>
+    /// A filter or ordering key naming a column the declaration does not have is refused, not
+    /// dropped. Dropping a filter widens the result and dropping an ordering key leaves rows in an
+    /// order the caller did not ask for — both answer <c>200</c>, so the caller reads a page that
+    /// looks like an answer to their question and is an answer to a different one.
+    /// <para>
+    /// The projection's own bookkeeping is not a declared column and is refused with the rest. Rows
+    /// carry the declared columns and nothing else, so a caller ordering by a system column would be
+    /// depending on a name they can never read back — which is how bookkeeping becomes a contract.
+    /// </para>
+    /// </summary>
+    private static void RefuseUndeclaredColumns(FormTypeRef type, QuerySpec spec, TableSchema schema)
+    {
+        var declared = schema.Columns.Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
+
+        List<string>? unknown = null;
+        foreach (var name in (spec.Filters?.Keys ?? []).Concat((spec.OrderBy ?? []).Select(k => k.Column)))
+        {
+            if (!declared.Contains(name))
+            {
+                (unknown ??= []).Add(name);
+            }
+        }
+
+        if (unknown is not null)
+        {
+            throw new InvalidQueryException(type, unknown);
+        }
     }
 
     private static QuerySpec WithDeterministicOrder(QuerySpec spec)
@@ -155,6 +186,11 @@ public sealed class RecordQuery : IRecordQuery
         {
             // Uncoercible filter value: leave it as-is so it simply fails to match, rather than
             // throwing — an over-specific filter returning nothing is a valid query outcome.
+            //
+            // This is the other side of the line RefuseUndeclaredColumns draws, and the two look
+            // contradictory only until the question is separated from the answer. A column that is
+            // not declared cannot be asked about; a value that does not fit a column that is
+            // declared asks something answerable, and the answer is no rows.
             return value;
         }
     }

@@ -321,7 +321,21 @@ what a caller reads, because an internal that leaked here would calcify into the
   a value may contain colons. Values are compared as the declared column's type, so `total:42`
   matches a number. A filter that cannot be read is refused rather than dropped: dropping one widens
   the result, and the caller reads rows they asked to exclude.
-- **`orderBy`** — comma-separated column list; a leading `-` reverses that column.
+- **`orderBy`** — comma-separated column list; a leading `-` reverses that column. An ordering key
+  that cannot be read is refused for the same reason in the other direction: rows left in an order
+  nobody asked for are indistinguishable from ordered ones until a second page disagrees with the
+  first.
+
+**The column and the value are refused differently, and the line is between the question and the
+answer.** A name that is not a declared column — in a filter or in `orderBy` — is a question the
+projection cannot be asked: `400` `/problems/invalid-query`. A value that does not fit the column it
+names asks something answerable, and the answer is no rows: `200` with an empty page. Told "no rows"
+for a mistyped column name, a caller would go looking at their data when what needs fixing is what
+they sent.
+
+The projection's bookkeeping columns are not declared columns, so they cannot be filtered or ordered
+by either — rows never carry them, and a caller ordering by a name they can never read back would be
+depending on an internal.
 - **`limit` / `offset`** — paging is deterministic whether or not the caller orders, because the
   projection's watermark is appended as a final tie-breaker.
 
@@ -349,8 +363,8 @@ which is stable; `title` and `detail` are prose.
 | Status | `type` | When |
 |---|---|---|
 | 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
-| 400 | `/problems/invalid-request` | The body was not JSON, or the idempotency key was not a UUID |
-| 400 | `/problems/invalid-query` | A filter or ordering key could not be read |
+| 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON, the idempotency key was not a UUID, or a parameter did not bind |
+| 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
 | 400 | `/problems/invalid-declaration` | A declaration named no table, carried no fields, or declared one twice |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
