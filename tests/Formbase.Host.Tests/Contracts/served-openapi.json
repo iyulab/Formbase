@@ -1,0 +1,1053 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Formbase.Host | v1",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "{origin}"
+    }
+  ],
+  "paths": {
+    "/formtypes/{type}/documents": {
+      "post": {
+        "tags": [
+          "DocumentEndpoints"
+        ],
+        "summary": "Accepts a document into the raw store",
+        "description": "The document is stored verbatim; no declaration is required and none is consulted. Send an Idempotency-Key header to make re-submission safe: the same key returns the same document without appending a second copy.",
+        "operationId": "AcceptDocument",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedDocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents/{id}": {
+      "get": {
+        "tags": [
+          "DocumentEndpoints"
+        ],
+        "summary": "Reads a stored document",
+        "description": "Reads from the raw store, which is the source of truth. This answers whether or not the form type has ever been projected.",
+        "operationId": "GetDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredDocumentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/formtypes/{type}/projection": {
+      "post": {
+        "tags": [
+          "ProjectionEndpoints"
+        ],
+        "summary": "Rebuilds a form type\u0027s projected table from raw",
+        "description": "Safe to repeat and safe to retry: the table is rebuilt from the raw stream rather than updated in place, so two runs over an unchanged stream leave the same table. A run is bounded to the raw head it saw when it started, so documents that arrive mid-run are left for the next one rather than landing under a watermark that does not cover them. A form type with no declaration answers projected: false \u2014 documents are accepted without one, so having none is not a failure.",
+        "operationId": "RunProjection",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionRunResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ProjectionEndpoints"
+        ],
+        "summary": "Reports whether a form type\u0027s projection exists and can be trusted",
+        "description": "Distinguishes \u0027not projected yet\u0027 from \u0027no data\u0027, which a query alone cannot. Branch on all four states \u2014 notProjected, projected, stale, unverified.",
+        "operationId": "GetProjectionStatus",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/formtypes/{type}/records": {
+      "get": {
+        "tags": [
+          "RecordEndpoints"
+        ],
+        "summary": "Reads a form type\u0027s projected records",
+        "description": "Filters are equality only, one per \u0060filter=column:value\u0060 parameter; the first colon separates the two, so a value may contain colons. Values are compared as the declared column\u0027s type, so \u0060filter=total:42\u0060 matches a number. Ordering takes a comma-separated column list where a leading \u0060-\u0060 reverses that column. Paging is deterministic whether or not the caller orders: the projection\u0027s watermark is appended as a final tie-breaker.",
+        "operationId": "QueryRecords",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "orderBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordQueryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/formtypes/{type}/declaration": {
+      "get": {
+        "tags": [
+          "DeclarationEndpoints"
+        ],
+        "summary": "Reads the declaration a form type currently has",
+        "description": "Answers with the declaration in force \u2014 the shape the next projection run will build. A form type with none is not an error state: documents are accepted without a declaration, and the raw store keeps them until one arrives.",
+        "operationId": "GetDeclaration",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclarationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DeclarationEndpoints"
+        ],
+        "summary": "Puts a declaration in force for a form type",
+        "description": "Send expectedDeclarationVersion with the version you believe is in force. Omit it only for a form type that has none: replacing a declaration without naming the one being replaced is how one consumer silently discards another\u0027s. Nothing is rebuilt here \u2014 the reply reports what the write did to the projection, and a rebuild drops and refills the whole table, which is not a cost to spend on a caller\u0027s behalf without being asked.",
+        "operationId": "Declare",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclarationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclarationWriteResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclarationWriteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DeclarationEndpoints"
+        ],
+        "summary": "Removes a declaration and the projection it built",
+        "description": "The projected table is dropped and the projection state forgotten, so the form type goes back to having documents and no shape. The raw stream is untouched: declare again and project, and the table comes back as it was. Documents accepted in the meantime are included, because they were always in raw.",
+        "operationId": "DeleteDeclaration",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "tags": [
+          "Formbase.Host"
+        ],
+        "summary": "Reports what this instance was composed as",
+        "description": "Deployment choices, fixed when the process started, so this is a read. The one a caller most needs is durable: an in-process host answers every request and loses the documents at the next restart.",
+        "operationId": "GetSettings",
+        "parameters": [
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptedDocumentResponse": {
+        "required": [
+          "documentId",
+          "formType"
+        ],
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "formType": {
+            "type": "string"
+          }
+        }
+      },
+      "DeclarationRequest": {
+        "required": [
+          "tableName",
+          "declarationVersion",
+          "expectedDeclarationVersion",
+          "fields",
+          "relations"
+        ],
+        "type": "object",
+        "properties": {
+          "tableName": {
+            "type": "string"
+          },
+          "declarationVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "expectedDeclarationVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredFieldRequest"
+            }
+          },
+          "relations": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DeclaredRelationRequest"
+            }
+          }
+        }
+      },
+      "DeclarationResponse": {
+        "required": [
+          "formType",
+          "tableName",
+          "declarationVersion",
+          "fields",
+          "relations"
+        ],
+        "type": "object",
+        "properties": {
+          "formType": {
+            "type": "string"
+          },
+          "tableName": {
+            "type": "string"
+          },
+          "declarationVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredFieldResponse"
+            }
+          },
+          "relations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredRelationResponse"
+            }
+          }
+        }
+      },
+      "DeclarationWriteResponse": {
+        "required": [
+          "declaration",
+          "projection"
+        ],
+        "type": "object",
+        "properties": {
+          "declaration": {
+            "$ref": "#/components/schemas/DeclarationResponse"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/ProjectionStatusResponse"
+          }
+        }
+      },
+      "DeclaredBinding": {
+        "enum": [
+          "stored",
+          "snapshot",
+          "reference"
+        ]
+      },
+      "DeclaredColumnType": {
+        "enum": [
+          "text",
+          "integer",
+          "decimal",
+          "boolean",
+          "timestamp",
+          "uuid",
+          "jsonb"
+        ]
+      },
+      "DeclaredFieldRequest": {
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/DeclaredColumnType"
+          },
+          "nullable": {
+            "type": "boolean",
+            "default": true
+          },
+          "sourceKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "binding": {
+            "$ref": "#/components/schemas/DeclaredBinding"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTargetResponse"
+              }
+            ]
+          }
+        }
+      },
+      "DeclaredFieldResponse": {
+        "required": [
+          "name",
+          "type",
+          "nullable",
+          "sourceKey",
+          "binding",
+          "target"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/DeclaredColumnType"
+          },
+          "nullable": {
+            "type": "boolean"
+          },
+          "sourceKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "binding": {
+            "$ref": "#/components/schemas/DeclaredBinding"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTargetResponse"
+              }
+            ]
+          }
+        }
+      },
+      "DeclaredRelationKind": {
+        "enum": [
+          "child",
+          "reference"
+        ]
+      },
+      "DeclaredRelationRequest": {
+        "required": [
+          "name",
+          "kind",
+          "target",
+          "keyField"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeclaredRelationKind"
+          },
+          "target": {
+            "type": "string"
+          },
+          "keyField": {
+            "type": "string"
+          }
+        }
+      },
+      "DeclaredRelationResponse": {
+        "required": [
+          "name",
+          "kind",
+          "target",
+          "keyField"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeclaredRelationKind"
+          },
+          "target": {
+            "type": "string"
+          },
+          "keyField": {
+            "type": "string"
+          }
+        }
+      },
+      "DeclaredTargetResponse": {
+        "required": [
+          "formType",
+          "keyField"
+        ],
+        "type": "object",
+        "properties": {
+          "formType": {
+            "type": "string"
+          },
+          "keyField": {
+            "type": "string"
+          }
+        }
+      },
+      "JsonElement": {},
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ProjectionRunResponse": {
+        "required": [
+          "projected",
+          "inserted",
+          "projectedWatermark",
+          "skipped",
+          "absentFieldCounts",
+          "unresolvedReferences"
+        ],
+        "type": "object",
+        "properties": {
+          "projected": {
+            "type": "boolean"
+          },
+          "inserted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "projectedWatermark": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedDocumentResponse"
+            }
+          },
+          "absentFieldCounts": {
+            "type": "object",
+            "additionalProperties": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "unresolvedReferences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ProjectionStateWire": {
+        "enum": [
+          "notProjected",
+          "projected",
+          "stale",
+          "unverified"
+        ]
+      },
+      "ProjectionStatusResponse": {
+        "required": [
+          "state",
+          "projectedWatermark",
+          "rawHead"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/ProjectionStateWire"
+          },
+          "projectedWatermark": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "rawHead": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "RecordQueryResponse": {
+        "required": [
+          "rows",
+          "stale"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SchemaIntelligenceResponse": {
+        "required": [
+          "installed",
+          "model"
+        ],
+        "type": "object",
+        "properties": {
+          "installed": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SettingsResponse": {
+        "required": [
+          "namespace",
+          "storeProfile",
+          "durable",
+          "schemaIntelligence"
+        ],
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "storeProfile": {
+            "type": "string"
+          },
+          "durable": {
+            "type": "boolean"
+          },
+          "schemaIntelligence": {
+            "$ref": "#/components/schemas/SchemaIntelligenceResponse"
+          }
+        }
+      },
+      "SkippedDocumentResponse": {
+        "required": [
+          "documentId",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "StoredDocumentResponse": {
+        "required": [
+          "documentId",
+          "formType",
+          "watermark",
+          "appendedAt",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "formType": {
+            "type": "string"
+          },
+          "watermark": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "appendedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "body": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "DocumentEndpoints"
+    },
+    {
+      "name": "ProjectionEndpoints"
+    },
+    {
+      "name": "RecordEndpoints"
+    },
+    {
+      "name": "DeclarationEndpoints"
+    },
+    {
+      "name": "Formbase.Host"
+    }
+  ]
+}

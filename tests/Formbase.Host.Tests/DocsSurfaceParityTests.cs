@@ -61,7 +61,7 @@ public sealed partial class DocsSurfaceParityTests : IClassFixture<WebApplicatio
     /// </summary>
     private static HashSet<string> DocumentedRoutes()
     {
-        var api = ReadRepoFile("docs/API.md");
+        var api = RepoFile.Read("docs/API.md");
 
         // Only that block counts. The page also shows worked examples with concrete ids and query
         // strings, and reading those as the documented surface would make the gate assert that the
@@ -99,24 +99,6 @@ public sealed partial class DocsSurfaceParityTests : IClassFixture<WebApplicatio
 
     /// <summary>Replaces every route parameter with a single placeholder.</summary>
     private static string Normalize(string path) => RouteParameter().Replace(path.Trim(), "{}");
-
-    private static string ReadRepoFile(string relativePath)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(
-                directory.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
-            if (File.Exists(candidate))
-            {
-                return File.ReadAllText(candidate);
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"{relativePath} not found above {AppContext.BaseDirectory}");
-    }
 
     [GeneratedRegex("```yaml[\r\n]+(?<routes>.*?)```", RegexOptions.Singleline)]
     private static partial Regex RouteBlock();
