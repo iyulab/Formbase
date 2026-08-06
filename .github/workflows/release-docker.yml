@@ -48,6 +48,26 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION, image: $IMAGE"
 
+      # The NuGet release refuses to publish a version the changelog does not record. This workflow
+      # fires on the same version bump, and what it publishes cannot be withdrawn — an image tag
+      # stays where it is pushed. So it holds the same line, by the same test, and holds it before
+      # any build minutes are spent: a heading alone does not count, the section has to say
+      # something. Two gates that disagree about what "recorded" means would let one release half
+      # of a version.
+      - name: Verify the changelog records this version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          awk -v heading="## $VERSION" '
+            $0 == heading { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "::error::CHANGELOG.md records no content under '## $VERSION'. Record the release before publishing it."
+            exit 1
+          fi
+          echo "Changelog records $VERSION: $(wc -l < "$RUNNER_TEMP/release-notes.md") lines"
+
       # Two gates guard this publish, one per kind of defect: dotnet test catches code that is
       # wrong, the start-up probe below catches an image that is wrong. Neither implies the other,
       # and a green suite in a sibling workflow is not a gate on this one — the two runs succeed
@@ -116,7 +136,13 @@ jobs:
           docker logs verify-host || true
           exit 1
 
+      # A manual run stops here: it builds the image and probes it, but publishes nothing. Without
+      # this condition there is no way to exercise the workflow at all — every step from here on
+      # writes tags that cannot be taken back, so "try it once" and "release it" would be the same
+      # act, against whatever version the file happens to hold. A version bump that failed after
+      # this point is recovered by re-running that run, which keeps this condition true.
       - name: Build and push Docker image
+        if: github.event_name == 'push'
         uses: docker/build-push-action@v6
         with:
           context: .

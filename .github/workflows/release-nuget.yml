@@ -54,8 +54,11 @@ jobs:
             capture && /^## / { exit }
             capture { print }
           ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
-          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
-            echo "::error::CHANGELOG.md has no '## $VERSION' section. Record the release before publishing it."
+          # -s is not the test: a heading followed by a blank line leaves a file that is
+          # non-empty and says nothing, which would publish a release whose notes are one
+          # newline. The section has to carry a character worth reading.
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "::error::CHANGELOG.md records no content under '## $VERSION'. Record the release before publishing it."
             exit 1
           fi
           echo "Release notes: $(wc -l < "$RUNNER_TEMP/release-notes.md") lines"
