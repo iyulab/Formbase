@@ -91,18 +91,28 @@ jobs:
       - name: Pack
         run: dotnet pack Formbase.slnx --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 
+      # A manual run stops publishing here: it builds, tests and packs, but pushes nothing. Every
+      # step from here on writes something that cannot be taken back, against whatever version the
+      # file happens to hold, so without this condition "try it once" and "release it" are the same
+      # act. What otherwise holds a manual run back is --skip-duplicate, and that is idempotence,
+      # not a guard: it means "do not publish the same thing twice", not "do not publish". The day
+      # a new package joins the solution, idempotence has nothing to say about it.
+      #
       # Pushing a .nupkg also uploads the co-located .snupkg, so symbols need no separate step.
       - name: Push to NuGet.org
+        if: github.event_name == 'push'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       # GitHub Packages rejects snupkg, so only the .nupkg glob is pushed here.
       - name: Push to GitHub Packages
+        if: github.event_name == 'push'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
 
       # Without this the repository keeps no record of what was released. MorphDB had the same gap
       # and it cost a consumer real time: packages had reached 0.5.1 while the newest tag was still
       # v0.2.1, so reading the repo to pick a version to pin produced one four minors old.
       - name: Tag the released version
+        if: github.event_name == 'push'
         run: |
           TAG="v${{ steps.version.outputs.version }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
@@ -119,6 +129,7 @@ jobs:
       # have a release, 0.6.0 shipped without one and nobody noticed for ten days. Automating it
       # here means the three can no longer drift apart.
       - name: Publish the GitHub Release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
