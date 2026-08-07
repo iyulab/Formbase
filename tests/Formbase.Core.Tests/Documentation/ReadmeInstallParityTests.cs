@@ -11,20 +11,8 @@ namespace Formbase.Core.Tests.Documentation;
 /// </summary>
 public sealed class ReadmeInstallParityTests
 {
-    private static readonly string RepoRoot = FindRepoRoot();
-    private static readonly string Readme = File.ReadAllText(Path.Combine(RepoRoot, "README.md"));
-
-    private static string FindRepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Formbase.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName
-            ?? throw new InvalidOperationException("Could not locate the repository root (no Formbase.slnx above the test binaries).");
-    }
+    private static readonly string RepoRoot = RepoFiles.Root;
+    private static readonly string Readme = RepoFiles.Read("README.md");
 
     [Fact]
     public void The_advertised_version_is_the_version_that_would_be_published()

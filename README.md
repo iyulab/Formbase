@@ -108,7 +108,10 @@ fails on the first proposal.
 `GET /settings` reports what an instance was composed as — its namespace, whether it is durable, and
 whether intelligence is installed. Credentials are never reported back.
 
-A container image and a compose file are not here yet.
+**Since 0.8.0 — the host is not in a released artifact yet.** It is not one of the published
+packages, and no image has been pushed, so the only ways to run it are from a checkout and from the
+bundle below. The packages under [Install](#install) are unaffected: embedding the engine is
+released and works as documented.
 
 ## Quick start
 
@@ -258,6 +261,12 @@ cp .env.example .env
 docker compose up -d
 curl http://127.0.0.1:8080/settings
 ```
+
+**This does not run yet, and the reason is the pin rather than the file.** The bundle asks for
+MorphDB `0.10.0`, which has not been published — `docker compose up` stops at the pull. Lowering
+the pin does not help: the start-up step creates the project under an id it chooses, and no
+released MorphDB accepts one, so the bundle would stop a step later instead. Until that version is
+out, run the host from a checkout against a MorphDB you start and provision yourself.
 
 Two things about the shape are worth knowing, because both are decisions rather than defaults.
 
