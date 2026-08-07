@@ -58,6 +58,45 @@ public class DocsVersionMarkerTests
                 "the tag it sends a reader to for released documentation has to be the released one");
     }
 
+    [Fact]
+    public void The_bundle_says_it_cannot_start_exactly_while_it_asks_for_a_MorphDB_ahead_of_the_pair()
+    {
+        // The bundle pins a MorphDB ahead of the line the install section pairs with, and while
+        // that is true `docker compose up` cannot succeed: the version it asks for is not out yet.
+        // Whether it has been published belongs to another repository's release line and cannot be
+        // read from here -- but the condition that makes the caveat true can, because it is the
+        // distance between two numbers in this tree. So the caveat is required exactly while the
+        // bundle is ahead, and must be gone once the pair catches up. Neither direction is left to
+        // whoever edits the README next.
+        var pin = Version.Parse(Regex.Match(
+            RepoFiles.Read("docker-compose.yml"), @"morphdb:(?<v>\d+\.\d+\.\d+)").Groups["v"].Value);
+
+        var pairedLine = Regex.Match(
+            RepoFiles.Read("README.md"), @"pairs with MorphDB `(?<v>\d+\.\d+)\.x`").Groups["v"].Value;
+
+        pairedLine.Should().NotBeEmpty("the install section must state the MorphDB line it pairs with");
+
+        var caveat = Regex.Match(RepoFiles.Read("README.md"), @"bundle asks for\s+MorphDB `(?<v>\d+\.\d+\.\d+)`");
+
+        if (pin > Version.Parse(pairedLine + ".0"))
+        {
+            caveat.Success.Should().BeTrue(
+                "the bundle asks for a MorphDB ahead of the paired line, so the documented "
+                + "`docker compose up` cannot succeed — a reader who runs it should find that "
+                + "written down rather than have to work it out from a pull error");
+
+            caveat.Groups["v"].Value.Should().Be(pin.ToString(),
+                "a reader diagnosing that failure compares the two, and a paragraph naming a "
+                + "version the file does not ask for sends them after the wrong thing");
+        }
+        else
+        {
+            caveat.Success.Should().BeFalse(
+                "the paired line has caught up with the bundle, so the caveat now describes a "
+                + "failure that no longer happens");
+        }
+    }
+
     /// <summary>
     /// The version a push publishes — the head of the chain, and the only link in it that cannot be
     /// forgotten. <see cref="ReadmeInstallParityTests"/> already holds the README's two statements

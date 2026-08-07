@@ -262,11 +262,12 @@ docker compose up -d
 curl http://127.0.0.1:8080/settings
 ```
 
-**This does not run yet, and the reason is the pin rather than the file.** The bundle asks for
-MorphDB `0.10.0`, which has not been published — `docker compose up` stops at the pull. Lowering
-the pin does not help: the start-up step creates the project under an id it chooses, and no
-released MorphDB accepts one, so the bundle would stop a step later instead. Until that version is
-out, run the host from a checkout against a MorphDB you start and provision yourself.
+**It does not start yet, and the reason is the pin rather than the file.** The bundle asks for
+MorphDB `0.10.0`, a version ahead of the pair stated under [Install](#install); until it is
+published, `docker compose up` stops at the pull. Lowering the pin does not help — the start-up
+step creates the project under an id it chooses, and no released MorphDB accepts one, so the
+bundle would stop a step later instead. Run the host from a checkout against a MorphDB you start
+and provision yourself until then.
 
 Two things about the shape are worth knowing, because both are decisions rather than defaults.
 
