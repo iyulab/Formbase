@@ -120,7 +120,37 @@ public sealed class EuProcurementNoticeRegressionTests
             "is an answer, not an absence, so the field never qualifies as genuinely absent here");
     }
 
-    private static ServiceProvider BuildProvider()
+    /// <summary>
+    /// The field this fixture's original mismatch (<c>Text</c>) would have skipped had it instead
+    /// been declared with a type that actually validates its shape — the type <c>deadline-receipt-request</c>
+    /// was declared with in the original discovery (<c>Timestamp</c>, ROADMAP.md P1). Only
+    /// <c>Jsonb</c> accepts every fixture row without a single skip; every scalar type rejects the
+    /// array. This is the empirical basis for the P1 design conclusion
+    /// (<c>claudedocs/Formbase/plans/2026-08-19-declaration-vocabulary-multiplicity-and-attributes-design.md</c>):
+    /// nothing here needed a new column type or a new <c>FieldHint</c> property, only the type
+    /// already meant for "shape not fixed in advance".
+    /// </summary>
+    [Fact]
+    public async Task Declaring_the_arrayvalued_field_as_jsonb_skips_nothing()
+    {
+        var provider = BuildProvider(currencyColumnType: ColumnType.Jsonb);
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        var notices = LoadFixture();
+
+        foreach (var notice in notices)
+        {
+            await engine.AcceptAsync(NoticeType, DocumentBody.Parse(notice.GetRawText()));
+        }
+
+        var result = await engine.ProjectAsync(NoticeType);
+
+        result.Skipped.Should().BeEmpty(
+            "Jsonb's DocumentMapper case (src/Formbase.Core/Projection/DocumentMapper.cs) never " +
+            "inspects ValueKind — every JSON shape, array included, is accepted unconditionally, " +
+            "unlike every scalar ColumnType above it in the same switch");
+    }
+
+    private static ServiceProvider BuildProvider(ColumnType currencyColumnType = ColumnType.Text)
     {
         var services = new ServiceCollection();
         services.AddFormbaseInMemory();
@@ -135,7 +165,7 @@ public sealed class EuProcurementNoticeRegressionTests
                 new FieldHint("publicationDate", ColumnType.Timestamp),
                 new FieldHint("buyerName", ColumnType.Text),
                 new FieldHint("totalValue", ColumnType.Decimal),
-                new FieldHint("totalValueCurrency", ColumnType.Text),
+                new FieldHint("totalValueCurrency", currencyColumnType),
             ]));
 
         return provider;
