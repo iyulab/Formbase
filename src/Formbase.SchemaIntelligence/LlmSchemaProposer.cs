@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
@@ -72,13 +73,24 @@ public sealed class LlmSchemaProposer : ISchemaProposer
             return null;
         }
 
-        var response = await _chatClient.GetResponseAsync(
-            [
-                new ChatMessage(ChatRole.System, SystemPrompt),
-                new ChatMessage(ChatRole.User, BuildUserPrompt(type, samples)),
-            ],
-            new ChatOptions { ResponseFormat = ChatResponseFormat.Json },
-            cancellationToken).ConfigureAwait(false);
+        ChatResponse response;
+        try
+        {
+            response = await _chatClient.GetResponseAsync(
+                [
+                    new ChatMessage(ChatRole.System, SystemPrompt),
+                    new ChatMessage(ChatRole.User, BuildUserPrompt(type, samples)),
+                ],
+                new ChatOptions { ResponseFormat = ChatResponseFormat.Json },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Any failure reaching the model — connection refused, timeout, auth, rate limit —
+            // is translated here so callers see one engine-recognized failure mode instead of
+            // whatever transport exception the chat client happens to throw.
+            throw new SchemaProposerUnavailableException(type, ex);
+        }
 
         var columns = ParseProposal(response.Text, observedFields);
         return new TableSchema(type.Value, columns);

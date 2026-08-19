@@ -1,3 +1,4 @@
+using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -152,6 +153,34 @@ public class LlmSchemaProposerTests
     }
 
     [Fact]
+    public async Task An_unreachable_chat_client_fails_as_a_recognized_engine_error()
+    {
+        var raw = await RawWith("""{"lot":"L-1"}""");
+        var proposer = new LlmSchemaProposer(raw, new ThrowingChatClient(
+            new HttpRequestException("No connection could be made")));
+
+        var act = () => proposer.ProposeAsync(Qc);
+
+        var thrown = await act.Should().ThrowAsync<SchemaProposerUnavailableException>();
+        thrown.Which.FormType.Should().Be(Qc);
+        thrown.Which.InnerException.Should().BeOfType<HttpRequestException>(
+            "the original transport failure must still be inspectable, not replaced");
+    }
+
+    [Fact]
+    public async Task Cancellation_from_the_chat_client_is_not_wrapped()
+    {
+        var raw = await RawWith("""{"lot":"L-1"}""");
+        var proposer = new LlmSchemaProposer(raw, new ThrowingChatClient(
+            new OperationCanceledException()));
+
+        var act = () => proposer.ProposeAsync(Qc);
+
+        await act.Should().ThrowAsync<OperationCanceledException>(
+            "cancellation is a caller-driven signal, not a proposer failure");
+    }
+
+    [Fact]
     public async Task Sampling_is_bounded()
     {
         var documents = Enumerable.Range(1, LlmSchemaProposer.SampleLimit + 15)
@@ -185,6 +214,24 @@ internal sealed class ScriptedChatClient(string reply) : IChatClient
         LastMessages = [.. messages];
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
     }
+
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("The proposer never streams.");
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>An <see cref="IChatClient"/> stand-in for a model that cannot be reached at all.</summary>
+internal sealed class ThrowingChatClient(Exception toThrow) : IChatClient
+{
+    public Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        => throw toThrow;
 
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)

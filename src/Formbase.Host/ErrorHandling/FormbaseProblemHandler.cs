@@ -1,4 +1,5 @@
 using Formbase.Core.Errors;
+using Formbase.SchemaIntelligence;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -52,6 +53,18 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 StatusCodes.Status400BadRequest,
                 "invalid-query",
                 "The query could not be read",
+                e.Message),
+
+            SchemaProposalFormatException e => Problem(
+                StatusCodes.Status400BadRequest,
+                "schema-proposal-invalid",
+                "The schema proposer's response could not be accepted",
+                e.Message),
+
+            SchemaProposerUnavailableException e => Problem(
+                StatusCodes.Status503ServiceUnavailable,
+                "schema-proposer-unavailable",
+                "The schema proposer is not reachable",
                 e.Message),
 
             // Binding fails before any endpoint runs, so nothing downstream can answer for it. Left

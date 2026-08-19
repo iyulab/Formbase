@@ -270,8 +270,15 @@ in place, so two runs over an unchanged stream leave the same table. A run is bo
 head it saw when it started, so documents arriving mid-run are left for the next run rather than
 landing under a watermark that does not cover them.
 
-`projected: false` means no declaration proposed a schema. That is not an error — documents are
-accepted without one — and nothing about the recorded state changes.
+`projected: false` means no declaration proposed a schema **and** schema intelligence (see
+[What this instance is](#what-this-instance-is)) had nothing to observe either. That is not an
+error — documents are accepted without one — and nothing about the recorded state changes.
+
+**When schema intelligence is installed and a form type has no declaration, this endpoint asks the
+model instead of answering `projected: false`.** A model failure is not silent: an unreadable or
+unshaped proposal answers `400` `/problems/schema-proposal-invalid`, and a model that could not be
+reached at all (connection, timeout, auth, rate limit) answers `503`
+`/problems/schema-proposer-unavailable` — see [Errors](#errors).
 
 Two fields exist so that silence stays visible:
 
@@ -377,6 +384,7 @@ which is stable; `title` and `detail` are prose.
 | 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON, the idempotency key was not a UUID, or a parameter did not bind |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
 | 400 | `/problems/invalid-declaration` | A declaration named no table, carried no fields, or declared one twice |
+| 400 | `/problems/schema-proposal-invalid` | Schema intelligence is installed and the model responded, but the proposal was not valid JSON, not the requested shape, or named a property never observed in the sampled documents |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
 | 404 | `/problems/unknown-namespace` | The request named a namespace this host does not serve |
@@ -385,6 +393,7 @@ which is stable; `title` and `detail` are prose.
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
+| 503 | `/problems/schema-proposer-unavailable` | Schema intelligence is installed but the model could not be reached (connection, timeout, auth, rate limit) |
 
 The three refusals a query can meet are deliberately separate, because their remedies are: run a
 projection, rebuild it, or retry later.

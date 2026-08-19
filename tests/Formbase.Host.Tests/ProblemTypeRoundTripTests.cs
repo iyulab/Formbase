@@ -3,12 +3,14 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
+using Formbase.SchemaIntelligence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -208,6 +210,24 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                 var type = await SeedProjectedAsync(factory, client);
                 return await client.GetAsync($"/formtypes/{type}/records");
             },
+
+            ["/problems/schema-proposal-invalid"] = async t =>
+            {
+                using var factory = t.WithStore<ISchemaProposer>(new ThrowingSchemaProposer(
+                    new SchemaProposalFormatException("The proposal is not valid JSON.")));
+                using var client = factory.CreateClient();
+
+                return await client.PostAsync($"/formtypes/{NewFormType()}/projection", null);
+            },
+
+            ["/problems/schema-proposer-unavailable"] = async t =>
+            {
+                using var factory = t.WithStore<ISchemaProposer>(new ThrowingSchemaProposer(
+                    new SchemaProposerUnavailableException(FormTypeRef.Create(NewFormType()))));
+                using var client = factory.CreateClient();
+
+                return await client.PostAsync($"/formtypes/{NewFormType()}/projection", null);
+            },
         };
 
     private static IEnumerable<(int Status, string Type)> ErrorTable()
@@ -306,5 +326,12 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The projection store is not reachable.");
+    }
+
+    /// <summary>A schema proposer that fails exactly one way, every time — the failure under test.</summary>
+    private sealed class ThrowingSchemaProposer(Exception toThrow) : ISchemaProposer
+    {
+        public Task<TableSchema?> ProposeAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+            throw toThrow;
     }
 }
