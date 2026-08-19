@@ -86,4 +86,8 @@
     <Using Include="AwesomeAssertions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Regression/Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
