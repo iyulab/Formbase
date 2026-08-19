@@ -4,6 +4,7 @@ using Formbase.Host.Composition;
 using Formbase.Host.Endpoints;
 using Formbase.Host.ErrorHandling;
 using Formbase.Host.Namespaces;
+using Formbase.Host.Projection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 // what lets the host's own tests exercise the real surface without standing anything up; a
 // deployment sets Formbase:Store=Durable and supplies what that profile needs.
 builder.Services.AddFormbaseStores(builder.Configuration);
+
+// This host's own memory of each form type's last projection run (inserted/skipped counts) — not
+// persisted, lost on restart. A host-response addition, not a core surface change: see
+// LastProjectionRunTracker.
+builder.Services.AddSingleton<LastProjectionRunTracker>();
 
 // Optional, like a database extension: supply model settings and the engine infers structure for
 // what nobody declared. Supply none and the host runs exactly as it does now — the invariant is that

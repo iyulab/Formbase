@@ -1,6 +1,7 @@
 using Formbase.Core;
 using Formbase.Core.Primitives;
 using Formbase.Host.Contracts;
+using Formbase.Host.Projection;
 
 namespace Formbase.Host.Endpoints;
 
@@ -38,10 +39,14 @@ internal static class ProjectionEndpoints
     private static async Task<IResult> RunAsync(
         string type,
         FormbaseEngine engine,
+        LastProjectionRunTracker runTracker,
         CancellationToken cancellationToken)
     {
-        var result = await engine.ProjectAsync(FormTypeRef.Create(type), cancellationToken)
+        var formType = FormTypeRef.Create(type);
+        var result = await engine.ProjectAsync(formType, cancellationToken)
             .ConfigureAwait(false);
+
+        runTracker.Record(formType, result);
 
         return Results.Ok(new ProjectionRunResponse(
             result.Projected,
@@ -55,14 +60,17 @@ internal static class ProjectionEndpoints
     private static async Task<IResult> GetStatusAsync(
         string type,
         FormbaseEngine engine,
+        LastProjectionRunTracker runTracker,
         CancellationToken cancellationToken)
     {
-        var status = await engine.GetProjectionStatusAsync(FormTypeRef.Create(type), cancellationToken)
+        var formType = FormTypeRef.Create(type);
+        var status = await engine.GetProjectionStatusAsync(formType, cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(new ProjectionStatusResponse(
             status.State.ToWire(),
             status.ProjectedWatermark.Value,
-            status.RawHead.Value));
+            status.RawHead.Value,
+            LastRunResponse.FromTracked(runTracker.TryGet(formType))));
     }
 }

@@ -301,10 +301,22 @@ GET /formtypes/orders/projection
 ```
 
 ```json
-{ "state": "stale", "projectedWatermark": 8, "rawHead": 12 }
+{
+  "state": "stale",
+  "projectedWatermark": 8,
+  "rawHead": 12,
+  "lastRun": { "insertedCount": 8, "skippedCount": 2, "observedAt": "2026-08-19T10:00:00Z" }
+}
 ```
 
 **Branch on all four states.**
+
+**`lastRun` is what this host instance itself observed, not a durable record.** It is `null` until
+this host has run the projection at least once since it started — a different instance, or this one
+after a restart, answers `null` for a form type it has genuinely projected before. This is what
+turns "148 documents silently missing" into a number a caller can see instead of a fact only the raw
+stream still knows: run the projection again to refresh it, the same way `state` is never a stale
+answer you cannot correct.
 
 | `state` | What it means | What to do |
 |---|---|---|

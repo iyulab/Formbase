@@ -792,6 +792,36 @@
         }
       },
       "JsonElement": {},
+      "LastRunResponse": {
+        "required": [
+          "insertedCount",
+          "skippedCount",
+          "observedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "insertedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skippedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -897,7 +927,8 @@
         "required": [
           "state",
           "projectedWatermark",
-          "rawHead"
+          "rawHead",
+          "lastRun"
         ],
         "type": "object",
         "properties": {
@@ -919,6 +950,16 @@
               "string"
             ],
             "format": "int64"
+          },
+          "lastRun": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LastRunResponse"
+              }
+            ]
           }
         }
       },

@@ -102,6 +102,49 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     }
 
     /// <summary>
+    /// Before this host has run the projection at all, it has nothing to report about a run — and
+    /// says so rather than a count that would read as "zero skipped" (a claim this host cannot back).
+    /// </summary>
+    [Fact]
+    public async Task Projection_status_before_any_run_reports_no_last_run_observation()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":1}""");
+
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+
+        status.GetProperty("lastRun").ValueKind.Should().Be(JsonValueKind.Null,
+            "this host has not projected this form type since it started, so it has no observation " +
+            "to report — not a zero it never earned");
+    }
+
+    /// <summary>
+    /// The gap this closes: <c>GET .../projection</c> used to answer <c>projected</c> the same way
+    /// whether every document landed or most of them were silently skipped. A caller reading the
+    /// status later — not the one moment the run response itself was visible — could not tell.
+    /// </summary>
+    [Fact]
+    public async Task Projection_status_after_a_run_reports_what_that_run_skipped()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":1}""");
+        await AcceptAsync(type, """{"total":[1,2]}"""); // an array where the declaration expects a scalar
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
+        run.GetProperty("skipped").GetArrayLength().Should().Be(1,
+            "the structurally mismatched document must be skipped, not silently coerced");
+
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var lastRun = status.GetProperty("lastRun");
+        lastRun.GetProperty("insertedCount").GetInt32().Should().Be(1);
+        lastRun.GetProperty("skippedCount").GetInt32().Should().Be(1,
+            "the skip that just happened is now visible to a caller reading status alone, without " +
+            "having been the one to see the run response");
+    }
+
+    /// <summary>
     /// The engine can hold a state this surface has no name for only if someone adds one without
     /// deciding what it is called. The mapping is total by construction, so this asserts the
     /// property rather than the four cases: every state the engine declares crosses.

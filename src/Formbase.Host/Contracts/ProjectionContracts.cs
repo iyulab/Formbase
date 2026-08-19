@@ -1,4 +1,5 @@
 using Formbase.Core.Projection;
+using Formbase.Host.Projection;
 
 namespace Formbase.Host.Contracts;
 
@@ -39,10 +40,27 @@ public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason);
 /// <param name="State">See <see cref="ProjectionStateWire"/> — a caller must branch on all four.</param>
 /// <param name="ProjectedWatermark">The raw position the projection reached.</param>
 /// <param name="RawHead">The current head of the form type's raw stream.</param>
+/// <param name="LastRun">
+/// What this host instance itself observed the last time it ran this projection — <c>null</c> when
+/// this host has not run it since it started. Not a durable record: a different host instance, or
+/// this one after a restart, answers <c>null</c> for a form type it has genuinely projected before.
+/// Run the projection again to refresh it, the same way <see cref="State"/> itself is never stale
+/// information you cannot correct.
+/// </param>
 public sealed record ProjectionStatusResponse(
     ProjectionStateWire State,
     long ProjectedWatermark,
-    long RawHead);
+    long RawHead,
+    LastRunResponse? LastRun);
+
+/// <param name="InsertedCount">Rows that landed in the projected table on that run.</param>
+/// <param name="SkippedCount">Documents that could not be mapped on that run.</param>
+/// <param name="ObservedAt">When this host observed the run.</param>
+public sealed record LastRunResponse(int InsertedCount, int SkippedCount, DateTimeOffset ObservedAt)
+{
+    internal static LastRunResponse? FromTracked(LastProjectionRun? run) =>
+        run is null ? null : new LastRunResponse(run.InsertedCount, run.SkippedCount, run.ObservedAt);
+}
 
 /// <summary>
 /// The projection states as the wire names them. Declared here rather than serializing the engine's

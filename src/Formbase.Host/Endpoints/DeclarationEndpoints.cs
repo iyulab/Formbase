@@ -5,6 +5,7 @@ using Formbase.Core.Projection;
 using Formbase.Core.Schema;
 using Formbase.Host.Contracts;
 using Formbase.Host.Declarations;
+using Formbase.Host.Projection;
 
 namespace Formbase.Host.Endpoints;
 
@@ -92,6 +93,7 @@ internal static class DeclarationEndpoints
         IFieldHintSource hints,
         IDeclarationWriter writer,
         FormbaseEngine engine,
+        LastProjectionRunTracker runTracker,
         CancellationToken cancellationToken)
     {
         var formType = FormTypeRef.Create(type);
@@ -113,7 +115,7 @@ internal static class DeclarationEndpoints
         // whether it stored what it was handed.
         var stored = await hints.GetHintsAsync(formType, cancellationToken).ConfigureAwait(false);
         var status = await engine.GetProjectionStatusAsync(formType, cancellationToken).ConfigureAwait(false);
-        var body = new DeclarationWriteResponse(Describe(stored!), Describe(status));
+        var body = new DeclarationWriteResponse(Describe(stored!), Describe(status, runTracker.TryGet(formType)));
 
         return existing is null
             ? Results.Created($"/formtypes/{formType}/declaration", body)
@@ -251,8 +253,8 @@ internal static class DeclarationEndpoints
                 r.Target.Value,
                 r.KeyField))]);
 
-    private static ProjectionStatusResponse Describe(ProjectionStatus status) =>
-        new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value);
+    private static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
+        new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value, LastRunResponse.FromTracked(lastRun));
 
     private static IResult Invalid(string detail) =>
         Results.Problem(
