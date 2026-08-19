@@ -12,9 +12,19 @@ keeping on record: 15 of the 25 buyer names in this sample have no English trans
 source's multi-language name map, so `buyerName` is legitimately absent for most of the sample —
 not a fixture bug.
 
-Both fixtures keep the same small subset of fields: a notice identifier, notice type, publication
-date, buyer name, and total contract value with its currency. Field values are unmodified from the
-source.
+`eu-procurement-pin-only-sample.json` — 25 real prior information notices (`pin-only` notice
+type, published as advance market intelligence rather than a call for competition), same source
+and API. A third real population: none of the 25 sampled notices carry a contract value at all —
+`total-value` is absent from the source JSON entirely, not present-as-null, so this fixture omits
+the `totalValue`/`totalValueCurrency` keys outright rather than writing them as `null`. Writing
+them as `null` would misrepresent what the source actually said (a field a document never had is a
+different fact from an explicit null — see `DocumentMapper.cs`'s `absent` handling). This is the
+only one of the three fixtures that exercises the absent-field path with real data end to end; the
+other two only exercise the explicit-null path.
+
+All three fixtures keep the same small subset of fields: a notice identifier, notice type,
+publication date, buyer name, and (where the source carries it) total contract value with its
+currency. Field values are unmodified from the source.
 
 **License**: TED notice data is made available for reuse under Commission Decision 2011/833/EU on
 the reuse of Commission documents. This fixture is a small derived sample kept for offline,
