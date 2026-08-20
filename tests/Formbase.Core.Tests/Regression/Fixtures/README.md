@@ -22,7 +22,16 @@ different fact from an explicit null — see `DocumentMapper.cs`'s `absent` hand
 only one of the three fixtures that exercises the absent-field path with real data end to end; the
 other two only exercise the explicit-null path.
 
-All three fixtures keep the same small subset of fields: a notice identifier, notice type,
+`eu-procurement-cn-social-sample.json` — 25 real light-regime social and specific services notices
+(`cn-social` notice type), same source and API. A fourth real population, and the first where
+presence of `totalValue` is inconsistent *within* the sample rather than uniform across it: 7 of the
+25 notices carry a real numeric value, the other 18 lack the key entirely. A light-regime notice is
+not required to declare a contract value the way a standard contract notice is, so the corpus itself
+answers the field for some notices and never asks the question for others — this is the only one of
+the four fixtures where the absent and present cases coexist in one homogeneous notice type instead
+of one case dominating the whole sample.
+
+All four fixtures keep the same small subset of fields: a notice identifier, notice type,
 publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
