@@ -117,7 +117,16 @@ alongside `pin-only` (advance intelligence, a separate contract notice must stil
 limits a subsequent tender must allow, if published far enough in advance. Real ratio 16 of 25
 present, 9 absent — close to but distinct from `pin-cfc-standard`'s 12/13.
 
-All thirteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-corr-sample.json` — 25 real corrigenda (`corr` notice type), same source and API. The
+most procedurally different type in the family yet: every other fixture, even `pmc`'s pre-procedure
+consultation, announces or reports on some procurement act, while a corrigendum amends the text of a
+notice already published — correcting an error rather than advancing a procedure. Whether a given
+corrigendum carries `totalValue` depends entirely on what it happens to correct, not any systematic
+rule, which is why this population's real ratio swings sharply between sampling windows (a same-day
+2025 sample showed 23 of 23 present; a broader mid-2024-onward sample, the one actually committed,
+shows 10 of 25) — correcting a buyer's name and correcting a contract value are unrelated events.
+
+All fourteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
