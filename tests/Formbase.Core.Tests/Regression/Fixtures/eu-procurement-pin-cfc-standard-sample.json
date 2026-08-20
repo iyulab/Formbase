@@ -1,0 +1,200 @@
+[
+  {
+    "noticeId": "287286-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-19T00:00:00+02:00",
+    "buyerName": "GWG Städtische Wohnungsgesellschaft München mbH"
+  },
+  {
+    "noticeId": "290680-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-23T00:00:00+02:00",
+    "buyerName": "Zentralinstitut für Seelische Gesundheit"
+  },
+  {
+    "noticeId": "290933-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-23T00:00:00+02:00",
+    "buyerName": "Comune di Francofonte",
+    "totalValue": 3000000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "293731-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-25T00:00:00+02:00",
+    "buyerName": "Universitätsklinikum Magdeburg A. ö. R.",
+    "totalValue": 2185000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "295226-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-26T00:00:00+02:00",
+    "buyerName": "ASIU SpA e lucchini SpA in AS"
+  },
+  {
+    "noticeId": "295231-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-26T00:00:00+02:00",
+    "buyerName": "Kunst- und Ausstellungshalle der Bundesrepublik Deutschland",
+    "totalValue": 1200000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "295232-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-26T00:00:00+02:00",
+    "buyerName": "Abfallwirtschaftsgesellschaft des Rems-Murr-Kreises mbH (AWG)",
+    "totalValue": 500000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "295233-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-26T00:00:00+02:00",
+    "buyerName": "Münchenstift GmbH"
+  },
+  {
+    "noticeId": "295591-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-26T00:00:00+02:00",
+    "buyerName": "Berliner Verkehrsbetriebe (BVG) Anstalt des öffentlichen Rechts; Abt. Einkauf FEM-E2 (IPLZ 42200); 10096 Berlin"
+  },
+  {
+    "noticeId": "298788-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-30T00:00:00+02:00",
+    "buyerName": "Kreisausschuss des Wetteraukreises – Fachdienst Landwirtschaft",
+    "totalValue": 250000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "299097-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-30T00:00:00+02:00",
+    "buyerName": "MVM Paksi Atomerőmű Zártkörűen Működő Részvénytársaság",
+    "totalValue": 1,
+    "totalValueCurrency": [
+      "HUF"
+    ]
+  },
+  {
+    "noticeId": "300300-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-08-31T00:00:00+02:00",
+    "buyerName": "Mühlenkreiskliniken (AöR)"
+  },
+  {
+    "noticeId": "308675-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-07T00:00:00+02:00",
+    "buyerName": "Scrutiny (outsourcing) Ltd",
+    "totalValue": 200000,
+    "totalValueCurrency": [
+      "GBP"
+    ]
+  },
+  {
+    "noticeId": "309511-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-07T00:00:00+02:00",
+    "buyerName": "GRDF"
+  },
+  {
+    "noticeId": "310586-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-08T00:00:00+02:00",
+    "buyerName": "NISZ – Nemzeti Infokommunikációs Szolgáltató Zártkörűen Működő Részvénytársaság"
+  },
+  {
+    "noticeId": "310803-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-08T00:00:00+02:00",
+    "buyerName": "Klinikum Idar-Oberstein GmbH"
+  },
+  {
+    "noticeId": "311912-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-08T00:00:00+02:00",
+    "buyerName": "ACA SpA in House Providing"
+  },
+  {
+    "noticeId": "312161-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-09T00:00:00+02:00",
+    "buyerName": "LEGT Jacques Coeur"
+  },
+  {
+    "noticeId": "312384-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-09T00:00:00+02:00",
+    "buyerName": "La Fondazione Circolo dei Lettori, en qualitè de Chef de File pour le projet «Lieux Vivants»",
+    "totalValue": 52491.8,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "312385-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-09T00:00:00+02:00",
+    "buyerName": "La Fondazione Circolo dei Lettori, en qualitè de Chef de File pour le projet «Lieux Vivants»",
+    "totalValue": 47196,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "312390-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-09T00:00:00+02:00",
+    "buyerName": "Hillerød Kommune",
+    "totalValue": 10000000,
+    "totalValueCurrency": [
+      "DKK"
+    ]
+  },
+  {
+    "noticeId": "313694-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-10T00:00:00+02:00",
+    "buyerName": "Eiropas Komisija, direction générale de l'informatique, direction \"Gestion des ressources et optimisation\", unité \"Passations de marchés et gestion de contrats\""
+  },
+  {
+    "noticeId": "314119-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-10T00:00:00+02:00",
+    "buyerName": "La Fondazione Circolo dei Lettori, in qualità di soggetto capofila del progetto “Lieux Vivants”",
+    "totalValue": 47196,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "314120-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-10T00:00:00+02:00",
+    "buyerName": "La Fondazione Circolo dei Lettori, in qualità di soggetto capofila del progetto «Lieux Vivants»",
+    "totalValue": 52491.8,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "315971-2016",
+    "noticeType": "pin-cfc-standard",
+    "publicationDate": "2016-09-13T00:00:00+02:00",
+    "buyerName": "NHS Bradford City CCG"
+  }
+]

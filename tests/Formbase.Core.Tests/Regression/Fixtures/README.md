@@ -57,7 +57,14 @@ prior fixtures ever exercises a full 25-of-25 presence. An award notice reports 
 and the light regime does not excuse a buyer from disclosing what they actually paid, unlike the
 lighter obligations that apply before any award exists.
 
-All six single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-pin-cfc-standard-sample.json` — 25 real prior information notices used as a call for
+competition (`pin-cfc-standard` notice type), same source and API. Procedurally distinct from
+`pin-only`: a plain PIN is advance market intelligence and a separate contract notice must still
+follow, but a PIN used as a call for competition is itself the invitation — suppliers can respond to
+it directly. That procedural difference shows up in `totalValue` presence too: 12 of 25 present, 13
+absent, a near-even split unlike `pin-only`'s uniform absence or any sibling fixture's skewed ratio.
+
+All seven single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
