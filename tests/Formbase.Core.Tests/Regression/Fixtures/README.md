@@ -90,4 +90,7 @@ deterministic testing — not a redistribution of the corpus itself.
 
 **Why it is offline**: the source API rate-limits automated requests, so the test suite never fetches
 it live. Regenerating the sample (a different query, a larger one, a different notice type) is a
-manual, occasional step — not something a build performs.
+manual, occasional step — not something a build performs. Use `scripts/fetch-ted-corpus-sample.py`
+(repo root) rather than hand-rolling the request each time; it encapsulates the query/field format
+these fixtures depend on, including the `--min-date` filter the multi-lot pair needed (pre-eForms
+notices, before October 2023, never carry structured per-lot fields).
