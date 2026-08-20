@@ -135,7 +135,65 @@ utilities directive family `qu-sy` already distinguished from. A third all-absen
 family (alongside `pin-only` and `qu-sy`), each for a different reason: here, a transport service
 concession is compensated and structured differently from a priced contract award.
 
-All fifteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-business-register-eeig-sample.json` — 25 real registration notices for a European Economic
+Interest Grouping (`brin-eeig` notice type), same source and API, but the first fixture in this family
+that is not a procurement notice at all. It reports the formation or completion of the liquidation of
+an EEIG (Council Regulation (EEC) No 2137/85), published to a business register — a company-law event
+with no contract to describe, not a procurement stage this family's other populations merely disclose
+less about. `buyerName` here carries the registered grouping's name, reusing this family's field label
+across notice families rather than implying a contracting authority exists. All 25 lack `totalValue` —
+a fourth all-absent population in the family (alongside `pin-only`, `qu-sy`, `pin-tran`), each absent
+for a different reason; here, there is no contract for the field to describe. A related type under the
+same `BRIN` document family, `brin-ecs`, was evaluated and rejected earlier for having only a single
+real notice ever published; `brin-eeig` carries 661.
+
+`eu-procurement-can-tran-sample.json` — 25 real result notices for public passenger transport services
+(`can-tran` notice type), same source and API. The award-stage sibling of `eu-procurement-pin-tran-sample.json`,
+sharing its legal basis (confirmed against the raw source: `32007R1370` on every sampled notice). The
+planning-stage fixture found `totalValue` absent on all 25 sampled notices; this result-stage sample
+shows the absence is not total at this later stage — 6 of 25 carry a real value, 19 do not — the same
+lifecycle-stage relationship `cn-standard`/`can-standard` already established for the classic
+directive, reproduced here under a different legal instrument entirely.
+
+`eu-procurement-compl-sample.json` — 25 real voluntary completion notices (`compl` notice type), same
+source and API. The first fixture representing a procedural stage none of the prior seventeen do: every
+sibling fixture is about a contract that does not yet exist, is being announced, awarded, or amended;
+this one marks a contract's performance as concluded. Real ratio 24 of 25 present — the highest in the
+family alongside `eu-procurement-can-social-sample.json`'s full 25 of 25. The eForms SDK declares this
+type's legal basis as `other` only, but the raw source's live `legal-basis` field on the sampled
+notices is broader — `32014L0024`, `32014L0025`, and `other` all appear — worth recording as a place
+where the SDK's declared catalog and the live corpus's actual tagging disagree, rather than assuming
+the catalog is authoritative on this point.
+
+**Discovery method correction (2026-08-20)**: the first fifteen fixtures above were found by probing
+individual candidate `notice-type` codes against the live search API — a method that could not tell
+whether a rejected or unprobed code was genuinely exhausted, since no catalog was cross-referenced. The
+three fixtures immediately above were found instead by reading the eForms SDK's own declared
+notice-subtype catalog directly (`notice-types/notice-types.json` in
+[OP-TED/eForms-SDK](https://github.com/OP-TED/eForms-SDK), fetched via `gh api
+repos/OP-TED/eForms-SDK/contents/notice-types/notice-types.json?ref=<tag>` — the tag must omit a
+leading `v`, e.g. `1.15.1` not `v1.15.1`, which 404s). That catalog declares **51 `subTypeId` entries
+collapsing to 21 distinct `type` codes** — the "51" this project tracked was always the finer
+legal-basis-variant count, not the number of distinct notice-type codes reachable through this
+family's `notice-type=<code>` query shape. Cross-referencing this family's touched codes against those
+21 accounts for all of them: seventeen adopted (the fifteen single-notice fixtures above, minus `corr`
+— see below — plus `brin-eeig`/`can-tran`/`compl`), four rejected (`pin-buyer`, `can-desg`, `brin-ecs`,
+and `subco` — see below). **The eForms SDK's declared notice-subtype catalog is therefore exhausted for
+this family's discovery method** — not because thoroughness happened to land there, but because there
+were only ever 21 codes to find. `corr` (corrigendum, already adopted as this family's 14th fixture)
+does not appear anywhere in the SDK's 51-entry catalog at all — the search API accepts it, but it is a
+TED-only code outside the eForms notice-subtype vocabulary the SDK declares, most likely because a
+corrigendum is modelled in eForms as an amendment to an existing notice rather than as its own subtype.
+Any further expansion of this family past its current eighteen fixtures needs a different catalog than
+the one this correction relied on — the SDK's 51/21 no longer has anything unexplored in it.
+
+**Evaluated and rejected — `subco`** (`subco` notice type, subcontract notice, defence directive only,
+documentType `CN`): probed alongside the three adopted types above and found to have only 13 real
+notices ever published (no date floor), well short of this family's fixed 25-record sample — the same
+insufficient-population reason `brin-ecs` was rejected for, just less extreme (13 real notices instead
+of 1). Not adopted.
+
+All eighteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 

@@ -1,0 +1,184 @@
+[
+  {
+    "noticeId": "304372-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-09-02T00:00:00+02:00",
+    "buyerName": "Territoire de la Côte Ouest"
+  },
+  {
+    "noticeId": "306162-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-09-03T00:00:00+02:00",
+    "buyerName": "Landkreis Neunkirchen"
+  },
+  {
+    "noticeId": "338791-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-09-30T00:00:00+02:00",
+    "buyerName": "Minister Infrastruktury i Budownictwa",
+    "totalValue": 3588790.23,
+    "totalValueCurrency": [
+      "PLN"
+    ]
+  },
+  {
+    "noticeId": "341544-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-10-01T00:00:00+02:00",
+    "buyerName": "Zweckverband Tourismusregion Berchtesgaden-Königssee (TRBK)"
+  },
+  {
+    "noticeId": "353904-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-10-11T00:00:00+02:00",
+    "buyerName": "1. Land Berlin, Senatsverwaltung für Stadtentwicklung und Umwelt; 2. Land Brandenburg, Ministerium für Infrastruktur und Landesplanung"
+  },
+  {
+    "noticeId": "355540-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-10-12T00:00:00+02:00",
+    "buyerName": "Communauté d'agglomération du Pays de Vannes, Vannes Agglo"
+  },
+  {
+    "noticeId": "382248-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-10-29T00:00:00+02:00",
+    "buyerName": "Landkreis Barnim und Landkreis Mäkisch-Oderland als Gruppe von Behörden",
+    "totalValue": 2186477,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "382249-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-10-29T00:00:00+02:00",
+    "buyerName": "Landkreis Barnim",
+    "totalValue": 7070300,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "382250-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-10-29T00:00:00+02:00",
+    "buyerName": "Communauté d'agglomération du Pays de Vannes, Vannes agglo"
+  },
+  {
+    "noticeId": "384818-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-11-02T00:00:00+01:00",
+    "buyerName": "Regione Toscana — Giunta Regionale Settore Trasporto Pubblico Locale",
+    "totalValueCurrency": [
+      "EUR",
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "384819-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-11-02T00:00:00+01:00",
+    "buyerName": "Gmina Nowa Sucha"
+  },
+  {
+    "noticeId": "386564-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-11-03T00:00:00+01:00",
+    "buyerName": "Gmina Brochów"
+  },
+  {
+    "noticeId": "399639-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-11-12T00:00:00+01:00",
+    "buyerName": "Gmina Wola Krzysztoporska"
+  },
+  {
+    "noticeId": "423167-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-01T00:00:00+01:00",
+    "buyerName": "Gmina Młodzieszyn"
+  },
+  {
+    "noticeId": "427137-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-03T00:00:00+01:00",
+    "buyerName": "Landratsamt Kyffhäuserkreis"
+  },
+  {
+    "noticeId": "430468-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-07T00:00:00+01:00",
+    "buyerName": "Jihočeský kraj",
+    "totalValue": 2250000000,
+    "totalValueCurrency": [
+      "CZK"
+    ]
+  },
+  {
+    "noticeId": "438053-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-13T00:00:00+01:00",
+    "buyerName": "Regione Autonoma Friuli-Venezia Giulia — Direzione Centrale Infrastrutture e Territorio",
+    "totalValueCurrency": [
+      "EUR",
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "441970-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-15T00:00:00+01:00",
+    "buyerName": "Provincia Autonoma di Bolzano — Alto Adige",
+    "totalValue": 29909000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "444089-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-16T00:00:00+01:00",
+    "buyerName": "Stadt Weimar"
+  },
+  {
+    "noticeId": "455429-2016",
+    "noticeType": "can-tran",
+    "publicationDate": "2016-12-23T00:00:00+01:00",
+    "buyerName": "Gmina Miejska Biała Podlaska"
+  },
+  {
+    "noticeId": "3855-2017",
+    "noticeType": "can-tran",
+    "publicationDate": "2017-01-05T00:00:00+01:00",
+    "buyerName": "SITAC"
+  },
+  {
+    "noticeId": "5502-2017",
+    "noticeType": "can-tran",
+    "publicationDate": "2017-01-06T00:00:00+01:00",
+    "buyerName": "Landkreis Märkisch-Oderland"
+  },
+  {
+    "noticeId": "9064-2017",
+    "noticeType": "can-tran",
+    "publicationDate": "2017-01-10T00:00:00+01:00",
+    "buyerName": "Provincia Autonoma di Trento",
+    "totalValue": 18536000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "13904-2017",
+    "noticeType": "can-tran",
+    "publicationDate": "2017-01-13T00:00:00+01:00",
+    "buyerName": "Klaipėdos rajono savivaldybė"
+  },
+  {
+    "noticeId": "96733-2017",
+    "noticeType": "can-tran",
+    "publicationDate": "2017-03-15T00:00:00+01:00",
+    "buyerName": "Rhein-Sieg-Kreis"
+  }
+]
