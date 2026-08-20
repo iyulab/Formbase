@@ -31,8 +31,8 @@
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <!-- AwesomeAssertions: Apache-2.0 community fork of FluentAssertions (FA 8.x is commercial). API-compatible; namespace is AwesomeAssertions (not FluentAssertions). -->
     <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
-    <PackageVersion Include="Testcontainers" Version="4.13.0" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
   </ItemGroup>
 </Project>
