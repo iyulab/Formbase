@@ -102,7 +102,15 @@ advance intelligence about an undefined contract, is still a step inside a proce
 produce one — this one precedes the procedure entirely. Real ratio: 22 of 25 absent, 3 present, a
 genuine minority rather than a uniform absence.
 
-All eleven single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-cn-desg-sample.json` — 25 real design contest notices (`cn-desg` notice type), same
+source and API. The first fixture representing a fundamentally different procurement mechanism —
+selecting a design through a jury-judged competition (Directive 2014/24/EU Articles 78-82) rather
+than a priced bid — instead of a different point in the same contract-award lifecycle every prior
+fixture shares. Not the same shape as the contest's own results notice (`can-desg`, evaluated and
+rejected during an earlier expansion for being 100% absent): this notice type's real sample is
+genuinely mixed, 7 of 25 present, 18 absent.
+
+All twelve single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
