@@ -110,7 +110,14 @@ fixture shares. Not the same shape as the contest's own results notice (`can-des
 rejected during an earlier expansion for being 100% absent): this notice type's real sample is
 genuinely mixed, 7 of 25 present, 18 absent.
 
-All twelve single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-pin-rtl-sample.json` — 25 real prior information notices used to reduce time limits
+(`pin-rtl` notice type), same source and API. A third distinct procedural role for the PIN instrument
+alongside `pin-only` (advance intelligence, a separate contract notice must still follow) and
+`pin-cfc-standard` (the PIN is itself the invitation): publishing this type shortens the minimum time
+limits a subsequent tender must allow, if published far enough in advance. Real ratio 16 of 25
+present, 9 absent — close to but distinct from `pin-cfc-standard`'s 12/13.
+
+All thirteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
