@@ -1,0 +1,188 @@
+[
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "2-2025",
+    "lotValue": 650000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0002",
+    "noticeId": "2-2025",
+    "lotValue": 650000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0003",
+    "noticeId": "2-2025",
+    "lotValue": 650000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0004",
+    "noticeId": "2-2025",
+    "lotValue": 350000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "45-2025",
+    "lotValue": 17490.0,
+    "lotValueCurrency": "BGN"
+  },
+  {
+    "lotId": "LOT-0002",
+    "noticeId": "45-2025",
+    "lotValue": 8335.0,
+    "lotValueCurrency": "BGN"
+  },
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "72-2025",
+    "lotValue": 850000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0004",
+    "noticeId": "72-2025",
+    "lotValue": 450000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0005",
+    "noticeId": "72-2025",
+    "lotValue": 450000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0006",
+    "noticeId": "72-2025",
+    "lotValue": 1600000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0007",
+    "noticeId": "72-2025",
+    "lotValue": 300000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "83-2025",
+    "lotValue": 42500.0,
+    "lotValueCurrency": "BGN"
+  },
+  {
+    "lotId": "LOT-0002",
+    "noticeId": "83-2025",
+    "lotValue": 16666.66,
+    "lotValueCurrency": "BGN"
+  },
+  {
+    "lotId": "LOT-0003",
+    "noticeId": "83-2025",
+    "lotValue": 150000.0,
+    "lotValueCurrency": "BGN"
+  },
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "116-2025",
+    "lotValue": 233000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0002",
+    "noticeId": "116-2025",
+    "lotValue": 39000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "124-2025",
+    "lotValue": 325000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0002",
+    "noticeId": "124-2025",
+    "lotValue": 185000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0003",
+    "noticeId": "124-2025",
+    "lotValue": 185000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0004",
+    "noticeId": "124-2025",
+    "lotValue": 135000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0005",
+    "noticeId": "124-2025",
+    "lotValue": 55000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0006",
+    "noticeId": "124-2025",
+    "lotValue": 280000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0007",
+    "noticeId": "124-2025",
+    "lotValue": 100000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0008",
+    "noticeId": "124-2025",
+    "lotValue": 385000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0001",
+    "noticeId": "126-2025",
+    "lotValue": 70000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0002",
+    "noticeId": "126-2025",
+    "lotValue": 350000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0003",
+    "noticeId": "126-2025",
+    "lotValue": 600000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0004",
+    "noticeId": "126-2025",
+    "lotValue": 4000000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0005",
+    "noticeId": "126-2025",
+    "lotValue": 500000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0006",
+    "noticeId": "126-2025",
+    "lotValue": 10000000.0,
+    "lotValueCurrency": "EUR"
+  },
+  {
+    "lotId": "LOT-0007",
+    "noticeId": "126-2025",
+    "lotValue": 3000000.0,
+    "lotValueCurrency": "EUR"
+  }
+]

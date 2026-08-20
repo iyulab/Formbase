@@ -40,8 +40,18 @@ within one type, but at the opposite ratio (18 of 25 present here, versus 7 of 2
 for a different real-world reason — not a lighter reporting regime, but a value that is sometimes not
 finalized or not disclosed before signature.
 
-All five fixtures keep the same small subset of fields: a notice identifier, notice type,
-publication date, buyer name, and (where the source carries it) total contract value with its
+`eu-procurement-multilot-notice-sample.json` + `eu-procurement-multilot-lot-sample.json` — a paired
+sample exercising entity repetition instead of scalar field shape: 7 real 2025 contract notices
+(`cn-standard`) and the 31 real lots they carry between them (2 to 8 lots each), each lot's
+`noticeId` pointing back at its real parent notice. The other five fixtures sample 2016-era notices,
+which predate eForms becoming the mandatory publication format (October 2023) and so never carry the
+structured per-lot fields (`BT-137-Lot`, `BT-27-Lot`) this pair needs — this is the first pair in the
+family to sample 2025 notices instead. Lot value and currency are unmodified from the source; notices
+were filtered to those where the lot-identifier count matched the lot-value count exactly, so no
+value had to be paired with a lot by inference.
+
+All five single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
 **License**: TED notice data is made available for reuse under Commission Decision 2011/833/EU on
