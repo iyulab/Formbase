@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.8.0
+
+### Added
+
+- **A declaration can be removed, and the caller can tell "removed" from "there was nothing".**
+  `InMemoryFieldHintSource.Remove` and `PostgresFieldHintSource.DeleteAsync` answer whether a
+  declaration was there rather than swallowing the fact. Removing a declaration is usually paired
+  with dropping what it built, and those are different situations.
+- **`InvalidQueryException`** — the engine's refusal when a query names a column the declaration
+  does not have. Pure addition; nothing previously threw it.
+- **Projection status reports the last completed run's skip count, not only the count at the moment
+  a run finished.** The response already named which documents a run skipped and how many while the
+  caller who triggered it was still looking; reading status afterward — "did the last run lose
+  anything" — had no way to tell zero skips from a run that silently dropped most of what it saw.
+  The count is host-local: a restart or a different instance answers `null` rather than a stale
+  number, and re-running the projection is what refreshes it.
+
+### Changed
+
+- **A record query that names an undeclared column is refused rather than answered with an empty
+  page.** This applies to a filter and to an ordering key alike. Dropping a filter widens the
+  result and dropping an ordering key leaves rows in an order nobody asked for, and both answered
+  `200` — so a mistyped column name arrived looking like an answer to the caller's question when
+  it was an answer to a different one.
+  **A value that does not fit the column it names still answers no rows**: that column exists and
+  the comparison is meaningful, so it is an ordinary empty result rather than a malformed request.
+  The projection's bookkeeping columns are not declared columns and are refused with the rest;
+  rows have never carried them.
+
+### Fixed
+
+- **A schema proposer's own failure answered the framework's generic 500 instead of a documented
+  problem type.** Every other engine refusal already mapped to a stable `/problems/...` type; a
+  malformed model proposal and an unreachable model endpoint were indistinguishable from the host
+  itself being broken. They now answer `400 /problems/schema-proposal-invalid` and
+  `503 /problems/schema-proposer-unavailable` respectively, documented in the error table and
+  cross-referenced from the endpoint that can raise them.
+
+### Added — the instance, which ships as an image rather than a package
+
+The host is not a packable project, so none of this reaches NuGet. This release is the first to
+publish it as a container image, and the image is how it becomes something to run.
+
+- **An HTTP surface for intake and raw reads**, for putting a declaration in force, for reading
+  back the declaration a form type currently has, for removing one along with the projection it
+  built, and for running a projection and asking what state it is in. Projected records are read
+  back with the request saying which data it is addressed to.
+- **A caller's mistake answers 4xx on every route**, not only on the routes that happened to carry
+  a guard. This now includes a value the surface cannot bind at all — a failure that happens before
+  any endpoint runs, and so was answered by the framework rather than from the documented table. It
+  answers `/problems/invalid-request` with the status the failure carries, so the instruction to
+  branch on `type` keeps working where the caller most needs it.
+- **The error surface no longer depends on the name the instance was started under.** Whether a
+  binding failure reached the instance's own handler was a framework default that differs by
+  environment, which made the documented table hold while developing and not in the configuration
+  the image ships with. It now holds in both.
+- **The instance composes durable stores when the deployment asks for them**, and says what it is:
+  a bare instance reports that it is not durable rather than implying otherwise.
+- **Schema intelligence installs like an extension** rather than being wired in.
+- **A deployable shape** — a container image and a bundle that stands the instance up next to the
+  stores it needs.
+
 ## 0.7.0
 
 ### Documentation

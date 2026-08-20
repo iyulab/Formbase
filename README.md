@@ -48,8 +48,8 @@ A document's life:
 
 ## Install
 
-Current release: **0.7.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.7.0` pairs with MorphDB `0.9.x`**. Pin the MorphDB server image to
+Current release: **0.8.0**. Formbase projects into MorphDB over its client, so the two move
+together — **`Formbase.* 0.8.0` pairs with MorphDB `0.9.x`**. Pin the MorphDB server image to
 that line (`ghcr.io/iyulab/morphdb:0.9.0`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
@@ -107,11 +107,6 @@ fails on the first proposal.
 
 `GET /settings` reports what an instance was composed as — its namespace, whether it is durable, and
 whether intelligence is installed. Credentials are never reported back.
-
-**Since 0.8.0 — the host is not in a released artifact yet.** It is not one of the published
-packages, and no image has been pushed, so the only ways to run it are from a checkout and from the
-bundle below. The packages under [Install](#install) are unaffected: embedding the engine is
-released and works as documented.
 
 ## Quick start
 
@@ -262,12 +257,13 @@ docker compose up -d
 curl http://127.0.0.1:8080/settings
 ```
 
-**It does not start yet, and the reason is the pin rather than the file.** The bundle asks for
-MorphDB `0.10.0`, a version ahead of the pair stated under [Install](#install); until it is
-published, `docker compose up` stops at the pull. Lowering the pin does not help — the start-up
-step creates the project under an id it chooses, and no released MorphDB accepts one, so the
-bundle would stop a step later instead. Run the host from a checkout against a MorphDB you start
-and provision yourself until then.
+**The bundle asks for MorphDB `0.10.0`, a version ahead of the pair stated under
+[Install](#install).** That release exists — its start-up step needs a MorphDB that accepts a
+caller-chosen project id, which only `0.10.0` does — but the pair under Install stays `0.9.x`
+because nothing here yet exercises what `0.10.0` adds beyond that. Lowering the pin is not an
+option: a MorphDB on the paired line refuses the chosen id, and the bundle would stop at that step
+instead of at the pull. Run the host from a checkout against a MorphDB you start and provision
+yourself if you need the pair rather than the bundle's floor.
 
 Two things about the shape are worth knowing, because both are decisions rather than defaults.
 

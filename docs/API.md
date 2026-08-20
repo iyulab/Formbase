@@ -1,12 +1,7 @@
 # HTTP API
 
-> **Since 0.8.0 — nothing in this document is in a released artifact yet.** `Formbase.Host` is not
-> one of the published packages and no image has been pushed, so this surface cannot be reached by
-> installing a release. Run it from a checkout instead: `dotnet run --project src/Formbase.Host`,
-> or the bundle in `docker-compose.yml`.
->
-> The released version is **0.7.0**, and the documents that describe it are the tree at its tag —
-> open a file at `v0.7.0` to read the reference for what you can install today.
+> The released version is **0.8.0**, and the documents that describe it are the tree at its tag —
+> open a file at `v0.8.0` to read the reference for what you can install today.
 >
 > A `Since x.y.z` marker names a **Formbase** version. Statements about the MorphDB a deployment
 > runs against are written in prose, because that version moves on its own line.
