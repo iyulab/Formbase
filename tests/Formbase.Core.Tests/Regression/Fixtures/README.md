@@ -64,7 +64,15 @@ follow, but a PIN used as a call for competition is itself the invitation — su
 it directly. That procedural difference shows up in `totalValue` presence too: 12 of 25 present, 13
 absent, a near-even split unlike `pin-only`'s uniform absence or any sibling fixture's skewed ratio.
 
-All seven single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-pin-cfc-social-sample.json` — 25 real light-regime prior information notices used as
+a call for competition (`pin-cfc-social` notice type), same source and API. The first fixture to
+combine two procedural traits the sibling fixtures only ever exercise separately — the lighter
+disclosure regime `cn-social` exercises, and the direct-response procedure `pin-cfc-standard`
+exercises. Its own real ratio (11 present, 14 absent) is close to but not identical to
+`pin-cfc-standard`'s 12/13 — the combination was read from the corpus, not predicted by composing
+the two individual traits' fixtures.
+
+All eight single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
