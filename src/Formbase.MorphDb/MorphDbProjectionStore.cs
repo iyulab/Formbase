@@ -43,11 +43,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         // Only the generic column shape crosses into MorphDB — projected tables are generic by
         // design (FormType never reaches MorphDB). The declaration axes stay formbase-internal:
         // SourceKey is an extraction concern (the projected column is just Name), and Binding is
-        // declaration semantics MorphDB has no notion of. Declared relations are delivered to this
-        // port but NOT materialized as MorphDB virtual FKs at stage-1: the MorphDB.Client 0.9.0
-        // exposes no relations API to wrap, and whether a rebuildable projection should carry
-        // enforced FKs is an open design question. The FK column data still projects as a normal
-        // column, so the projection stays complete — only the optional relation link is absent.
+        // declaration semantics MorphDB has no notion of.
         var request = new CreateTableRequest
         {
             Name = schema.TableName,
@@ -62,6 +58,73 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         };
 
         await _client.Schema.CreateTableAsync(request, cancellationToken).ConfigureAwait(false);
+
+        if (schema.Relations is { Count: > 0 })
+        {
+            foreach (var relation in schema.Relations)
+            {
+                await MaterializeRelationAsync(schema.TableName, relation, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Materializes one declared relation as a MorphDB virtual FK, always with
+    /// <c>EnforceOnWrite: false</c> — the drop-and-rebuild orchestration in the core projector gives
+    /// no ordering guarantee between a form type's table and the tables its relations name, so a
+    /// child can (and, on the first projection of either side, will) be written before its parent
+    /// has been reloaded. Enforcing would reject data that is consistent at its source; this project
+    /// analysis settled on non-enforcing metadata for exactly that reason
+    /// (<c>claudedocs/Formbase/plans/2026-07-24-projection-fk-enforcement-analysis.md</c>). No
+    /// physical constraint follows either, which is what keeps a later drop of either table free of
+    /// MorphDB's <c>TABLE_HAS_DEPENDENTS</c> refusal.
+    /// <para>
+    /// Only <see cref="RelationKind.Child"/> is materialized. <see cref="RelationKind.Reference"/>'s
+    /// key field names a column on *this* table, but nothing in the declaration vocabulary states
+    /// which column on the target it is matched against — <see cref="RelationKind.Child"/> has a
+    /// real answer (the same field name declared on both sides, the only reading consistent with how
+    /// <see cref="Formbase.Core.Projection.HintSchemaProposer"/> resolves <c>FieldBinding.Reference</c>
+    /// targets, and the one actual fixture — <c>EuMultiLotProcurementNoticeRegressionTests</c> —
+    /// exercises) but Reference does not, so a source-side FK column still projects as a normal
+    /// column and the relation stays undeclared to MorphDB rather than materialized on a guess.
+    /// </para>
+    /// <para>
+    /// Whichever side of the relation is not the table just created may not exist yet — the first
+    /// projection of a parent whose relation names a not-yet-projected child is expected, not an
+    /// error. MorphDB answers that case as <c>400 TABLE_NOT_FOUND</c> (a validation response, not a
+    /// 404 — the requested resource is the relation, not the table), which this catches by error
+    /// code and skips: the relation reappears on this table's next rebuild, once the other side
+    /// exists. Anything else — a real validation failure, a naming collision — propagates, the same
+    /// as <see cref="Formbase.Core.Projection.ProjectionResult.UnresolvedReferences"/> reports an
+    /// unresolved <c>FieldBinding.Reference</c> by name rather than swallowing it.
+    /// </para>
+    /// </summary>
+    private async Task MaterializeRelationAsync(string tableName, RelationDef relation, CancellationToken cancellationToken)
+    {
+        if (relation.Kind != RelationKind.Child)
+        {
+            return;
+        }
+
+        var request = new CreateRelationRequest
+        {
+            Name = relation.Name,
+            SourceTable = relation.TargetTable,
+            SourceColumn = relation.KeyColumn,
+            TargetTable = tableName,
+            TargetColumn = relation.KeyColumn,
+            EnforceOnWrite = false,
+        };
+
+        try
+        {
+            await _client.Schema.CreateRelationAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MorphDBValidationException ex) when (ex.ErrorCode == "TABLE_NOT_FOUND")
+        {
+            // The child table this relation names has not been projected yet — its own projection
+            // will materialize the same relation once this (parent) table exists, which it now does.
+        }
     }
 
     public async Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)

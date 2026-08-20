@@ -349,7 +349,8 @@ Implemented:
 Known gaps (audited 2026-07-20 against Formology):
 
 - **Per-row absent-vs-null** — the aggregate counts above do not yet mark *which* row predates a grown schema; the declaration version is now recorded, so the per-row distinction is the remaining step.
-- **Reference resolution is declared, not executed** — a `FieldBinding.Reference` (true-now) column carries its declared meaning but the engine does not yet resolve the referenced value, so it projects **empty** and the column is named in `ProjectionResult.UnresolvedReferences`; it is never filled with the document's own copy, which would be a wrong value wearing a plausible face. Separately, the MorphDB adapter does not yet materialize declared relations as virtual FKs (its client exposes no relations API — the FK column data still projects normally).
+- **Reference resolution is declared, not executed** — a `FieldBinding.Reference` (true-now) column carries its declared meaning but the engine does not yet resolve the referenced value, so it projects **empty** and the column is named in `ProjectionResult.UnresolvedReferences`; it is never filled with the document's own copy, which would be a wrong value wearing a plausible face.
+- **`RelationHint.Kind.Reference` is not materialized as a virtual FK** — the MorphDB adapter now materializes `RelationHint.Kind.Child` relations (a redeclared parent creates one against MorphDB once the child table it names exists, non-enforcing so drop-and-rebuild orders freely), but `Reference`'s declaration axis names only the FK column on the declaring side, not which column it matches on the target — `Child`'s answer (the same field name on both sides) does not carry over. The FK column data projects normally either way; only the optional relation link is what stays undeclared to MorphDB for `Reference`.
 
 Planned (later stages, each its own effort):
 
