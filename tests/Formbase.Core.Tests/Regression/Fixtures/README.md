@@ -187,6 +187,23 @@ corrigendum is modelled in eForms as an amendment to an existing notice rather t
 Any further expansion of this family past its current eighteen fixtures needs a different catalog than
 the one this correction relied on — the SDK's 51/21 no longer has anything unexplored in it.
 
+**No broader catalog exists (2026-08-21)**: the open question left by the correction above — whether
+the TED Search API's `notice-type` field draws from some published superset that would explain `corr`
+— was checked directly rather than left open. The eForms SDK's own published `notice-type` codelist
+(the human-readable table the SDK's `notice-types.json` collapses to) is the same 21 codes, `corr`
+included nowhere. The Search API's own documentation publishes no field-value catalog and exposes no
+machine-readable schema for it (no OpenAPI/Swagger document is served). The live API does validate the
+field server-side — an unrecognized value returns a structured "not supported" error naming the field
+— but that validation is not backed by any published enumeration. The one candidate source that could
+have supplied one, a legacy Standard-Forms-to-eForms correspondence table TED itself publishes, is
+explicitly captioned "indicative only, not a technical or reusable mapping" and does not list `corr`
+either — corrigenda were never one of the numbered legacy forms. **Conclusion: no official catalog of
+the Search API's full `notice-type` vocabulary exists publicly** — `corr` is confirmed to be a
+genuinely undocumented, API-internal addition, not a gap in this project's research. Further expansion
+of this fixture family by notice-type has no remaining discovery method and is closed; any additional
+value beyond `corr` would have to come from a source outside official TED/eForms documentation
+entirely, which this project does not pursue speculatively.
+
 **Evaluated and rejected — `subco`** (`subco` notice type, subcontract notice, defence directive only,
 documentType `CN`): probed alongside the three adopted types above and found to have only 13 real
 notices ever published (no date floor), well short of this family's fixed 25-record sample — the same
