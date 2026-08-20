@@ -50,9 +50,24 @@ family to sample 2025 notices instead. Lot value and currency are unmodified fro
 were filtered to those where the lot-identifier count matched the lot-value count exactly, so no
 value had to be paired with a lot by inference.
 
-All five single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-can-social-sample.json` — 25 real light-regime social and specific services award
+notices (`can-social` notice type), same source and API. The award-stage sibling of `cn-social`, and
+the first fixture where `totalValue` is present in every single sampled notice — none of the five
+prior fixtures ever exercises a full 25-of-25 presence. An award notice reports a concluded amount,
+and the light regime does not excuse a buyer from disclosing what they actually paid, unlike the
+lighter obligations that apply before any award exists.
+
+All six single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
+
+**Attribute pairing (P1's "속성 결합" axis)**: every fixture above already exercises this — value
+and currency are declared as sibling fields on the same row, and `eu-procurement-cn-standard-sample.json`
+alone carries several distinct currencies (`EUR`, `PLN`, and others) correctly paired per row across
+its 25 notices. A dedicated search for the sharper case — different currencies for different lots
+*within one notice* — turned up none across roughly 400 real 2025 `cn-standard` notices; the real
+pattern is one buyer, one currency, for every lot in a given notice. No fixture invents that case,
+since the source never presented it.
 
 **License**: TED notice data is made available for reuse under Commission Decision 2011/833/EU on
 the reuse of Commission documents. This fixture is a small derived sample kept for offline,
