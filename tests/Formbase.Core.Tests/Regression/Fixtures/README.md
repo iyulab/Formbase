@@ -72,7 +72,18 @@ exercises. Its own real ratio (11 present, 14 absent) is close to but not identi
 `pin-cfc-standard`'s 12/13 — the combination was read from the corpus, not predicted by composing
 the two individual traits' fixtures.
 
-All eight single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-can-modif-sample.json` — 25 real contract modification notices (`can-modif` notice
+type), same source and API. The first fixture in the family to represent a post-award act rather than
+a pre-award announcement or a fresh award: every sibling fixture publishes a notice about a contract
+that does not yet exist or has just been concluded, while this one amends a contract already awarded
+— a real corpus check found it the single most common notice type published in mid-2025 after
+`cn-standard` and `can-standard` themselves, ahead of every other type this family samples. Real ratio
+18 of 25 present, 7 absent — the same ratio `eu-procurement-veat-sample.json` carries, but for a
+different reason: a modification that leaves the contract's value unchanged has nothing to report
+there, not an optional disclosure. `buyerName` is present and non-null in all 25, unlike several
+sibling fixtures.
+
+All nine single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
