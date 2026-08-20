@@ -83,7 +83,18 @@ different reason: a modification that leaves the contract's value unchanged has 
 there, not an optional disclosure. `buyerName` is present and non-null in all 25, unlike several
 sibling fixtures.
 
-All nine single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-qu-sy-sample.json` — 25 real qualification system notices (`qu-sy` notice type),
+same source and API. The first fixture published under the utilities directive (2014/25/EU) rather
+than the classic directive (2014/24/EU) every prior fixture carries — confirmed against the raw
+source's `legal-basis` field (`32014L0025`/`32004L0017` on every sampled notice), not inferred from
+the notice-type code. A qualification system is not a notice about a specific contract at all: a
+utilities buyer maintains an ongoing list of pre-qualified suppliers for future contracts, so none of
+the 25 sampled notices carry `totalValue` — a categorically different reason for absence than
+`pin-only` (a contract not yet defined) or `can-modif` (a modification that happens not to change the
+value): here the concept the field names does not apply. `buyerName` is present and non-null in all
+25.
+
+All ten single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
