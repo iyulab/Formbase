@@ -94,7 +94,15 @@ the 25 sampled notices carry `totalValue` — a categorically different reason f
 value): here the concept the field names does not apply. `buyerName` is present and non-null in all
 25.
 
-All ten single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-pmc-sample.json` — 25 real prior market consultation notices (`pmc` notice type),
+same source and API. The first fixture that is not a notice about a contract, an award, or a
+modification at all: it announces an informal consultation with the market before any procurement
+procedure has been launched (Directive 2014/24/EU Article 40). Every other fixture, even `pin-only`'s
+advance intelligence about an undefined contract, is still a step inside a procedure that will
+produce one — this one precedes the procedure entirely. Real ratio: 22 of 25 absent, 3 present, a
+genuine minority rather than a uniform absence.
+
+All eleven single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 

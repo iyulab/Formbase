@@ -1,0 +1,164 @@
+[
+  {
+    "noticeId": "187629-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-24T00:00:00+01:00",
+    "buyerName": "presidenza del consiglio dei ministri"
+  },
+  {
+    "noticeId": "188522-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-24T00:00:00+01:00",
+    "buyerName": "Regione Liguria SUAR"
+  },
+  {
+    "noticeId": "200372-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-28T00:00:00+01:00",
+    "buyerName": "Stichting Amsterdam UMC"
+  },
+  {
+    "noticeId": "201326-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-28T00:00:00+01:00",
+    "buyerName": "Politie"
+  },
+  {
+    "noticeId": "201656-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-28T00:00:00+01:00",
+    "buyerName": "Azienda Sanitaria Locale Salerno",
+    "totalValue": 120000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "201882-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-28T00:00:00+01:00",
+    "buyerName": "Provincie Overijssel"
+  },
+  {
+    "noticeId": "204835-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-31T00:00:00+02:00",
+    "buyerName": "N.V. Nederlandse Gasunie"
+  },
+  {
+    "noticeId": "205355-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-31T00:00:00+02:00",
+    "buyerName": "A.S.S.T. DI BERGAMO OVEST",
+    "totalValue": 355000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "206313-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-03-31T00:00:00+02:00",
+    "buyerName": "N.V. Nederlandse Gasunie"
+  },
+  {
+    "noticeId": "207703-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-01T00:00:00+02:00",
+    "buyerName": "Inkoop Uitvoeringscentrum Dienst Justitiële Inrichtingen (IUC DJI)"
+  },
+  {
+    "noticeId": "209387-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-01T00:00:00+02:00",
+    "buyerName": "Provincie Noord-Brabant"
+  },
+  {
+    "noticeId": "209807-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-02T00:00:00+02:00",
+    "buyerName": "VISTA college"
+  },
+  {
+    "noticeId": "210184-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-02T00:00:00+02:00",
+    "buyerName": "Wojewódzki Szpital Specjalistyczny w Olsztynie"
+  },
+  {
+    "noticeId": "212152-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-02T00:00:00+02:00",
+    "buyerName": "Rijkswaterstaat Programma's, Projecten en Onderhoud"
+  },
+  {
+    "noticeId": "214764-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-03T00:00:00+02:00",
+    "buyerName": "Rijkswaterstaat Programma's, Projecten en Onderhoud"
+  },
+  {
+    "noticeId": "216803-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-03T00:00:00+02:00",
+    "buyerName": "ProRail B.V."
+  },
+  {
+    "noticeId": "217197-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-04T00:00:00+02:00",
+    "buyerName": "Azienda Provinciale per i Servizi Sanitari di Trento"
+  },
+  {
+    "noticeId": "217612-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-04T00:00:00+02:00",
+    "buyerName": "ProRail B.V."
+  },
+  {
+    "noticeId": "217690-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-04T00:00:00+02:00",
+    "buyerName": "Erasmus MC"
+  },
+  {
+    "noticeId": "221062-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-07T00:00:00+02:00",
+    "buyerName": "Erasmus MC"
+  },
+  {
+    "noticeId": "221991-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-07T00:00:00+02:00",
+    "buyerName": "Ministerie van Economische Zaken, Rijksdienst voor Ondernemend Nederland (RVO)"
+  },
+  {
+    "noticeId": "222050-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-07T00:00:00+02:00",
+    "buyerName": "Ministerie van Infrastructuur en Waterstaat"
+  },
+  {
+    "noticeId": "223498-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-07T00:00:00+02:00",
+    "buyerName": "Azienda Ospedaliero Universitaria di Sassari",
+    "totalValue": 580000,
+    "totalValueCurrency": [
+      "EUR"
+    ]
+  },
+  {
+    "noticeId": "223504-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-07T00:00:00+02:00",
+    "buyerName": "N.V. Nederlandse Gasunie"
+  },
+  {
+    "noticeId": "226001-2025",
+    "noticeType": "pmc",
+    "publicationDate": "2025-04-08T00:00:00+02:00",
+    "buyerName": "ProRail B.V."
+  }
+]
