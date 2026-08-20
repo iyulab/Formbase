@@ -156,6 +156,28 @@ jobs:
       - name: Test (durable live contract)
         run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeLiveTests=true --filter "FullyQualifiedName~Live.Durable"
 
+  compose-durability:
+    name: Compose Durability
+    runs-on: ubuntu-latest
+    # Same gating as the other live jobs: this stands up the deployable shape, not the code, so a
+    # build that already failed should not also spend the minutes docker-compose needs to pull and
+    # build three images.
+    needs: build
+    # Pulls the published MorphDB and Postgres images and builds the Formbase one — the widest
+    # single-run bound in this file after durable-live, for the same reason: three containers.
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Stands docker-compose.yml up, writes a document, restarts the host, and reads the document
+      # back — the check a green test suite cannot make, because the suite runs in-process and never
+      # loses what a restart would. The script needs nothing beyond what the runner already has: a
+      # Docker daemon and the images docker-compose.yml names.
+      - name: Compose durability check
+        run: scripts/compose-durability-check.sh
+
   quality:
     name: Format & Vulnerability Scan
     runs-on: ubuntu-latest

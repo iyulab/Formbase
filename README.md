@@ -76,6 +76,14 @@ the packages above are unchanged by its existence.
 dotnet run --project src/Formbase.Host
 ```
 
+A published image is the same artifact, built from the same Dockerfile the release workflow verifies
+before it pushes — pull it instead of building from source:
+
+```bash
+docker pull ghcr.io/iyulab/formbase:0.8.0
+docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.8.0
+```
+
 By default it composes the in-process stores, which needs nothing else running and loses everything
 on restart. A deployment selects the durable profile instead:
 
@@ -330,7 +338,7 @@ Implemented:
 - **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
 - Record query with not-projected / stale / unverified / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
-- **HTTP surface** (`Formbase.Host`) — intake with a first-class idempotency key, raw reads, declaration reads, projection runs and state, and record queries, described by a generated OpenAPI document and held to [docs/API.md](docs/API.md) by a parity gate. Writing a declaration is not on the surface yet, and neither is a container image.
+- **HTTP surface** (`Formbase.Host`) — intake with a first-class idempotency key, raw reads, declaration reads, projection runs and state, and record queries, described by a generated OpenAPI document and held to [docs/API.md](docs/API.md) by a parity gate. Writing a declaration is not on the surface yet. A container image is — published to `ghcr.io/iyulab/formbase` from the same Dockerfile `docker-compose.yml` builds (see [Install](#install))
 - DI composition and contract test suites for the store ports
 - **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction awaits the declaration-version work below)
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
