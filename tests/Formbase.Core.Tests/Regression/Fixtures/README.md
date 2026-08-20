@@ -126,7 +126,16 @@ rule, which is why this population's real ratio swings sharply between sampling 
 2025 sample showed 23 of 23 present; a broader mid-2024-onward sample, the one actually committed,
 shows 10 of 25) — correcting a buyer's name and correcting a contract value are unrelated events.
 
-All fourteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
+`eu-procurement-pin-tran-sample.json` — 25 real prior information notices for public transport
+services (`pin-tran` notice type), same source and API. The first fixture published under a
+Regulation rather than either procurement Directive every prior fixture carries — confirmed against
+the raw source's `legal-basis` field (`32007R1370`, Regulation (EC) No 1370/2007 on public passenger
+transport services by rail and road, on every sampled notice), sitting entirely outside the classic/
+utilities directive family `qu-sy` already distinguished from. A third all-absent population in the
+family (alongside `pin-only` and `qu-sy`), each for a different reason: here, a transport service
+concession is compensated and structured differently from a priced contract award.
+
+All fifteen single-notice fixtures keep the same small subset of fields: a notice identifier, notice
 type, publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
