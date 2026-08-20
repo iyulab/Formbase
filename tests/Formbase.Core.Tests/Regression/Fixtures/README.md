@@ -31,7 +31,16 @@ answers the field for some notices and never asks the question for others — th
 the four fixtures where the absent and present cases coexist in one homogeneous notice type instead
 of one case dominating the whole sample.
 
-All four fixtures keep the same small subset of fields: a notice identifier, notice type,
+`eu-procurement-veat-sample.json` — 25 real voluntary ex ante transparency notices (`veat` notice
+type), same source and API. A fifth real population, and structurally unlike the other four: this
+notice type does not announce or award a competitive tender — it is published when a buyer intends
+to award a contract without prior competition (a direct award) and voluntarily opens a waiting
+period before signing. It shares the `cn-social` fixture's trait of mixed `totalValue` presence
+within one type, but at the opposite ratio (18 of 25 present here, versus 7 of 25 present there) and
+for a different real-world reason — not a lighter reporting regime, but a value that is sometimes not
+finalized or not disclosed before signature.
+
+All five fixtures keep the same small subset of fields: a notice identifier, notice type,
 publication date, buyer name, and (where the source carries it) total contract value with its
 currency. Field values are unmodified from the source.
 
