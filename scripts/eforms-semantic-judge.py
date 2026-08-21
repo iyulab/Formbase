@@ -113,7 +113,7 @@ def jaccard(a, b):
     return len(a & b) / len(a | b) if a and b else 0.0
 
 
-def build_positive_pairs(by_group, group_be, min_fields, lo, hi):
+def build_positive_pairs(by_group, group_be, min_fields, lo, hi, max_fields=None):
     pairs = []
     for gid, per_form in by_group.items():
         variants = defaultdict(list)
@@ -125,6 +125,14 @@ def build_positive_pairs(by_group, group_be, min_fields, lo, hi):
                 a, b = set(distinct[i]), set(distinct[j])
                 if len(a) < min_fields or len(b) < min_fields:
                     continue
+                # A handful of eForms groups are aggregate/rollup sections with 200+ fields (e.g.
+                # GR-Result, which literally unions several other business entities' fields). That
+                # is not the case automation.md Section 4 describes ("same section, different
+                # optional subset") — it is a structural outlier that also blows a 27B model's
+                # response time past any practical timeout (observed: 360s+ with one retry). Cap
+                # sample size to the realistic range instead of fighting the timeout upward.
+                if max_fields is not None and (len(a) > max_fields or len(b) > max_fields):
+                    continue
                 score = jaccard(a, b)
                 if lo <= score <= hi:
                     pairs.append({"kind": "positive", "groupId": gid, "businessEntityId": group_be.get(gid),
@@ -132,9 +140,11 @@ def build_positive_pairs(by_group, group_be, min_fields, lo, hi):
     return pairs
 
 
-def build_negative_pairs(by_group, group_be, min_fields, threshold):
+def build_negative_pairs(by_group, group_be, min_fields, threshold, max_fields=None):
     union_fields = {gid: set().union(*per_form.values()) for gid, per_form in by_group.items()}
-    gids = sorted(g for g in union_fields if len(union_fields[g]) >= min_fields)
+    gids = sorted(g for g in union_fields
+                  if len(union_fields[g]) >= min_fields
+                  and (max_fields is None or len(union_fields[g]) <= max_fields))
     pairs = []
     for i in range(len(gids)):
         for j in range(i + 1, len(gids)):
@@ -209,6 +219,11 @@ def main():
     ap.add_argument("--n-negative", type=int, default=10)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--min-fields", type=int, default=4)
+    ap.add_argument("--max-fields", type=int, default=60,
+                     help="Skip groups larger than this (default: 60 — excludes eForms' handful "
+                          "of 200+-field aggregate/rollup sections, which are not the kind of "
+                          "section automation.md Section 4 describes and blow past any practical "
+                          "timeout; set 0 to disable the cap)")
     ap.add_argument("--positive-jaccard-range", type=float, nargs=2, default=[0.3, 0.9])
     ap.add_argument("--negative-threshold", type=float, default=0.5)
     ap.add_argument("--timeout", type=int, default=180)
@@ -220,8 +235,9 @@ def main():
 
     field_names, by_group, group_be = load_corpus(args.corpus_dir)
     lo, hi = args.positive_jaccard_range
-    positives = build_positive_pairs(by_group, group_be, args.min_fields, lo, hi)
-    negatives = build_negative_pairs(by_group, group_be, args.min_fields, args.negative_threshold)
+    max_fields = args.max_fields if args.max_fields > 0 else None
+    positives = build_positive_pairs(by_group, group_be, args.min_fields, lo, hi, max_fields)
+    negatives = build_negative_pairs(by_group, group_be, args.min_fields, args.negative_threshold, max_fields)
     print(f"positive pool: {len(positives)}   negative pool: {len(negatives)}", flush=True)
 
     rng = random.Random(args.seed)
