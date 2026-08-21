@@ -4,9 +4,15 @@ is currently possible" -- Section 6 is explicitly marked unverified there ("아�
 없습니다"). This script runs the smallest real version of that computation: sample real result-
 stage (`can-standard`) TED notices, follow the TED Search API's own `procedure-identifier` field
 (a UUID TED itself assigns and reuses across every notice belonging to the same real procurement
-procedure) back to see whether a competition-stage (`cn-standard`) notice -- the precondition the
-eForms SDK's `formType` flow (planning -> competition -> result -> ...) declares -- actually
-exists for it.
+procedure) back to see whether a competition-stage notice -- the precondition the eForms SDK's
+`formType` flow (planning -> competition -> result -> ...) declares -- actually exists for it.
+
+cycle-167's first pass checked only `cn-standard` and found 6/25 (24%) "missing". One of those 6
+turned out to carry a `veat` notice instead (a direct-award route, eForms `formType: dir-awa-pre`)
+-- not a real precondition gap, just a too-narrow check. `--precondition-types` now defaults to
+every notice-type the eForms SDK's own catalog declares under `formType: competition` OR
+`formType: dir-awa-pre` for exactly this reason: the true precondition for a `formType: result`
+notice is "some valid predecessor exists", not "one specific notice-type exists".
 
 This is a manual, occasional research tool for P3-h -- never run by CI or the regression suite,
 same posture as fetch-ted-corpus-sample.py / eforms-isomorphism.py / eforms-semantic-judge.py.
@@ -49,11 +55,19 @@ def query(q, fields, limit=25, page=1, retries=2):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    # Every notice-type the eForms SDK's notice-types.json declares under formType "competition"
+    # or "dir-awa-pre" -- any one of these is a valid predecessor for a formType "result" notice
+    # (a direct award via `veat` is a legitimate alternative route, not a gap).
+    default_preconditions = [
+        "cn-desg", "cn-social", "cn-standard", "pin-cfc-social", "pin-cfc-standard", "qu-sy",
+        "subco", "veat",
+    ]
     ap.add_argument("--result-type", default="can-standard",
                      help="Result-stage notice type to sample (default: can-standard)")
-    ap.add_argument("--precondition-type", default="cn-standard",
-                     help="Competition-stage notice type the flow declares as a precondition "
-                          "(default: cn-standard)")
+    ap.add_argument("--precondition-types", nargs="+", default=default_preconditions,
+                     help="Notice types that each count as satisfying the precondition -- ANY one "
+                          "present in the chain is enough (default: every eForms SDK notice-type "
+                          "declared as formType competition or dir-awa-pre)")
     ap.add_argument("--limit", type=int, default=20)
     ap.add_argument("--min-date", default="20250101")
     ap.add_argument("--out", default="chain-result.json")
@@ -83,7 +97,8 @@ def main():
         chain_notices = chain.get("notices", [])
         types_in_chain = [c.get("notice-type") for c in chain_notices]
 
-        has_precondition = args.precondition_type in types_in_chain
+        satisfied_by = [t for t in types_in_chain if t in args.precondition_types]
+        has_precondition = len(satisfied_by) > 0
         total = chain.get("totalNoticeCount", len(chain_notices))
 
         if total > 20:
@@ -103,6 +118,7 @@ def main():
             "procedureId": pid,
             "chainSize": total,
             "chainTypes": types_in_chain,
+            "satisfiedBy": satisfied_by,
             "classification": classification,
         })
 
@@ -112,7 +128,7 @@ def main():
 
     result = {
         "result_type": args.result_type,
-        "precondition_type": args.precondition_type,
+        "precondition_types": args.precondition_types,
         "n_sampled": len(notices),
         "classification_counts": counts,
         "procedures": procedures,
