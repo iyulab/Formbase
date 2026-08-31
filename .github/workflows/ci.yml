@@ -206,4 +206,9 @@ jobs:
         run: dotnet format Formbase.slnx --verify-no-changes --verbosity diagnostic
 
       - name: Check for vulnerable packages
-        run: dotnet list Formbase.slnx package --vulnerable --include-transitive
+        run: |
+          dotnet list Formbase.slnx package --vulnerable --include-transitive | tee vulnerable-packages.txt
+          if grep -q "has the following vulnerable packages" vulnerable-packages.txt; then
+            echo "::error::Vulnerable packages detected -- see the scan output above."
+            exit 1
+          fi
