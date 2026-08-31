@@ -5,9 +5,9 @@
 
 **A raw-first document engine that lets you store data before you design its schema — then projects a queryable structure once you declare one.**
 
-Formbase sits on top of [MorphDB](https://github.com/iyulab/MorphDB) (runtime-flexible relational storage) and adds the layer MorphDB deliberately leaves out: turning a stream of documents into a typed, queryable table on your terms. It is the engine realization of [Formology](https://github.com/iyulab/formology)'s three layers — humans write documents, the system derives data, and (in a later stage) intelligence grows an ontology.
+Formbase sits on top of [MorphDB](https://github.com/iyulab/MorphDB) (runtime-flexible relational storage) and adds the layer MorphDB deliberately leaves out: turning a stream of documents into a typed, queryable table on your terms. It is the engine realization of [Formology](https://github.com/iyulab/formology)'s system layer — humans write documents, Formbase derives typed data from them. Cross-form entity and relationship inference (Formology's intelligence layer) is [Eyu](https://github.com/iyulab/Eyu)'s job, not Formbase's — Formbase's own `ISchemaProposer` port only ever infers a single FormType's flat schema.
 
-> Status: **core engine, in active development (0.x).** The raw-first intake, hint-driven projection, and MorphDB adapter are implemented and tested. The LLM-driven ontology layer is a deliberate future stage, wired for via a port but not yet built. See [Roadmap](#roadmap).
+> Status: **core engine, in active development (0.x).** The raw-first intake, hint-driven projection, MorphDB adapter, and a hint-driven + LLM-backed schema proposer (`Formbase.SchemaIntelligence`, composed declared-first) are implemented and tested — all scoped to a single FormType. Cross-FormType ontology inference is out of scope here; see [Eyu](https://github.com/iyulab/Eyu). See [Roadmap](#roadmap).
 
 ## The idea
 
