@@ -206,6 +206,6 @@ jobs:
         run: dotnet format Formbase.slnx --verify-no-changes --verbosity diagnostic
 
       - name: Check for vulnerable packages
-        uses: iyulab/dotnet-ci-actions/vulnerability-scan@main
+        uses: iyulab/dotnet-ci-actions/vulnerability-scan@00faf7ff62b88e11fbf88edfedcf73bdc5f2eebe # main, 2026-08-31
         with:
           project: Formbase.slnx
