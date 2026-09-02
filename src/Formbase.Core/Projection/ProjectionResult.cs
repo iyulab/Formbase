@@ -43,4 +43,35 @@ public sealed record ProjectionResult(
         IReadOnlyList<string> unresolvedReferences,
         Watermark watermark) =>
         new(Projected: true, inserted, skipped, absentFieldCounts, unresolvedReferences, watermark);
+
+    /// <summary>
+    /// Weighted Form Coverage Index for this run (Liolios et al. 2012 Metadata Coverage Index,
+    /// weighted extension): wFCI = 1 - (Σᵢ wᵢ·absentᵢ) / (Inserted · Σᵢ wᵢ), row-averaged over every
+    /// row this run inserted. <paramref name="declaredFields"/> must list every declared field to
+    /// score, including ones with no entry in <see cref="AbsentFieldCounts"/> — a field absent from
+    /// that dictionary was never absent from a row, not unscored, and still belongs in the total.
+    /// A field with no entry in <paramref name="fieldWeights"/> gets weight 1; passing no weights at
+    /// all reduces this exactly to the plain (unweighted) coverage ratio. Field-importance weights are
+    /// a caller concern (e.g. derived from ablation) — this type only aggregates what it already has.
+    /// </summary>
+    public double WeightedFormCoverageIndex(
+        IReadOnlyCollection<string> declaredFields,
+        IReadOnlyDictionary<string, double>? fieldWeights = null)
+    {
+        if (Inserted == 0)
+        {
+            return double.NaN;
+        }
+
+        var weightedAbsent = 0.0;
+        var totalWeight = 0.0;
+        foreach (var field in declaredFields)
+        {
+            var weight = fieldWeights?.GetValueOrDefault(field, 1.0) ?? 1.0;
+            totalWeight += weight;
+            weightedAbsent += weight * AbsentFieldCounts.GetValueOrDefault(field, 0);
+        }
+
+        return totalWeight == 0 ? double.NaN : 1.0 - (weightedAbsent / (Inserted * totalWeight));
+    }
 }

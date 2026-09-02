@@ -157,4 +157,46 @@ public class ProjectionResultTests
         result.AbsentFieldCounts.Should().Equal(absences);
         result.ProjectedWatermark.Should().Be(new Watermark(9));
     }
+
+    [Fact]
+    public void Uniform_weights_reduce_wFCI_to_the_plain_coverage_ratio()
+    {
+        // 2 declared fields, 4 rows landed, "qty" absent from 1 of them, "lot" never absent
+        // (and so carries no entry in the sparse dict at all).
+        var absences = new Dictionary<string, int> { ["qty"] = 1 };
+        var result = ProjectionResult.Completed(inserted: 4, skipped: [], absentFieldCounts: absences, unresolvedReferences: [], watermark: new Watermark(4));
+
+        // MCI = filled / total = (4 + 3) / (4 * 2) = 7/8
+        result.WeightedFormCoverageIndex(declaredFields: ["lot", "qty"]).Should().BeApproximately(0.875, 1e-9);
+    }
+
+    [Fact]
+    public void A_field_absent_from_the_dictionary_counts_as_fully_present()
+    {
+        // "lot" has no entry in AbsentFieldCounts at all -- must still count toward the denominator
+        // as a declared field, fully present, not be silently dropped from the index.
+        var result = ProjectionResult.Completed(inserted: 4, skipped: [], absentFieldCounts: new Dictionary<string, int>(), unresolvedReferences: [], watermark: new Watermark(4));
+
+        result.WeightedFormCoverageIndex(declaredFields: ["lot"]).Should().Be(1.0);
+    }
+
+    [Fact]
+    public void Per_field_weights_change_the_index()
+    {
+        var absences = new Dictionary<string, int> { ["qty"] = 1 };
+        var result = ProjectionResult.Completed(inserted: 4, skipped: [], absentFieldCounts: absences, unresolvedReferences: [], watermark: new Watermark(4));
+
+        // wFCI = (w_lot*4 + w_qty*3) / (Inserted * (w_lot+w_qty)) = (1*4 + 3*3) / (4*4) = 13/16
+        var weights = new Dictionary<string, double> { ["qty"] = 3.0 };
+        result.WeightedFormCoverageIndex(declaredFields: ["lot", "qty"], fieldWeights: weights)
+            .Should().BeApproximately(0.8125, 1e-9);
+    }
+
+    [Fact]
+    public void No_rows_landed_yields_an_undefined_index()
+    {
+        var result = ProjectionResult.Completed(inserted: 0, skipped: [], absentFieldCounts: new Dictionary<string, int>(), unresolvedReferences: [], watermark: new Watermark(0));
+
+        result.WeightedFormCoverageIndex(declaredFields: ["lot"]).Should().Be(double.NaN);
+    }
 }
