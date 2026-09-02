@@ -186,6 +186,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Catches the class of failure the Compose Durability job hit (a tracked script committed
+      # without +x fails at "Permission denied", exit 126, only when a workflow tries to run it
+      # directly) before it reaches that point -- checks git's tracked mode, not the filesystem
+      # bit, since a checkout on a filesystem without POSIX permissions (e.g. this repo's own dev
+      # workstations) would otherwise report every script as non-executable regardless of what's
+      # actually committed.
+      - name: Verify tracked shell scripts are executable
+        run: |
+          non_exec=$(git ls-files -s -- '*.sh' | awk '$1 != "100755" {print $4}')
+          if [ -n "$non_exec" ]; then
+            echo "::error::tracked without the executable bit (git mode != 100755):"
+            echo "$non_exec"
+            exit 1
+          fi
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
