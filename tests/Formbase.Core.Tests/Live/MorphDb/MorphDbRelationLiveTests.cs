@@ -49,7 +49,8 @@ public sealed class MorphDbRelationLiveTests : IAsyncLifetime
             .Build();
         await _postgres.StartAsync();
 
-        _morphdb = new ContainerBuilder("ghcr.io/iyulab/morphdb:0.10.0")
+        _morphdb = new ContainerBuilder(
+                Environment.GetEnvironmentVariable("FORMBASE_MORPHDB_IMAGE") ?? "ghcr.io/iyulab/morphdb:0.11.0")
             .WithNetwork(_network)
             .WithEnvironment("ConnectionStrings__MorphDB", $"Host={PostgresAlias};Port=5432;Database=morphdb;Username=morph;Password=morph")
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")

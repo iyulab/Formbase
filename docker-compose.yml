@@ -32,7 +32,7 @@ services:
     # id is 0.10.0. An earlier one refuses the request outright — it rejects JSON members it does not
     # know — so lowering this stops the bundle at start-up rather than misconfiguring it. Embedding
     # the engine still pairs as the README says; this line is the bundle's floor, not a new pair.
-    image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.10.0}
+    image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.11.0}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph

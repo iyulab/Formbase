@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0
+
+Pairs with MorphDB `0.11.x`, up from `0.9.x` — the `MorphDB.Client` dependency had already moved
+to `0.11.0` (a formbase-only dependency round) while the documented pair, the two live-suite
+fixtures' default pins (`0.9.0` and `0.10.0`, disagreeing with each other), and the Docker
+bundle's pin (`0.10.0`) each stayed at a different, older line. Verified against a live
+`morphdb:0.11.0` container before changing the recommendation — the full MorphDb live contract
+suite (31 tests, both fixtures) passes against it. No `Formbase.*` behavior changes; this release
+exists to bring the stated pair, the tested pair, and the installed dependency back into
+agreement.
+
+### Fixed
+
+- **The advertised MorphDB pair had drifted from what the tree actually depends on and tests
+  against.** Four places named four different versions (README/CHANGELOG `0.9.x`, one live test
+  fixture `0.9.0`, another `0.10.0`, `docker-compose.yml` `0.10.0`) while `Directory.Packages.
+  props` already declared `MorphDB.Client 0.11.0`. All four now agree on `0.11.x`/`0.11.0`, and
+  the second live test fixture's server image is overridable via `FORMBASE_MORPHDB_IMAGE` (it
+  previously ignored that variable, unlike the first), so the scheduled drift watch now covers
+  both.
+
 ## 0.8.0
 
 ### Added

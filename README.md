@@ -48,9 +48,9 @@ A document's life:
 
 ## Install
 
-Current release: **0.8.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.8.0` pairs with MorphDB `0.9.x`**. Pin the MorphDB server image to
-that line (`ghcr.io/iyulab/morphdb:0.9.0`); the compatible pair is stated with every release in
+Current release: **0.9.0**. Formbase projects into MorphDB over its client, so the two move
+together — **`Formbase.* 0.9.0` pairs with MorphDB `0.11.x`**. Pin the MorphDB server image to
+that line (`ghcr.io/iyulab/morphdb:0.11.0`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
 Start with the core and the DI helpers, then add only the adapters you actually run:
@@ -265,14 +265,6 @@ docker compose up -d
 curl http://127.0.0.1:8080/settings
 ```
 
-**The bundle asks for MorphDB `0.10.0`, a version ahead of the pair stated under
-[Install](#install).** That release exists — its start-up step needs a MorphDB that accepts a
-caller-chosen project id, which only `0.10.0` does — but the pair under Install stays `0.9.x`
-because nothing here yet exercises what `0.10.0` adds beyond that. Lowering the pin is not an
-option: a MorphDB on the paired line refuses the chosen id, and the bundle would stop at that step
-instead of at the pull. Run the host from a checkout against a MorphDB you start and provision
-yourself if you need the pair rather than the bundle's floor.
-
 Two things about the shape are worth knowing, because both are decisions rather than defaults.
 
 **The project id is written down, not discovered.** `POST /api/projects` answers with the id it
@@ -287,12 +279,6 @@ depend on a neighbour staying out of reach.
 
 Point the host at a MorphDB you already run with `FORMBASE_MORPHDB_URL`. The project named in
 `.env` is then created on that instance, and the bundled one can come out of the file.
-
-The bundle pins a MorphDB **ahead of the pair stated under [Install](#install)**, and that is not a
-change to the pair: embedding the engine still works against the line named there. Creating a
-project under a chosen id is what needs the newer server. An older one refuses the request rather
-than misreading it, so lowering the pin stops `docker compose up` at that step instead of leaving
-you with a host scoped to a project that was never created.
 
 ## Building and testing
 
