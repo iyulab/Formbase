@@ -233,7 +233,7 @@ append advisory lock은 성능을 포기하고 정합성을 샀다(`PostgresRawS
 | ~~문서-코드 불일치~~ | ~~`README.md` "Six ports"~~ | ✅ 해소 (2026-07-20) |
 | **부재와 null을 구별하지 못함** | `DocumentMapper.cs` — `!present`와 `JsonValueKind.Null`이 같은 분기. 투영에서 *"칸을 비웠다"*와 *"그 칸이 없었다"*가 같은 `null`이 된다 | 🟡 **부분 해소** — `ProjectionResult.AbsentFieldCounts`가 투영 단위 집계로 드러낸다. **행 단위 구별은 미해소**(C1 잔존) |
 | ~~선언 어휘가 평탄함~~ | ~~`FieldHint`~~ | ✅ **선언 층 해소** (0.6.0 — `RelationHint`(Child·Reference) + `FieldBinding` + `SourceKey` + `DeclarationVersion`). **의미 실행은 아래 두 행으로 이월** |
-| **`FieldBinding.Reference`가 그때 값을 돌려준다** | `Projector` 경로 — "지금 참"으로 선언한 칸이 `Snapshot`과 동일한 값을 반환하고, 미해석 신호가 없다(`Skipped` 0 · `Projected` · `Stale=false`) | **C1.** §1 「미결정을 그럴듯한 기본값으로 메우지 않는다」 위반. 우선 수정 대상 |
+| ~~`FieldBinding.Reference`가 그때 값을 돌려준다~~ | ~~`Projector` 경로~~ | ✅ **해소** (`f5e8164`) — 미해결 참조 칼럼은 이제 **비워서** 투영하고 `ProjectionResult.UnresolvedReferences`로 이름을 보고한다(문서의 값을 대신 채우지 않는다 — §1 「미결정을 그럴듯한 기본값으로 메우지 않는다」 정렬) |
 | **유추 제안기가 선언 축을 산출하지 못한다** | `LlmSchemaProposer` — `ColumnDef`의 `SourceKey`·`Binding`·`BindingTarget`과 `TableSchema.Relations`를 채우지 않는다. 등록 시 힌트 제안기를 대체하므로 선언한 시간 결합·관계가 무경고로 소실된다 | **C2.** §6-1(2026-08-03 개정) 미이행. 선언·미선언을 합성하는 제안기로 해소 예정 |
 
 ---
