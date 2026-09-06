@@ -13,7 +13,7 @@ namespace Formbase.Core.Tests.Projection;
 /// and the state cleanup ALSO fails (shared connection pool), the recorded stamp may overclaim a
 /// half-built table as fresh. A best-effort "unverified" mark lets a query refuse to trust it —
 /// closing the C2 silent-wrong-answer window — while the projector's original cause still
-/// propagates (cycle-34).
+/// propagates.
 /// </summary>
 public class ProjectionUnverifiedTests
 {

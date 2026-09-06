@@ -74,8 +74,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// no ordering guarantee between a form type's table and the tables its relations name, so a
     /// child can (and, on the first projection of either side, will) be written before its parent
     /// has been reloaded. Enforcing would reject data that is consistent at its source; this project
-    /// analysis settled on non-enforcing metadata for exactly that reason
-    /// (<c>claudedocs/Formbase/plans/2026-07-24-projection-fk-enforcement-analysis.md</c>). No
+    /// analysis settled on non-enforcing metadata for exactly that reason. No
     /// physical constraint follows either, which is what keeps a later drop of either table free of
     /// MorphDB's <c>TABLE_HAS_DEPENDENTS</c> refusal.
     /// <para>
