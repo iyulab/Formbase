@@ -7,14 +7,14 @@ stage (`can-standard`) TED notices, follow the TED Search API's own `procedure-i
 procedure) back to see whether a competition-stage notice -- the precondition the eForms SDK's
 `formType` flow (planning -> competition -> result -> ...) declares -- actually exists for it.
 
-cycle-167's first pass checked only `cn-standard` and found 6/25 (24%) "missing". One of those 6
+This script's first pass checked only `cn-standard` and found 6/25 (24%) "missing". One of those 6
 turned out to carry a `veat` notice instead (a direct-award route, eForms `formType: dir-awa-pre`)
 -- not a real precondition gap, just a too-narrow check. `--precondition-types` now defaults to
 every notice-type the eForms SDK's own catalog declares under `formType: competition` OR
 `formType: dir-awa-pre` for exactly this reason: the true precondition for a `formType: result`
 notice is "some valid predecessor exists", not "one specific notice-type exists".
 
-This is a manual, occasional research tool for P3-h -- never run by CI or the regression suite,
+This is a manual, occasional research tool for ontology-layer dogfooding -- never run by CI or the regression suite,
 same posture as fetch-ted-corpus-sample.py / eforms-isomorphism.py / eforms-semantic-judge.py.
 
 Usage:

@@ -201,6 +201,13 @@ jobs:
             exit 1
           fi
 
+      # Published text must not name something only an insider can look up. Needs no dotnet, so
+      # it runs before the SDK is set up and fails the job in seconds when it fails.
+      - name: Internal token scan
+        uses: iyulab/dotnet-ci-actions/internal-token-scan@7e501c0d46f7c06e73a8945f4b0f83fcb347eb53 # main, 2026-09-06
+        with:
+          min-files: '50'
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:

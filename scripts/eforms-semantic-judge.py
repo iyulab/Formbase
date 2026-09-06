@@ -12,14 +12,14 @@ model — see eforms-isomorphism.py's docstring for how the positive/negative po
     happens to overlap by chance. Section 4's "looks similar, actually different" case — the one
     the methodology warns must not be auto-merged.
 
-This is a manual, occasional research tool for P3-h — never run by CI or the regression suite, the
+This is a manual, occasional research tool for ontology-layer dogfooding — never run by CI or the regression suite, the
 same posture as fetch-ted-corpus-sample.py and eforms-isomorphism.py.
 
 Requires a corpus directory already populated by:
     python3 scripts/eforms-isomorphism.py fetch --out-dir <dir>
 and a reachable OpenAI-compatible endpoint via FORMBASE_LLM_ENDPOINT / FORMBASE_LLM_API_KEY /
-FORMBASE_LLM_MODEL (read from the environment, or from --env-file — this repo keeps them in the
-umbrella's .env.local, gitignored, see HD-05 / D-C17 in claudedocs/HANDOFF.md).
+FORMBASE_LLM_MODEL (read from the environment, or from --env-file — keep them in a gitignored
+env file outside this tree; credentials are never committed).
 
 Usage:
     python3 scripts/eforms-semantic-judge.py --corpus-dir /tmp/eforms-sdk \\
@@ -153,7 +153,7 @@ def build_negative_pairs(by_group, group_be, min_fields, threshold, max_fields=N
             # Requiring BOTH sides to carry a declared businessEntityId is not optional: a group
             # with none is a purely structural container, not "labelled different" — treating
             # `None != "LotResult"` as a semantic conflict was this script's own bug (found in the
-            # cycle-165 pilot run: 11/20 sampled negatives were jaccard=1.0, i.e. IDENTICAL field
+            # first pilot run: 11/20 sampled negatives were jaccard=1.0, i.e. IDENTICAL field
             # sets, mislabeled "different concept" only because one side had no businessEntityId at
             # all). Ground truth this weak cannot support any conclusion about the model.
             if be_a is None or be_b is None or be_a == be_b:

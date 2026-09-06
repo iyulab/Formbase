@@ -2,7 +2,7 @@
 """Reproduce and extend automation.md Section 4's structural precondition (composition match)
 over the eForms SDK's declared notice-type visualizations.
 
-This is a manual, occasional research tool for P3-h (ontology layer dogfooding) — regression tests
+This is a manual, occasional research tool for ontology-layer dogfooding — regression tests
 never call it, and CI never runs it, the same posture as fetch-ted-corpus-sample.py. Run it only
 when re-verifying or extending the Section 4 pilot. See
 tests/Formbase.Core.Tests/Regression/Fixtures/README.md for the sibling TED-instance corpus this
