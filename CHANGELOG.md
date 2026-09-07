@@ -15,24 +15,6 @@
   the loopback port and exits 0 or 1. None of these are in `docs/API.md` — that page is the
   consumer's surface, and these are the operator's.
 
-### Changed
-
-- **A body the host cannot read now says what is wrong with it.** Binding failures were answered
-  with the framework's own message, which named the parameter and the type it was binding to
-  (`Failed to read parameter "…Request request" …`) and nothing a caller could act on. The response
-  now names the offending value by its JSON path in the document they sent — `the value at
-  '$.fields[0].type' is not one this field accepts (line 1, position 79)` — and points at the page
-  listing what is accepted. A body that never parsed says so instead of pointing at a field. No
-  problem response carries an internal identifier, and a test sweeps the wrong-request surface to
-  keep it that way.
-- **The MorphDB the bundle and the docs name is now `0.11.1`.** The compatibility pair is unchanged
-  — `Formbase.* 0.9.0` still pairs with MorphDB `0.11.x` — but the concrete tag the install
-  instructions, the compose bundle, and the live-suite fixtures reach for had stayed at `0.11.0`
-  after `0.11.1` was published. A pair names a line; the tag beside it should name the newest
-  published member of that line, because that is the one a reader will actually run.
-
-### Added
-
 - **The skips of the last projection are kept, not just returned.** `CONSTITUTION.md` calls a
   mapping failure a `ProjectionSkip` *record*, and until now it was a return value: the run that
   produced it handed it back to whoever called it and nothing stored it, so a host driving
@@ -48,6 +30,22 @@
   read from the recorded state, so it survives a restart and answers for a run another instance
   performed. `count: 0` means the same for "mapped everything" and "never projected"; the status
   endpoint separates those.
+
+### Changed
+
+- **A body the host cannot read now says what is wrong with it.** Binding failures were answered
+  with the framework's own message, which named the parameter and the type it was binding to
+  (`Failed to read parameter "…Request request" …`) and nothing a caller could act on. The response
+  now names the offending value by its JSON path in the document they sent — `the value at
+  '$.fields[0].type' is not one this field accepts (line 1, position 79)` — and points at the page
+  listing what is accepted. A body that never parsed says so instead of pointing at a field. No
+  problem response carries an internal identifier, and a test sweeps the wrong-request surface to
+  keep it that way.
+- **The MorphDB the bundle and the docs name is now `0.11.1`.** The compatibility pair is unchanged
+  — `Formbase.* 0.9.0` still pairs with MorphDB `0.11.x` — but the concrete tag the install
+  instructions, the compose bundle, and the live-suite fixtures reach for had stayed at `0.11.0`
+  after `0.11.1` was published. A pair names a line; the tag beside it should name the newest
+  published member of that line, because that is the one a reader will actually run.
 
 ### Breaking
 
