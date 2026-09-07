@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- **The MorphDB the bundle and the docs name is now `0.11.1`.** The compatibility pair is unchanged
+  — `Formbase.* 0.9.0` still pairs with MorphDB `0.11.x` — but the concrete tag the install
+  instructions, the compose bundle, and the live-suite fixtures reach for had stayed at `0.11.0`
+  after `0.11.1` was published. A pair names a line; the tag beside it should name the newest
+  published member of that line, because that is the one a reader will actually run.
+
 ### Added
 
 - **The skips of the last projection are kept, not just returned.** `CONSTITUTION.md` calls a

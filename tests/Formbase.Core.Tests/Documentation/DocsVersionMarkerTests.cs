@@ -61,13 +61,19 @@ public class DocsVersionMarkerTests
     [Fact]
     public void The_bundle_says_it_cannot_start_exactly_while_it_asks_for_a_MorphDB_ahead_of_the_pair()
     {
-        // The bundle pins a MorphDB ahead of the line the install section pairs with, and while
-        // that is true `docker compose up` cannot succeed: the version it asks for is not out yet.
-        // Whether it has been published belongs to another repository's release line and cannot be
-        // read from here -- but the condition that makes the caveat true can, because it is the
-        // distance between two numbers in this tree. So the caveat is required exactly while the
-        // bundle is ahead, and must be gone once the pair catches up. Neither direction is left to
-        // whoever edits the README next.
+        // The bundle pins a MorphDB outside the line the install section pairs with, and while that
+        // is true `docker compose up` cannot succeed: the version it asks for is not one the pair
+        // vouches for. Whether it has been published belongs to another repository's release line
+        // and cannot be read from here -- but the condition that makes the caveat true can, because
+        // it is the distance between two numbers in this tree. So the caveat is required exactly
+        // while the bundle is outside the pair, and must be gone once the pair covers it. Neither
+        // direction is left to whoever edits the README next.
+        //
+        // The distance is measured at the **line**, not at the patch. An earlier form of this test
+        // compared the pin to `<line>.0` and so treated any published patch inside the pair as
+        // "ahead" -- which made tracking the newest published patch of the paired line, the thing
+        // the install instructions should always do, look like a defect and demanded a caveat that
+        // would have been false. A patch inside the pair is the expected state, not a caveat.
         var pin = Version.Parse(Regex.Match(
             RepoFiles.Read("docker-compose.yml"), @"morphdb:(?<v>\d+\.\d+\.\d+)").Groups["v"].Value);
 
@@ -78,10 +84,10 @@ public class DocsVersionMarkerTests
 
         var caveat = Regex.Match(RepoFiles.Read("README.md"), @"bundle asks for\s+MorphDB `(?<v>\d+\.\d+\.\d+)`");
 
-        if (pin > Version.Parse(pairedLine + ".0"))
+        if (new Version(pin.Major, pin.Minor) > Version.Parse(pairedLine))
         {
             caveat.Success.Should().BeTrue(
-                "the bundle asks for a MorphDB ahead of the paired line, so the documented "
+                "the bundle asks for a MorphDB outside the paired line, so the documented "
                 + "`docker compose up` cannot succeed — a reader who runs it should find that "
                 + "written down rather than have to work it out from a pull error");
 
@@ -92,7 +98,7 @@ public class DocsVersionMarkerTests
         else
         {
             caveat.Success.Should().BeFalse(
-                "the paired line has caught up with the bundle, so the caveat now describes a "
+                "the pair covers what the bundle asks for, so the caveat now describes a "
                 + "failure that no longer happens");
         }
     }

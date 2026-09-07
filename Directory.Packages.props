@@ -12,7 +12,7 @@
          OpenAI-compatible endpoint. -->
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
     <PackageVersion Include="M3L.Native" Version="0.7.2" />
-    <PackageVersion Include="MorphDB.Client" Version="0.11.0" />
+    <PackageVersion Include="MorphDB.Client" Version="0.11.1" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <!-- Host: the HTTP surface and its OpenAPI document -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />

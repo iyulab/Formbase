@@ -1,5 +1,5 @@
 # Drift watch, separated from CI by design (§3.10-C2): the regular pipeline pins the MorphDB image
-# to the compatibility pair (0.8.x) so a red build always means *our* defect, while this schedule
+# to the compatibility pair the README states so a red build always means *our* defect, while this schedule
 # runs the same live contract suite against `latest` — a red run here means the server moved under
 # us, which is a signal to investigate, not a broken build.
 name: MorphDB Drift Watch
