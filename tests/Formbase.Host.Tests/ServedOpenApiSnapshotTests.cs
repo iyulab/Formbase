@@ -40,7 +40,7 @@ public sealed class ServedOpenApiSnapshotTests : IClassFixture<WebApplicationFac
     [Fact]
     public async Task The_served_document_is_the_one_recorded_as_published()
     {
-        var served = await _client.GetStringAsync("/openapi/v1.json");
+        var served = await _client.GetStringAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
 
         Normalize(served).Should().Be(
             Normalize(RepoFile.Read(SnapshotPath)),

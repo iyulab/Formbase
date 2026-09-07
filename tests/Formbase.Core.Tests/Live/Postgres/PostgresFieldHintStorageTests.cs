@@ -35,14 +35,14 @@ public sealed class PostgresFieldHintStorageTests
             new FieldHint("measured_at", ColumnType.Timestamp),
         ]);
 
-        await source.DeclareAsync(hints);
+        await source.DeclareAsync(hints, TestContext.Current.CancellationToken);
 
-        await using var connection = await _fixture.DataSource.OpenConnectionAsync();
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""SELECT fields::text FROM "{schema}".field_hints WHERE form_type = @type""";
         command.Parameters.AddWithValue("type", type.Value);
 
-        var storedJson = (string?)await command.ExecuteScalarAsync();
+        var storedJson = (string?)await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
         storedJson.Should().NotBeNull();
 
         // Parse independently (no JsonStringEnumConverter here) so the assertion cannot be satisfied by

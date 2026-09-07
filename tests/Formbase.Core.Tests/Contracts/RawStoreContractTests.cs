@@ -22,7 +22,7 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        var stored = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
+        var stored = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
 
         stored.Watermark.Should().Be(new Watermark(1));
     }
@@ -32,8 +32,8 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        var first = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
-        var second = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""));
+        var first = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var second = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
 
         (second.Watermark > first.Watermark).Should().BeTrue();
     }
@@ -43,8 +43,8 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        var a = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
-        var b = await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""));
+        var a = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var b = await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
 
         (b.Watermark > a.Watermark).Should().BeTrue();
     }
@@ -55,12 +55,12 @@ public abstract class RawStoreContractTests
         var store = CreateStore();
         var id = DocumentId.New();
 
-        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""));
-        var again = await store.AppendAsync(Qc, id, Body("""{"n":999}"""));
+        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var again = await store.AppendAsync(Qc, id, Body("""{"n":999}"""), TestContext.Current.CancellationToken);
 
         again.Id.Should().Be(first.Id);
         again.Watermark.Should().Be(first.Watermark);
-        var head = await store.HeadAsync(Qc);
+        var head = await store.HeadAsync(Qc, TestContext.Current.CancellationToken);
         head.Should().Be(first.Watermark, "a duplicate id must not create a second row");
     }
 
@@ -69,9 +69,9 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
         var id = DocumentId.New();
-        await store.AppendAsync(Qc, id, Body("""{"lot":"L-1"}"""));
+        await store.AppendAsync(Qc, id, Body("""{"lot":"L-1"}"""), TestContext.Current.CancellationToken);
 
-        var fetched = await store.GetAsync(id);
+        var fetched = await store.GetAsync(id, TestContext.Current.CancellationToken);
 
         fetched.Should().NotBeNull();
         fetched!.Id.Should().Be(id);
@@ -83,19 +83,19 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        (await store.GetAsync(DocumentId.New())).Should().BeNull();
+        (await store.GetAsync(DocumentId.New(), TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
     public async Task Stream_returns_a_form_types_documents_in_append_order_after_a_watermark()
     {
         var store = CreateStore();
-        var d1 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
-        var d2 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""));
-        var d3 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":3}"""));
+        var d1 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var d2 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
+        var d3 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":3}"""), TestContext.Current.CancellationToken);
 
         var after1 = new List<StoredDocument>();
-        await foreach (var d in store.StreamAsync(Qc, d1.Watermark))
+        await foreach (var d in store.StreamAsync(Qc, d1.Watermark, TestContext.Current.CancellationToken))
         {
             after1.Add(d);
         }
@@ -107,11 +107,11 @@ public abstract class RawStoreContractTests
     public async Task Stream_from_zero_returns_all_documents_of_the_type()
     {
         var store = CreateStore();
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""));
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
 
         var all = new List<StoredDocument>();
-        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero))
+        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
         {
             all.Add(d);
         }
@@ -123,11 +123,11 @@ public abstract class RawStoreContractTests
     public async Task Stream_isolates_by_form_type()
     {
         var store = CreateStore();
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
-        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""));
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
 
         var qcDocs = new List<StoredDocument>();
-        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero))
+        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
         {
             qcDocs.Add(d);
         }
@@ -156,11 +156,11 @@ public abstract class RawStoreContractTests
         var watermarks = stored.Select(s => s.Watermark).ToList();
         watermarks.Should().OnlyHaveUniqueItems("each append must be assigned its own watermark");
         watermarks.Should().HaveCount(count);
-        (await store.HeadAsync(Qc)).Should().Be(watermarks.Max(), "head must reflect every committed append");
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(watermarks.Max(), "head must reflect every committed append");
 
         foreach (var s in stored)
         {
-            (await store.GetAsync(s.Id)).Should().NotBeNull("no appended document may be lost to a race");
+            (await store.GetAsync(s.Id, TestContext.Current.CancellationToken)).Should().NotBeNull("no appended document may be lost to a race");
         }
     }
 
@@ -169,18 +169,18 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        (await store.HeadAsync(Qc)).Should().Be(Watermark.Zero);
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Watermark.Zero);
     }
 
     [Fact]
     public async Task Head_returns_the_latest_watermark_of_the_type()
     {
         var store = CreateStore();
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""));
-        var last = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""));
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var last = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
         // A later append under a different type must not move Qc's head.
-        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":3}"""));
+        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":3}"""), TestContext.Current.CancellationToken);
 
-        (await store.HeadAsync(Qc)).Should().Be(last.Watermark);
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(last.Watermark);
     }
 }

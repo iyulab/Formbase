@@ -27,14 +27,14 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// </summary>
     public string ConnectionString => _postgres.GetConnectionString();
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _postgres = new PostgreSqlBuilder("postgres:16-alpine").Build();
         await _postgres.StartAsync();
         DataSource = NpgsqlDataSource.Create(_postgres.GetConnectionString());
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (DataSource is not null)
         {

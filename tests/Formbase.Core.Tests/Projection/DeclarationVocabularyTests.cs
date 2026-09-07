@@ -42,12 +42,12 @@ public class DeclarationVocabularyTests
         [
             new FieldHint("lot_label", ColumnType.Text, Nullable: false, SourceKey: "lot"),
         ]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await h.Projector.ProjectAsync(Qc);
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.Inserted.Should().Be(1);
-        var rows = await h.Store.QueryAsync("qc", QuerySpec.All);
+        var rows = await h.Store.QueryAsync("qc", QuerySpec.All, TestContext.Current.CancellationToken);
         rows[0]["lot_label"].Should().Be("L-1", "the raw key and the projected column are two names, not one");
     }
 
@@ -59,18 +59,18 @@ public class DeclarationVocabularyTests
         [
             new FieldHint("lot", ColumnType.Text, Nullable: false),
         ]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
-        await h.Projector.ProjectAsync(Qc);
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         // The rename: display name changes, identity (extraction key) stays.
         h.Hints.Declare(new FormTypeHints(Qc, "qc",
         [
             new FieldHint("lot_number", ColumnType.Text, Nullable: false, SourceKey: "lot"),
         ]));
-        var second = await h.Projector.ProjectAsync(Qc);
+        var second = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         second.Inserted.Should().Be(1, "a renamed field must keep its data — the VibeBase field.rename scenario");
-        var rows = await h.Store.QueryAsync("qc", QuerySpec.All);
+        var rows = await h.Store.QueryAsync("qc", QuerySpec.All, TestContext.Current.CancellationToken);
         rows[0]["lot_number"].Should().Be("L-1");
     }
 
@@ -103,9 +103,9 @@ public class DeclarationVocabularyTests
         h.Hints.Declare(new FormTypeHints(Qc, "qc",
             [new FieldHint("lot", ColumnType.Text, Nullable: false)],
             Relations: [new RelationHint("defects", RelationKind.Child, Defects, "qc_id")]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         var created = h.Store.CreatedSchemas.Single(s => s.TableName == "qc");
         created.Relations.Should().ContainSingle().Which.Should().BeEquivalentTo(
@@ -128,9 +128,9 @@ public class DeclarationVocabularyTests
                 Binding: FieldBinding.Snapshot,
                 Target: new EntityRef(FormTypeRef.Create("items"), "price")),
         ]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await h.Projector.ProjectAsync(Qc);
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         // Stage-1 semantics: the value still comes from raw (fixed-then is what raw already is);
         // what must not drop is the declared meaning.
@@ -157,11 +157,11 @@ public class DeclarationVocabularyTests
                 Target: new EntityRef(FormTypeRef.Create("items"), "price")),
         ]));
         // The document carries a copy of the referenced value — forms routinely do.
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        var rows = await h.Store.QueryAsync("qc", QuerySpec.All);
+        var rows = await h.Store.QueryAsync("qc", QuerySpec.All, TestContext.Current.CancellationToken);
         rows[0]["unit_price"].Should().BeNull(
             "a true-now declaration must not be answered with the document's fixed-then copy — "
             + "an empty box can still be filled, a wrong value is never found");
@@ -178,9 +178,9 @@ public class DeclarationVocabularyTests
                 Binding: FieldBinding.Reference,
                 Target: new EntityRef(FormTypeRef.Create("items"), "price")),
         ]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await h.Projector.ProjectAsync(Qc);
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.UnresolvedReferences.Should().Equal(["unit_price"],
             "leaving the box empty without saying so is the same silence in a quieter form");
@@ -197,9 +197,9 @@ public class DeclarationVocabularyTests
                 Binding: FieldBinding.Reference,
                 Target: new EntityRef(FormTypeRef.Create("items"), "price")),
         ]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await h.Projector.ProjectAsync(Qc);
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         var created = h.Store.CreatedSchemas.Single(s => s.TableName == "qc");
         created.Columns.Single(c => c.Name == "unit_price").Nullable.Should().BeTrue(
@@ -216,9 +216,9 @@ public class DeclarationVocabularyTests
         [
             new FieldHint("lot", ColumnType.Text, Nullable: false),
         ]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await h.Projector.ProjectAsync(Qc);
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.Inserted.Should().Be(1);
         result.UnresolvedReferences.Should().BeEmpty("only a Reference binding is unresolved");
@@ -231,9 +231,9 @@ public class DeclarationVocabularyTests
         h.Hints.Declare(new FormTypeHints(Qc, "qc",
             [new FieldHint("lot", ColumnType.Text, Nullable: false)],
             Relations: [new RelationHint("defects", RelationKind.Reference, Defects, "defect_id")]));
-        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         h.Store.CreatedSchemas.Single(s => s.TableName == "qc")
             .Relations.Should().ContainSingle().Which.TargetTable.Should().Be("defects",

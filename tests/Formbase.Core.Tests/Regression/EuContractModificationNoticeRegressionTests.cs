@@ -36,10 +36,10 @@ public sealed class EuContractModificationNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(ModificationNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(ModificationNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(ModificationNoticeType);
+        var result = await engine.ProjectAsync(ModificationNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -62,10 +62,10 @@ public sealed class EuContractModificationNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(ModificationNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(ModificationNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(ModificationNoticeType);
+        var result = await engine.ProjectAsync(ModificationNoticeType, TestContext.Current.CancellationToken);
 
         withoutValueKey.Should().BeGreaterThan(0, "the fixture must contain at least one notice with " +
             "no totalValue key, or this test is not exercising the case it claims to");

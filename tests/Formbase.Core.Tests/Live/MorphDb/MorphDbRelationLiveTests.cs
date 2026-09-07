@@ -35,7 +35,7 @@ public sealed class MorphDbRelationLiveTests : IAsyncLifetime
     private Guid _projectId;
     private MorphDbProjectionStore _store = null!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _network = new NetworkBuilder().Build();
         await _network.CreateAsync();
@@ -72,7 +72,7 @@ public sealed class MorphDbRelationLiveTests : IAsyncLifetime
         _store = new MorphDbProjectionStore(CreateRawClient());
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await _morphdb.DisposeAsync();
         await _postgres.DisposeAsync();
@@ -114,14 +114,14 @@ public sealed class MorphDbRelationLiveTests : IAsyncLifetime
         const string notices = "notices_after_child";
         const string lots = "lots_after_child";
 
-        await _store.CreateTableAsync(NoticeSchema(notices, lots));
-        await _store.CreateTableAsync(LotSchema(lots));
+        await _store.CreateTableAsync(NoticeSchema(notices, lots), TestContext.Current.CancellationToken);
+        await _store.CreateTableAsync(LotSchema(lots), TestContext.Current.CancellationToken);
 
         // Redeclare the parent now that the child exists — same drop-then-create the core projector
         // does on every cycle (Projector.cs) — this is the call that should succeed in creating the
         // relation MorphDB never got on the first pass.
-        await _store.DropTableAsync(notices);
-        await _store.CreateTableAsync(NoticeSchema(notices, lots));
+        await _store.DropTableAsync(notices, TestContext.Current.CancellationToken);
+        await _store.CreateTableAsync(NoticeSchema(notices, lots), TestContext.Current.CancellationToken);
 
         // The REST client exposes no relation-read endpoint, so read the relation back the way
         // docs/API.md's own "Reading the schema" section does: GraphQL's `table(name).relations`.

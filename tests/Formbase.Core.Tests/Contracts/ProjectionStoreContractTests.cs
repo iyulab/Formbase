@@ -31,11 +31,11 @@ public abstract class ProjectionStoreContractTests
     {
         var store = CreateStore();
 
-        await store.CreateTableAsync(Schema());
-        (await store.TableExistsAsync(TableName)).Should().BeTrue();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        (await store.TableExistsAsync(TableName, TestContext.Current.CancellationToken)).Should().BeTrue();
 
-        await store.DropTableAsync(TableName);
-        (await store.TableExistsAsync(TableName)).Should().BeFalse();
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+        (await store.TableExistsAsync(TableName, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -52,12 +52,12 @@ public abstract class ProjectionStoreContractTests
     public async Task Create_fails_when_the_table_already_exists()
     {
         var store = CreateStore();
-        await store.CreateTableAsync(Schema());
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
 
         var act = () => store.CreateTableAsync(Schema());
 
         await act.Should().ThrowAsync<Exception>();
-        await store.DropTableAsync(TableName);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -74,71 +74,71 @@ public abstract class ProjectionStoreContractTests
     public async Task Query_returns_inserted_rows()
     {
         var store = CreateStore();
-        await store.CreateTableAsync(Schema());
-        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2)]);
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2)], TestContext.Current.CancellationToken);
 
-        var rows = await store.QueryAsync(TableName, QuerySpec.All);
+        var rows = await store.QueryAsync(TableName, QuerySpec.All, TestContext.Current.CancellationToken);
 
         rows.Should().HaveCount(2);
-        await store.DropTableAsync(TableName);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
     [Fact]
     public async Task Query_applies_equality_filters()
     {
         var store = CreateStore();
-        await store.CreateTableAsync(Schema());
-        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("a", 3)]);
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("a", 3)], TestContext.Current.CancellationToken);
 
         var rows = await store.QueryAsync(TableName, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["k"] = "a" }));
+            Filters: new Dictionary<string, object?> { ["k"] = "a" }), TestContext.Current.CancellationToken);
 
         rows.Should().HaveCount(2);
         rows.Should().OnlyContain(r => Equals(r["k"], "a"));
-        await store.DropTableAsync(TableName);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
     [Fact]
     public async Task Query_limit_caps_the_row_count()
     {
         var store = CreateStore();
-        await store.CreateTableAsync(Schema());
-        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("c", 3), Row("d", 4)]);
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("c", 3), Row("d", 4)], TestContext.Current.CancellationToken);
 
-        var rows = await store.QueryAsync(TableName, new QuerySpec(Limit: 2));
+        var rows = await store.QueryAsync(TableName, new QuerySpec(Limit: 2), TestContext.Current.CancellationToken);
 
         rows.Should().HaveCount(2);
-        await store.DropTableAsync(TableName);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
     [Fact]
     public async Task Query_orders_by_the_requested_key_in_both_directions()
     {
         var store = CreateStore();
-        await store.CreateTableAsync(Schema());
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
         // Inserted out of order, so passing order (not insertion order) is what's being verified.
-        await store.BulkInsertAsync(TableName, [Row("a", 3), Row("b", 1), Row("c", 2)]);
+        await store.BulkInsertAsync(TableName, [Row("a", 3), Row("b", 1), Row("c", 2)], TestContext.Current.CancellationToken);
 
-        var asc = await store.QueryAsync(TableName, new QuerySpec(OrderBy: [new OrderKey("v")]));
+        var asc = await store.QueryAsync(TableName, new QuerySpec(OrderBy: [new OrderKey("v")]), TestContext.Current.CancellationToken);
         asc.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(1L, 2L, 3L);
 
-        var desc = await store.QueryAsync(TableName, new QuerySpec(OrderBy: [new OrderKey("v", Descending: true)]));
+        var desc = await store.QueryAsync(TableName, new QuerySpec(OrderBy: [new OrderKey("v", Descending: true)]), TestContext.Current.CancellationToken);
         desc.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(3L, 2L, 1L);
 
-        await store.DropTableAsync(TableName);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
     [Fact]
     public async Task Ordered_paging_returns_a_deterministic_slice()
     {
         var store = CreateStore();
-        await store.CreateTableAsync(Schema());
-        await store.BulkInsertAsync(TableName, [Row("a", 3), Row("b", 1), Row("d", 4), Row("c", 2)]);
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 3), Row("b", 1), Row("d", 4), Row("c", 2)], TestContext.Current.CancellationToken);
 
         // Ordered by v ascending → 1,2,3,4; skip 1, take 2 → the middle slice, same on any store.
-        var page = await store.QueryAsync(TableName, new QuerySpec(Limit: 2, Offset: 1, OrderBy: [new OrderKey("v")]));
+        var page = await store.QueryAsync(TableName, new QuerySpec(Limit: 2, Offset: 1, OrderBy: [new OrderKey("v")]), TestContext.Current.CancellationToken);
 
         page.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(2L, 3L);
-        await store.DropTableAsync(TableName);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 }

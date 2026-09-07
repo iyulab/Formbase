@@ -35,7 +35,7 @@ public sealed class SettingsSurfaceTests : IClassFixture<WebApplicationFactory<P
     [Fact]
     public async Task An_instance_reports_how_it_is_composed()
     {
-        var settings = await ReadAsync(await _client.GetAsync("/settings"));
+        var settings = await ReadAsync(await _client.GetAsync("/settings", TestContext.Current.CancellationToken));
 
         settings.GetProperty("namespace").GetString().Should().Be("default");
         settings.GetProperty("storeProfile").GetString().Should().Be("inmemory");
@@ -47,14 +47,14 @@ public sealed class SettingsSurfaceTests : IClassFixture<WebApplicationFactory<P
     [Fact]
     public async Task An_instance_with_no_model_settings_runs_without_intelligence()
     {
-        var intelligence = (await ReadAsync(await _client.GetAsync("/settings")))
+        var intelligence = (await ReadAsync(await _client.GetAsync("/settings", TestContext.Current.CancellationToken)))
             .GetProperty("schemaIntelligence");
 
         intelligence.GetProperty("installed").GetBoolean().Should().BeFalse();
         intelligence.GetProperty("model").ValueKind.Should().Be(JsonValueKind.Null);
 
         // The invariant, stated where it can fail: every other capability is unchanged.
-        (await _client.GetAsync("/formtypes/nothing_declared/declaration")).StatusCode
+        (await _client.GetAsync("/formtypes/nothing_declared/declaration", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.NotFound, "the host is fully operational without a model");
     }
 

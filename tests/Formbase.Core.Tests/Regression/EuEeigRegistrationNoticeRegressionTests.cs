@@ -50,10 +50,10 @@ public sealed class EuEeigRegistrationNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(EeigRegistrationNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(EeigRegistrationNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(EeigRegistrationNoticeType);
+        var result = await engine.ProjectAsync(EeigRegistrationNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -74,10 +74,10 @@ public sealed class EuEeigRegistrationNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(EeigRegistrationNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(EeigRegistrationNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(EeigRegistrationNoticeType);
+        var result = await engine.ProjectAsync(EeigRegistrationNoticeType, TestContext.Current.CancellationToken);
 
         missingKeyCount.Should().Be(notices.Count,
             "the fixture must genuinely lack the key on every document, or this test is not " +

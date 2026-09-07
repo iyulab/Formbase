@@ -24,7 +24,7 @@ public abstract class FieldHintSourceContractTests
     {
         var source = CreateSource();
 
-        (await source.GetHintsAsync(Qc)).Should().BeNull();
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public abstract class FieldHintSourceContractTests
 
         await DeclareAsync(source, hints);
 
-        var read = await source.GetHintsAsync(Qc);
+        var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         read.Should().NotBeNull();
         read!.Type.Should().Be(Qc);
         read.TableName.Should().Be("qc_table");
@@ -58,7 +58,7 @@ public abstract class FieldHintSourceContractTests
 
         await DeclareAsync(source, new FormTypeHints(Qc, "qc_table", fields));
 
-        var read = await source.GetHintsAsync(Qc);
+        var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         read!.Fields.Should().BeEquivalentTo(fields, options => options.WithStrictOrdering());
     }
 
@@ -74,7 +74,7 @@ public abstract class FieldHintSourceContractTests
 
         await DeclareAsync(source, new FormTypeHints(Qc, "qc_table", fields));
 
-        var read = await source.GetHintsAsync(Qc);
+        var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         read!.Fields.Should().BeEquivalentTo(fields, options => options.WithStrictOrdering());
     }
 
@@ -86,7 +86,7 @@ public abstract class FieldHintSourceContractTests
 
         await DeclareAsync(source, new FormTypeHints(Qc, "qc_v2", [new FieldHint("fresh", ColumnType.Integer)]));
 
-        var read = await source.GetHintsAsync(Qc);
+        var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         read!.TableName.Should().Be("qc_v2");
         read.Fields.Should().ContainSingle().Which.Name.Should().Be("fresh");
     }
@@ -99,8 +99,8 @@ public abstract class FieldHintSourceContractTests
         await DeclareAsync(source, new FormTypeHints(Qc, "qc_table", [new FieldHint("serial", ColumnType.Text)]));
         await DeclareAsync(source, new FormTypeHints(Work, "work_table", [new FieldHint("hours", ColumnType.Decimal)]));
 
-        (await source.GetHintsAsync(Qc))!.TableName.Should().Be("qc_table");
-        (await source.GetHintsAsync(Work))!.TableName.Should().Be("work_table");
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken))!.TableName.Should().Be("qc_table");
+        (await source.GetHintsAsync(Work, TestContext.Current.CancellationToken))!.TableName.Should().Be("work_table");
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public abstract class FieldHintSourceContractTests
 
         await DeclareAsync(source, new FormTypeHints(Qc, "qc_table", []));
 
-        var read = await source.GetHintsAsync(Qc);
+        var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         // "declared with no fields" is not the same as "never declared" — the read must not collapse them.
         read.Should().NotBeNull();
         read!.Fields.Should().BeEmpty();

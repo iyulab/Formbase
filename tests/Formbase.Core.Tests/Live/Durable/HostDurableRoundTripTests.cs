@@ -32,7 +32,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
 
     public HostDurableRoundTripTests(DurableFixture fixture) => _fixture = fixture;
 
-    public Task InitializeAsync()
+    public ValueTask InitializeAsync()
     {
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -46,10 +46,10 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         });
 
         _client = _factory.CreateClient();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         _client.Dispose();
         if (_factory is not null)
@@ -61,7 +61,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
     [Fact]
     public async Task The_host_reports_itself_as_durable()
     {
-        var settings = await ReadAsync(await _client.GetAsync("/settings"));
+        var settings = await ReadAsync(await _client.GetAsync("/settings", TestContext.Current.CancellationToken));
 
         settings.GetProperty("durable").GetBoolean().Should().BeTrue();
         settings.GetProperty("storeProfile").GetString().Should().Be("durable");
@@ -78,17 +78,17 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         var accepted = await AcceptAsync(type, """{"total":41}""");
         var documentId = accepted.GetProperty("documentId").GetGuid();
 
-        var stored = await ReadAsync(await _client.GetAsync($"/documents/{documentId}"));
+        var stored = await ReadAsync(await _client.GetAsync($"/documents/{documentId}", TestContext.Current.CancellationToken));
         stored.GetProperty("body").GetProperty("total").GetInt64().Should().Be(41,
             "the raw store is the source of truth and it is a different database from the projection");
 
         await DeclareAsync(type);
-        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
         run.GetProperty("projected").GetBoolean().Should().BeTrue(
-            await _client.GetStringAsync($"/formtypes/{type}/projection"));
+            await _client.GetStringAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         run.GetProperty("inserted").GetInt32().Should().Be(1);
 
-        var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records"));
+        var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
         records.GetProperty("rows")[0].GetProperty("total").GetInt64().Should().Be(41,
             "the row came back from MorphDB, having gone in from PostgreSQL");
     }
@@ -104,11 +104,11 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         var key = Guid.NewGuid();
 
         await AcceptAsync(type, """{"total":1}""", key);
-        var first = (await ReadAsync(await _client.GetAsync($"/documents/{key}")))
+        var first = (await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken)))
             .GetProperty("watermark").GetInt64();
 
         await AcceptAsync(type, """{"total":1}""", key);
-        var second = (await ReadAsync(await _client.GetAsync($"/documents/{key}")))
+        var second = (await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken)))
             .GetProperty("watermark").GetInt64();
 
         second.Should().Be(first, "a retry is not a new document, so it takes no new position");
@@ -124,27 +124,27 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         var type = NewFormType();
         await AcceptAsync(type, """{"total":7}""");
         await DeclareAsync(type);
-        await _client.PostAsync($"/formtypes/{type}/projection", null);
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
 
-        (await _client.DeleteAsync($"/formtypes/{type}/declaration")).StatusCode
+        (await _client.DeleteAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.NoContent);
 
         // Asked of MorphDB directly. Nothing the surface answers can see a leftover table: the next
         // projection drops and rebuilds anyway, so an orphan would sit there indefinitely and every
         // response would look correct.
         await using var morphDb = _fixture.CreateMorphDbClient();
-        (await morphDb.Schema.GetTableAsync(type)).Should().BeNull(
+        (await morphDb.Schema.GetTableAsync(type, TestContext.Current.CancellationToken)).Should().BeNull(
             "the table went with the declaration — one left behind is storage nothing points at, " +
             "and nothing else would ever mention it");
 
         await DeclareAsync(type);
-        (await _client.GetAsync($"/formtypes/{type}/records")).StatusCode
+        (await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.Conflict,
                 "the table went with the declaration, so a re-declared form type serves nothing " +
                 "until it is projected again");
 
-        await _client.PostAsync($"/formtypes/{type}/projection", null);
-        var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records"));
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
+        var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
         records.GetProperty("rows")[0].GetProperty("total").GetInt64().Should().Be(7,
             "raw was never touched, so the projection is reconstructible");
     }
@@ -159,7 +159,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         var type = NewFormType();
         await AcceptAsync(type, """{"total":5}""");
         await DeclareAsync(type);
-        await _client.PostAsync($"/formtypes/{type}/projection", null);
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
 
         await using var restarted = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -170,12 +170,12 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         });
         using var client = restarted.CreateClient();
 
-        var status = await ReadAsync(await client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("projected",
             "a restarted host that forgot its declarations would read notProjected while both " +
             "databases still held the projection");
 
-        var records = await ReadAsync(await client.GetAsync($"/formtypes/{type}/records"));
+        var records = await ReadAsync(await client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
         records.GetProperty("rows")[0].GetProperty("total").GetInt64().Should().Be(5);
     }
 

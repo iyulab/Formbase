@@ -285,15 +285,15 @@ Point the host at a MorphDB you already run with `FORMBASE_MORPHDB_URL`. The pro
 
 ```bash
 dotnet build Formbase.slnx
-dotnet test  Formbase.slnx          # default suite — no Docker required
+dotnet test --solution Formbase.slnx   # default suite — no Docker required
 ```
 
 Live tests stand up real backing services via Testcontainers and are excluded from the default build. The two suites need different things, so each has its own switch:
 
 ```bash
-dotnet test Formbase.slnx -p:IncludePostgresLiveTests=true   # Docker only — self-contained
-dotnet test Formbase.slnx -p:IncludeMorphDbLiveTests=true    # Docker only — the fixture seeds its own project
-dotnet test Formbase.slnx -p:IncludeLiveTests=true           # umbrella: both
+dotnet test --solution Formbase.slnx -p:IncludePostgresLiveTests=true   # Docker only — self-contained
+dotnet test --solution Formbase.slnx -p:IncludeMorphDbLiveTests=true    # Docker only — the fixture seeds its own project
+dotnet test --solution Formbase.slnx -p:IncludeLiveTests=true           # umbrella: both
 ```
 
 The durable suite also runs **the HTTP host itself** over both live services — intake, declaration,

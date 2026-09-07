@@ -36,7 +36,7 @@ public sealed class QueryRefusalContractTests : IClassFixture<WebApplicationFact
     {
         var type = await SeedProjectedAsync();
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records?filter=totl:1");
+        var response = await _client.GetAsync($"/formtypes/{type}/records?filter=totl:1", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "a mistyped column name is not a narrower question — it is one the projection has no " +
@@ -49,7 +49,7 @@ public sealed class QueryRefusalContractTests : IClassFixture<WebApplicationFact
     {
         var type = await SeedProjectedAsync();
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records?orderBy=-totl");
+        var response = await _client.GetAsync($"/formtypes/{type}/records?orderBy=-totl", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "silently unordered rows look exactly like ordered ones until the page the caller " +
@@ -65,7 +65,7 @@ public sealed class QueryRefusalContractTests : IClassFixture<WebApplicationFact
     {
         var type = await SeedProjectedAsync();
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records?filter=total:not-a-number");
+        var response = await _client.GetAsync($"/formtypes/{type}/records?filter=total:not-a-number", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
             "the column exists and the comparison is meaningful — no row holds that value, which " +
@@ -82,7 +82,7 @@ public sealed class QueryRefusalContractTests : IClassFixture<WebApplicationFact
     {
         var type = await SeedProjectedAsync();
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records?orderBy=fb_watermark");
+        var response = await _client.GetAsync($"/formtypes/{type}/records?orderBy=fb_watermark", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ReadAsync(response)).GetProperty("type").GetString().Should().Be("/problems/invalid-query");
@@ -99,7 +99,7 @@ public sealed class QueryRefusalContractTests : IClassFixture<WebApplicationFact
     {
         var type = await SeedProjectedAsync();
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records?limit=every-single-one");
+        var response = await _client.GetAsync($"/formtypes/{type}/records?limit=every-single-one", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 

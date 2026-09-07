@@ -16,9 +16,9 @@ public class IntakeServiceTests
         var store = new InMemoryRawStore();
         var intake = new IntakeService(store);
 
-        var id = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""));
+        var id = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var stored = await store.GetAsync(id);
+        var stored = await store.GetAsync(id, TestContext.Current.CancellationToken);
         stored.Should().NotBeNull();
         stored!.Type.Should().Be(Qc);
     }
@@ -30,9 +30,9 @@ public class IntakeServiceTests
         var intake = new IntakeService(store);
 
         // No schema/hint declared anywhere — raw-first intake must still succeed.
-        var id = await intake.AcceptAsync(FormTypeRef.Create("never-seen"), Body("""{"x":1}"""));
+        var id = await intake.AcceptAsync(FormTypeRef.Create("never-seen"), Body("""{"x":1}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        (await store.GetAsync(id)).Should().NotBeNull();
+        (await store.GetAsync(id, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 
     [Fact]
@@ -42,11 +42,11 @@ public class IntakeServiceTests
         var intake = new IntakeService(store);
         var key = DocumentId.New();
 
-        var first = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key);
-        var retry = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key);
+        var first = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
+        var retry = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
 
         retry.Should().Be(first);
-        (await store.HeadAsync(Qc)).Should().Be(new Watermark(1), "retry must not create a second document");
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(new Watermark(1), "retry must not create a second document");
     }
 
     [Fact]

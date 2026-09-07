@@ -36,12 +36,12 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
 
         var response = await DeclareAsync(type, Declaration(version: 1));
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var declaration = (await ReadAsync(response)).GetProperty("declaration");
         declaration.GetProperty("declarationVersion").GetInt32().Should().Be(1);
         declaration.GetProperty("fields")[0].GetProperty("name").GetString().Should().Be("total");
 
-        var readBack = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration"));
+        var readBack = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
         readBack.GetProperty("tableName").GetString().Should().Be(declaration.GetProperty("tableName").GetString());
     }
 
@@ -110,7 +110,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         var type = NewFormType();
         await DeclareAsync(type, Declaration(version: 1));
         await AcceptAsync(type, """{"total":1}""");
-        (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null)))
+        (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)))
             .GetProperty("projected").GetBoolean().Should().BeTrue();
 
         var response = await DeclareAsync(type, Declaration(version: 2, expected: 1, extraField: "amount"));
@@ -129,7 +129,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     {
         var response = await _client.PutAsJsonAsync(
             $"/formtypes/{NewFormType()}/declaration",
-            new { tableName = "t", declarationVersion = 1, fields = Array.Empty<object>() });
+            new { tableName = "t", declarationVersion = 1, fields = Array.Empty<object>() }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await ReadAsync(response)).GetProperty("type").GetString()
@@ -150,7 +150,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
                     new { name = "total", type = "integer" },
                     new { name = "Total", type = "text" },
                 },
-            });
+            }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "one of them would land in the projected column and the other would vanish unreported");
@@ -168,10 +168,10 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         await DeclareAsync(type, Declaration(version: 1));
         await AcceptAsync(type, """{"total":7}""");
 
-        (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null)))
+        (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)))
             .GetProperty("inserted").GetInt32().Should().Be(1);
 
-        var rows = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records")))
+        var rows = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken)))
             .GetProperty("rows");
         rows[0].GetProperty("total").GetInt64().Should().Be(7);
     }

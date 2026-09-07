@@ -35,8 +35,8 @@ public sealed class ReadmeQuickstartTests
         var qc = FormTypeRef.Create("quality-check");
 
         // 1) Accept documents with no schema declared.
-        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1","qty":10}"""));
-        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-2","qty":20}"""));
+        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1","qty":10}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-2","qty":20}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         // 2) Declare structure after the fact, then project.
         hints.Declare(new FormTypeHints(qc, "quality_checks",
@@ -44,11 +44,11 @@ public sealed class ReadmeQuickstartTests
             new FieldHint("lot", ColumnType.Text, Nullable: false),
             new FieldHint("qty", ColumnType.Integer),
         ]));
-        await engine.ProjectAsync(qc);
+        await engine.ProjectAsync(qc, TestContext.Current.CancellationToken);
 
         // 3) Now the records are queryable.
         var result = await engine.QueryAsync(qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["qty"] = 20 }));
+            Filters: new Dictionary<string, object?> { ["qty"] = 20 }), TestContext.Current.CancellationToken);
 
         // The sample's closing comment: "result.Rows -> the L-2 record". A quickstart that runs but
         // returns something other than what it promises is still a false document.
@@ -71,14 +71,14 @@ public sealed class ReadmeQuickstartTests
 
         // "null when nothing is declared yet" — the sample says so in a trailing comment, which a
         // reader will rely on for their own null handling.
-        (await proposer.ProposeAsync(qc)).Should().BeNull("nothing is declared yet");
+        (await proposer.ProposeAsync(qc, TestContext.Current.CancellationToken)).Should().BeNull("nothing is declared yet");
 
         hints.Declare(new FormTypeHints(qc, "quality_checks",
         [
             new FieldHint("lot", ColumnType.Text, Nullable: false),
         ]));
 
-        var schema = await proposer.ProposeAsync(qc);
+        var schema = await proposer.ProposeAsync(qc, TestContext.Current.CancellationToken);
 
         // Every member the sample's comment block names must exist and be readable.
         foreach (var column in schema!.Columns)

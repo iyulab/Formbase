@@ -20,15 +20,15 @@ public class FormbaseDiTests
         var hints = provider.GetRequiredService<InMemoryFieldHintSource>();
 
         var qc = FormTypeRef.Create("qc");
-        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1","qty":1}"""));
+        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1","qty":1}"""), cancellationToken: TestContext.Current.CancellationToken);
         hints.Declare(new FormTypeHints(qc, "qc",
         [
             new FieldHint("lot", ColumnType.Text),
             new FieldHint("qty", ColumnType.Integer),
         ]));
-        await engine.ProjectAsync(qc);
+        await engine.ProjectAsync(qc, TestContext.Current.CancellationToken);
 
-        var result = await engine.QueryAsync(qc, QuerySpec.All);
+        var result = await engine.QueryAsync(qc, QuerySpec.All, TestContext.Current.CancellationToken);
         result.Rows.Should().ContainSingle();
     }
 
@@ -43,9 +43,9 @@ public class FormbaseDiTests
         var engine = provider.GetRequiredService<FormbaseEngine>();
         var rawStore = provider.GetRequiredService<Formbase.Core.Ports.IRawStore>();
 
-        var id = await engine.AcceptAsync(FormTypeRef.Create("qc"), DocumentBody.Parse("""{"x":1}"""));
+        var id = await engine.AcceptAsync(FormTypeRef.Create("qc"), DocumentBody.Parse("""{"x":1}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        (await rawStore.GetAsync(id)).Should().NotBeNull();
+        (await rawStore.GetAsync(id, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 
     [Fact]
@@ -60,12 +60,12 @@ public class FormbaseDiTests
 
         var qc = FormTypeRef.Create("qc");
         hints.Declare(new FormTypeHints(qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
-        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await engine.AcceptAsync(qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var outcome = await supervisor.RunOnceAsync(qc);
+        var outcome = await supervisor.RunOnceAsync(qc, TestContext.Current.CancellationToken);
 
         outcome.Decision.ShouldProject.Should().BeTrue();
-        (await engine.QueryAsync(qc, QuerySpec.All)).Rows.Should().ContainSingle();
+        (await engine.QueryAsync(qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle();
     }
 
     [Fact]

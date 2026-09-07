@@ -6,7 +6,6 @@ using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
 using Formbase.Core.Schema;
 using Formbase.SchemaIntelligence;
-using Xunit.Abstractions;
 
 namespace Formbase.Core.Tests.Live.Llm;
 
@@ -149,7 +148,7 @@ public class LlmProposerQualityMeasurement(ITestOutputHelper output)
         var reportPath = Environment.GetEnvironmentVariable("FORMBASE_LLM_QUALITY_REPORT");
         if (!string.IsNullOrWhiteSpace(reportPath))
         {
-            await File.WriteAllTextAsync(reportPath, report);
+            await File.WriteAllTextAsync(reportPath, report, TestContext.Current.CancellationToken);
         }
 
         // The instrument's own sanity floor, not the graduation gate: a run where nothing ever

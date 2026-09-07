@@ -46,7 +46,7 @@ public sealed class MorphDbEngineLiveTests
         // 1) Accept without any declaration.
         for (var n = 1; n <= 5; n++)
         {
-            await engine.AcceptAsync(qc, DocumentBody.Parse($$"""{"lot":"L-{{n}}","qty":{{n}}}"""));
+            await engine.AcceptAsync(qc, DocumentBody.Parse($$"""{"lot":"L-{{n}}","qty":{{n}}}"""), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         // 2) Records not yet queryable — NotProjected, not empty.
@@ -59,11 +59,11 @@ public sealed class MorphDbEngineLiveTests
             new FieldHint("lot", ColumnType.Text, Nullable: false),
             new FieldHint("qty", ColumnType.Integer, Nullable: true),
         ]));
-        var projection = await engine.ProjectAsync(qc);
+        var projection = await engine.ProjectAsync(qc, TestContext.Current.CancellationToken);
         projection.Inserted.Should().Be(5);
 
         // 4) Now the system's question is answerable, from real MorphDB rows.
-        var all = await engine.QueryAsync(qc, QuerySpec.All);
+        var all = await engine.QueryAsync(qc, QuerySpec.All, TestContext.Current.CancellationToken);
         all.Rows.Should().HaveCount(5);
         all.Stale.Should().BeFalse();
 
@@ -74,11 +74,11 @@ public sealed class MorphDbEngineLiveTests
 
         // 5) An equality filter (int coerced to the bigint column) round-trips through MorphDB.
         var filtered = await engine.QueryAsync(qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["qty"] = 3 }));
+            Filters: new Dictionary<string, object?> { ["qty"] = 3 }), TestContext.Current.CancellationToken);
         filtered.Rows.Should().ContainSingle();
         filtered.Rows[0]["lot"].Should().Be("L-3");
 
         // Cleanup.
-        await store.DropTableAsync(table);
+        await store.DropTableAsync(table, TestContext.Current.CancellationToken);
     }
 }

@@ -41,12 +41,12 @@ public sealed class RestartSurvivalTests
         {
             var first = BuildDurableEngine(firstSource, schema, out var hints);
 
-            await first.AcceptAsync(type, DocumentBody.Parse("""{"serial":"A-1"}"""));
-            await first.AcceptAsync(type, DocumentBody.Parse("""{"serial":"A-2"}"""));
+            await first.AcceptAsync(type, DocumentBody.Parse("""{"serial":"A-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+            await first.AcceptAsync(type, DocumentBody.Parse("""{"serial":"A-2"}"""), cancellationToken: TestContext.Current.CancellationToken);
             await hints.DeclareAsync(new FormTypeHints(type, table,
-                [new FieldHint("serial", ColumnType.Text, Nullable: false)]));
+                [new FieldHint("serial", ColumnType.Text, Nullable: false)]), TestContext.Current.CancellationToken);
 
-            var projected = await first.ProjectAsync(type);
+            var projected = await first.ProjectAsync(type, TestContext.Current.CancellationToken);
             projected.Projected.Should().BeTrue();
         }
 
@@ -56,10 +56,10 @@ public sealed class RestartSurvivalTests
 
         // ProjectionState has three members: NotProjected, Projected, Stale. "Projected" is the
         // current-and-caught-up one; there is no member called Current.
-        var status = await second.GetProjectionStatusAsync(type);
+        var status = await second.GetProjectionStatusAsync(type, TestContext.Current.CancellationToken);
         status.State.Should().Be(ProjectionState.Projected);
 
-        var result = await second.QueryAsync(type, QuerySpec.All);
+        var result = await second.QueryAsync(type, QuerySpec.All, TestContext.Current.CancellationToken);
         result.Stale.Should().BeFalse();
         result.Rows.Should().HaveCount(2);
     }

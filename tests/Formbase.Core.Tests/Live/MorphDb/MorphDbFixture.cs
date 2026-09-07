@@ -46,7 +46,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
 
     public MorphDBClient CreateClient() => new(BaseUrl, new MorphDBClientOptions { ProjectId = ProjectId });
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         if (_network is not null)
         {
@@ -112,7 +112,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
         return project.Id;
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_morphdb is not null)
         {

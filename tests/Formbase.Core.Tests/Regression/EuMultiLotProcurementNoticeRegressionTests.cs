@@ -48,15 +48,15 @@ public sealed class EuMultiLotProcurementNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(NoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(NoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
         foreach (var lot in lots)
         {
-            await engine.AcceptAsync(LotType, DocumentBody.Parse(lot.GetRawText()));
+            await engine.AcceptAsync(LotType, DocumentBody.Parse(lot.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var noticeResult = await engine.ProjectAsync(NoticeType);
-        var lotResult = await engine.ProjectAsync(LotType);
+        var noticeResult = await engine.ProjectAsync(NoticeType, TestContext.Current.CancellationToken);
+        var lotResult = await engine.ProjectAsync(LotType, TestContext.Current.CancellationToken);
 
         noticeResult.Projected.Should().BeTrue();
         noticeResult.Inserted.Should().Be(notices.Count);

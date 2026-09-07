@@ -32,7 +32,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
     [Fact]
     public async Task A_form_type_with_no_declaration_says_so_rather_than_failing()
     {
-        var response = await _client.GetAsync($"/formtypes/{NewFormType()}/declaration");
+        var response = await _client.GetAsync($"/formtypes/{NewFormType()}/declaration", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var problem = await ReadAsync(response);
@@ -54,7 +54,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
             ],
             DeclarationVersion: 7));
 
-        var declaration = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration"));
+        var declaration = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
 
         declaration.GetProperty("formType").GetString().Should().Be(type);
         declaration.GetProperty("tableName").GetString().Should().Be($"{type}_table");
@@ -91,7 +91,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
                     Target: new EntityRef(FormTypeRef.Create("customers"), "name")),
             ]));
 
-        var field = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration")))
+        var field = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)))
             .GetProperty("fields")[0];
 
         field.GetProperty("binding").GetString().Should().Be("reference");
@@ -109,7 +109,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
             [new FieldHint("total", ColumnType.Integer)],
             [new RelationHint("lines", RelationKind.Child, FormTypeRef.Create("orderlines"), "orderId")]));
 
-        var relation = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration")))
+        var relation = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)))
             .GetProperty("relations")[0];
 
         relation.GetProperty("name").GetString().Should().Be("lines");
@@ -140,7 +140,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
     [Fact]
     public async Task The_openapi_document_lists_the_declaration_vocabulary()
     {
-        var schemas = (await ReadAsync(await _client.GetAsync("/openapi/v1.json")))
+        var schemas = (await ReadAsync(await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken)))
             .GetProperty("components").GetProperty("schemas");
 
         Values(schemas, "DeclaredColumnType").Should().BeEquivalentTo(

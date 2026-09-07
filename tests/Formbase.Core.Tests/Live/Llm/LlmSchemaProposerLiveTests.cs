@@ -25,16 +25,16 @@ public class LlmSchemaProposerLiveTests
         var raw = new InMemoryRawStore();
         var intake = new IntakeService(raw);
         await intake.AcceptAsync(Inspections, DocumentBody.Parse(
-            """{"lot":"L-2024-001","qty":120,"passed":true,"inspected_at":"2026-07-01T09:30:00Z","note":"ok"}"""));
+            """{"lot":"L-2024-001","qty":120,"passed":true,"inspected_at":"2026-07-01T09:30:00Z","note":"ok"}"""), cancellationToken: TestContext.Current.CancellationToken);
         await intake.AcceptAsync(Inspections, DocumentBody.Parse(
-            """{"lot":"L-2024-002","qty":80,"passed":false,"inspected_at":"2026-07-02T14:00:00Z"}"""));
+            """{"lot":"L-2024-002","qty":80,"passed":false,"inspected_at":"2026-07-02T14:00:00Z"}"""), cancellationToken: TestContext.Current.CancellationToken);
         await intake.AcceptAsync(Inspections, DocumentBody.Parse(
-            """{"lot":"L-2024-003","qty":null,"passed":true,"inspected_at":"2026-07-03T11:15:00Z","note":"recheck"}"""));
+            """{"lot":"L-2024-003","qty":null,"passed":true,"inspected_at":"2026-07-03T11:15:00Z","note":"recheck"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         using var client = LlmLiveClient.Create();
         var proposer = new LlmSchemaProposer(raw, client);
 
-        var schema = await proposer.ProposeAsync(Inspections);
+        var schema = await proposer.ProposeAsync(Inspections, TestContext.Current.CancellationToken);
 
         // The guards make failure loud: a hallucinated field or malformed reply throws, so
         // reaching here already means the completion survived the strict parse.
@@ -48,11 +48,11 @@ public class LlmSchemaProposerLiveTests
         // And the engine can actually project with it — the whole point of the port.
         var store = new InMemoryProjectionStore();
         var projector = new Projector(raw, proposer, store, new InMemoryProjectionState());
-        var result = await projector.ProjectAsync(Inspections);
+        var result = await projector.ProjectAsync(Inspections, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         (result.Inserted + result.Skipped.Count).Should().Be(3, "every document lands or is accounted for");
         result.Inserted.Should().BeGreaterThan(0, "a schema no document maps into is not a usable proposal");
-        (await store.QueryAsync("inspections", QuerySpec.All)).Should().HaveCount(result.Inserted);
+        (await store.QueryAsync("inspections", QuerySpec.All, TestContext.Current.CancellationToken)).Should().HaveCount(result.Inserted);
     }
 }

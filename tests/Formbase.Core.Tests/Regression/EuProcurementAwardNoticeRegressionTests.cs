@@ -34,10 +34,10 @@ public sealed class EuProcurementAwardNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(AwardNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(AwardNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(AwardNoticeType);
+        var result = await engine.ProjectAsync(AwardNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count,
@@ -64,10 +64,10 @@ public sealed class EuProcurementAwardNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(AwardNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(AwardNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(AwardNoticeType);
+        var result = await engine.ProjectAsync(AwardNoticeType, TestContext.Current.CancellationToken);
 
         explicitNullCount.Should().BeGreaterThan(0, "the fixture must contain at least one notice " +
             "with a missing English buyer-name translation, or this test is not exercising the case " +

@@ -38,8 +38,8 @@ public sealed class EnvironmentEnvelopeTests : IClassFixture<WebApplicationFacto
     {
         var (client, type) = await SeedAsync(environment);
 
-        using var response = await client.GetAsync($"/formtypes/{type}/records?limit=every-single-one");
-        var payload = await response.Content.ReadAsStringAsync();
+        using var response = await client.GetAsync($"/formtypes/{type}/records?limit=every-single-one", TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(400, payload);
         Type(payload).Should().Be("/problems/invalid-request", payload);
@@ -51,8 +51,8 @@ public sealed class EnvironmentEnvelopeTests : IClassFixture<WebApplicationFacto
     {
         var (client, type) = await SeedAsync(environment);
 
-        using var response = await client.GetAsync($"/formtypes/{type}/records?filter=totl:1");
-        var payload = await response.Content.ReadAsStringAsync();
+        using var response = await client.GetAsync($"/formtypes/{type}/records?filter=totl:1", TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(400, payload);
         Type(payload).Should().Be("/problems/invalid-query", payload);
@@ -72,11 +72,11 @@ public sealed class EnvironmentEnvelopeTests : IClassFixture<WebApplicationFacto
 
         using var accepted = await client.PostAsync(
             $"/formtypes/{type}/documents",
-            new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"));
-        accepted.IsSuccessStatusCode.Should().BeTrue(await accepted.Content.ReadAsStringAsync());
+            new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        accepted.IsSuccessStatusCode.Should().BeTrue(await accepted.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
-        using var response = await client.GetAsync($"/formtypes/{type}/records");
-        var payload = await response.Content.ReadAsStringAsync();
+        using var response = await client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(409, payload);
         Type(payload).Should().Be("/problems/not-projected", payload);
@@ -94,8 +94,8 @@ public sealed class EnvironmentEnvelopeTests : IClassFixture<WebApplicationFacto
         using var factory = ForEnvironment(environment);
         using var client = factory.CreateClient();
 
-        using var response = await client.GetAsync($"/formtypes/{NewFormType()}/declaration");
-        var payload = await response.Content.ReadAsStringAsync();
+        using var response = await client.GetAsync($"/formtypes/{NewFormType()}/declaration", TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         payload.Should().NotBeEmpty();
         JsonDocument.Parse(payload).RootElement.TryGetProperty("title", out _).Should().BeTrue(payload);

@@ -48,7 +48,7 @@ public sealed class NamespaceSelectorTests : IClassFixture<WebApplicationFactory
             "answering from this host's own data would hand the caller someone else's rows under " +
             "the name they asked for");
 
-        var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
         problem.GetProperty("type").GetString().Should().Be("/problems/unknown-namespace");
         problem.GetProperty("detail").GetString().Should().Contain("default");
     }

@@ -45,7 +45,7 @@ public class ProjectionTriggerTests
         var h = new Harness();
         await h.Accept("""{"lot":"L-1"}""");
 
-        var decision = await h.Trigger().EvaluateAsync(Qc);
+        var decision = await h.Trigger().EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeFalse("projecting without a proposable schema is a no-op");
         decision.Reason.Should().Be(ProjectionTriggerReason.None);
@@ -57,7 +57,7 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
 
-        var decision = await h.Trigger().EvaluateAsync(Qc);
+        var decision = await h.Trigger().EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeFalse("there is nothing to project yet");
     }
@@ -69,7 +69,7 @@ public class ProjectionTriggerTests
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
 
-        var decision = await h.Trigger().EvaluateAsync(Qc);
+        var decision = await h.Trigger().EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeTrue();
         decision.Reason.Should().Be(ProjectionTriggerReason.FirstProjection);
@@ -81,9 +81,9 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        var decision = await h.Trigger().EvaluateAsync(Qc);
+        var decision = await h.Trigger().EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeFalse();
         decision.Status.State.Should().Be(ProjectionState.Projected);
@@ -95,14 +95,14 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         h.Hints.Declare(new FormTypeHints(Qc, Table,
         [
             new FieldHint("lot", ColumnType.Text, Nullable: false),
             new FieldHint("qty", ColumnType.Integer, Nullable: true),
         ]));
 
-        var decision = await h.Trigger(lagThreshold: 100).EvaluateAsync(Qc);
+        var decision = await h.Trigger(lagThreshold: 100).EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeTrue("a redeclared shape serves wrong-shaped rows until rebuilt");
         decision.Reason.Should().Be(ProjectionTriggerReason.ShapeDrift);
@@ -114,10 +114,10 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         h.DeclareQcHints(table: "qc_v2");
 
-        var decision = await h.Trigger(lagThreshold: 100).EvaluateAsync(Qc);
+        var decision = await h.Trigger(lagThreshold: 100).EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeTrue("the current declaration's table was never built");
         decision.Reason.Should().Be(ProjectionTriggerReason.FirstProjection);
@@ -129,11 +129,11 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         await h.Accept("""{"lot":"L-2"}""");
         await h.Accept("""{"lot":"L-3"}""");
 
-        var decision = await h.Trigger(lagThreshold: 3).EvaluateAsync(Qc);
+        var decision = await h.Trigger(lagThreshold: 3).EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeFalse("2 documents behind is below the threshold of 3");
         decision.Status.State.Should().Be(ProjectionState.Stale, "holding is a policy choice, not ignorance");
@@ -145,11 +145,11 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         await h.Accept("""{"lot":"L-2"}""");
         await h.Accept("""{"lot":"L-3"}""");
 
-        var decision = await h.Trigger(lagThreshold: 2).EvaluateAsync(Qc);
+        var decision = await h.Trigger(lagThreshold: 2).EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeTrue();
         decision.Reason.Should().Be(ProjectionTriggerReason.DataLag);
@@ -161,10 +161,10 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         await h.Accept("""{"lot":"L-2"}""");
 
-        var decision = await h.Trigger().EvaluateAsync(Qc);
+        var decision = await h.Trigger().EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeTrue();
         decision.Reason.Should().Be(ProjectionTriggerReason.DataLag);
@@ -186,12 +186,12 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         // A failed rebuild's fallback left the projection unverified: the trigger must rebuild it,
         // not hold — otherwise a suspect projection is never repaired by the automation.
-        await h.State.MarkUnverifiedAsync(Qc);
+        await h.State.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
-        var decision = await h.Trigger().EvaluateAsync(Qc);
+        var decision = await h.Trigger().EvaluateAsync(Qc, TestContext.Current.CancellationToken);
 
         decision.ShouldProject.Should().BeTrue();
         decision.Reason.Should().Be(ProjectionTriggerReason.Unverified);
@@ -203,14 +203,14 @@ public class ProjectionTriggerTests
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":"L-1"}""");
-        await h.Projector.ProjectAsync(Qc);
-        await h.State.MarkUnverifiedAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        await h.State.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
-        var run = await h.Supervisor().RunOnceAsync(Qc);
+        var run = await h.Supervisor().RunOnceAsync(Qc, TestContext.Current.CancellationToken);
 
         run.Decision.ShouldProject.Should().BeTrue();
         run.Projection.Should().NotBeNull();
-        (await h.State.GetAsync(Qc))!.Verified.Should().BeTrue("a rebuild restores verified integrity");
+        (await h.State.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeTrue("a rebuild restores verified integrity");
     }
 
     [Fact]
@@ -221,8 +221,8 @@ public class ProjectionTriggerTests
         await h.Accept("""{"lot":"L-1"}""");
         var supervisor = h.Supervisor();
 
-        var first = await supervisor.RunOnceAsync(Qc);
-        var second = await supervisor.RunOnceAsync(Qc);
+        var first = await supervisor.RunOnceAsync(Qc, TestContext.Current.CancellationToken);
+        var second = await supervisor.RunOnceAsync(Qc, TestContext.Current.CancellationToken);
 
         first.Decision.ShouldProject.Should().BeTrue();
         first.Projection.Should().NotBeNull();

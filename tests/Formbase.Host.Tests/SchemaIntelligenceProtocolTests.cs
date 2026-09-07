@@ -42,9 +42,9 @@ public class SchemaIntelligenceProtocolTests
 
         var raw = provider.GetRequiredService<IRawStore>();
         await new IntakeService(raw).AcceptAsync(
-            Inspections, DocumentBody.Parse("""{"lot":"L-2024-001","qty":120}"""));
+            Inspections, DocumentBody.Parse("""{"lot":"L-2024-001","qty":120}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Inspections);
+        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Inspections, TestContext.Current.CancellationToken);
 
         // The answer survived the round trip and the strict parse.
         schema.Should().NotBeNull();
@@ -82,8 +82,8 @@ public class SchemaIntelligenceProtocolTests
         // guard against invented properties, which says nothing about where the request went.
         var raw = provider.GetRequiredService<IRawStore>();
         await new IntakeService(raw).AcceptAsync(
-            Inspections, DocumentBody.Parse("""{"lot":"L-1","qty":1}"""));
-        await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Inspections);
+            Inspections, DocumentBody.Parse("""{"lot":"L-1","qty":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Inspections, TestContext.Current.CancellationToken);
 
         stub.Requests.Should().ContainSingle().Which.Path.Should().Be("/v1/chat/completions");
     }

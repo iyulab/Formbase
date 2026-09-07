@@ -40,7 +40,7 @@ public sealed class DeclarationReadBackTests
 
         // Exactly the README's snippet.
         var proposer = provider.GetRequiredService<ISchemaProposer>();
-        var schema = await proposer.ProposeAsync(Qc);
+        var schema = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema.Should().NotBeNull();
         schema!.DeclarationVersion.Should().Be(1);
@@ -61,7 +61,7 @@ public sealed class DeclarationReadBackTests
     {
         await using var provider = BuildProvider();
 
-        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc);
+        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema.Should().BeNull("an empty column list would read as 'declared nothing', which is a different fact");
     }
@@ -78,17 +78,17 @@ public sealed class DeclarationReadBackTests
         var engine = provider.GetRequiredService<FormbaseEngine>();
         hints.Declare(Declaration());
 
-        await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","qty":10}"""));
-        await engine.ProjectAsync(Qc);
-        (await engine.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.Projected);
+        await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","qty":10}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await engine.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        (await engine.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Projected);
 
         // Redeclare only the version — no new document, so no watermark movement.
         hints.Declare(Declaration(version: 2));
 
-        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc);
+        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc, TestContext.Current.CancellationToken);
         schema!.DeclarationVersion.Should().Be(2, "the read-back follows the declaration at once");
 
-        (await engine.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.Stale,
+        (await engine.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Stale,
             "the table still has the old shape, and the status is what says so");
     }
 
@@ -103,8 +103,8 @@ public sealed class DeclarationReadBackTests
         provider.GetRequiredService<InMemoryFieldHintSource>().Declare(Declaration());
         var engine = provider.GetRequiredService<FormbaseEngine>();
 
-        await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","qty":10,"unit_price":12.5}"""));
-        var result = await engine.ProjectAsync(Qc);
+        await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","qty":10,"unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var result = await engine.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.UnresolvedReferences.Should().Equal(["unit_price"]);
     }

@@ -60,9 +60,9 @@ public class RecordQueryTests
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
         await h.Accept("""{"lot":"L-2","qty":20}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
         result.Stale.Should().BeFalse();
         result.Rows.Should().HaveCount(2);
@@ -74,10 +74,10 @@ public class RecordQueryTests
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         var result = await h.Query.QueryAsync(Qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["lot"] = "does-not-exist" }));
+            Filters: new Dictionary<string, object?> { ["lot"] = "does-not-exist" }), TestContext.Current.CancellationToken);
 
         result.Rows.Should().BeEmpty();
         result.Stale.Should().BeFalse();
@@ -89,10 +89,10 @@ public class RecordQueryTests
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         await h.Accept("""{"lot":"L-2","qty":20}"""); // appended after projection
 
-        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
         result.Stale.Should().BeTrue();
         result.Rows.Should().HaveCount(1, "the query still serves the last projected snapshot");
@@ -107,9 +107,9 @@ public class RecordQueryTests
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
         result.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty"]);
     }
@@ -122,7 +122,7 @@ public class RecordQueryTests
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         h.Hints.Declare(new FormTypeHints(Qc, Table,
         [
@@ -131,7 +131,7 @@ public class RecordQueryTests
             new FieldHint("inspector", ColumnType.Text),
         ]));
 
-        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
         result.Stale.Should().BeTrue("the projected table no longer matches the declared shape");
         result.Rows.Should().HaveCount(1, "the last projected snapshot still serves");
@@ -149,7 +149,7 @@ public class RecordQueryTests
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         h.Hints.Declare(new FormTypeHints(Qc, "qc_v2",
         [
@@ -168,7 +168,7 @@ public class RecordQueryTests
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         h.Hints.Declare(new FormTypeHints(Qc, Table,
         [
@@ -176,9 +176,9 @@ public class RecordQueryTests
             new FieldHint("qty", ColumnType.Integer, Nullable: true),
             new FieldHint("inspector", ColumnType.Text),
         ]));
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        var result = await h.Query.QueryAsync(Qc, QuerySpec.All);
+        var result = await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
         result.Stale.Should().BeFalse("re-projection materialized the redeclared shape");
     }
@@ -190,11 +190,11 @@ public class RecordQueryTests
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
         await h.Accept("""{"lot":"L-2","qty":20}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         // Filter value is a C# int; the stored value is a long. Coercion must bridge them.
         var result = await h.Query.QueryAsync(Qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["qty"] = 20 }));
+            Filters: new Dictionary<string, object?> { ["qty"] = 20 }), TestContext.Current.CancellationToken);
 
         result.Rows.Should().ContainSingle();
         result.Rows[0]["lot"].Should().Be("L-2");
@@ -206,7 +206,7 @@ public class RecordQueryTests
         var h = new Harness(queryStore: new ThrowingQueryStore());
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc); // projects via the real store; State records it
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken); // projects via the real store; State records it
 
         var act = () => h.Query.QueryAsync(Qc, QuerySpec.All);
 
@@ -220,9 +220,9 @@ public class RecordQueryTests
         var h = new Harness(queryStore: spy);
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        await h.Query.QueryAsync(Qc, QuerySpec.All);
+        await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
         // Paging is only well-defined over a total order. Callers rarely supply one, so the read path
         // appends the unique, monotonic watermark as the last key — asserted on the spec handed to the
@@ -239,9 +239,9 @@ public class RecordQueryTests
         var h = new Harness(queryStore: spy);
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":10}""");
-        await h.Projector.ProjectAsync(Qc);
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        await h.Query.QueryAsync(Qc, new QuerySpec(OrderBy: [new OrderKey("lot", Descending: true)]));
+        await h.Query.QueryAsync(Qc, new QuerySpec(OrderBy: [new OrderKey("lot", Descending: true)]), TestContext.Current.CancellationToken);
 
         // The caller's intent leads; the tie-break only breaks ties beneath it. Ordering the watermark
         // first would silently override what the caller asked for.

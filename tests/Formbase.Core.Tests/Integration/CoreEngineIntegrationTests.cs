@@ -64,20 +64,20 @@ public class CoreEngineIntegrationTests
         // 3) The human's question still works: every document is retrievable.
         foreach (var id in ids)
         {
-            (await e.Core.GetDocumentAsync(id)).Should().NotBeNull();
+            (await e.Core.GetDocumentAsync(id, TestContext.Current.CancellationToken)).Should().NotBeNull();
         }
-        (await e.Core.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.NotProjected);
+        (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.NotProjected);
 
         // 4) Declare structure after the fact and project.
         e.DeclareHints();
-        var projection = await e.Core.ProjectAsync(Qc);
+        var projection = await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         projection.Inserted.Should().Be(10);
 
         // 5) Now the system's question is answerable.
-        var result = await e.Core.QueryAsync(Qc, QuerySpec.All);
+        var result = await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
         result.Rows.Should().HaveCount(10);
         result.Stale.Should().BeFalse();
-        (await e.Core.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.Projected);
+        (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Projected);
     }
 
     [Fact]
@@ -89,25 +89,25 @@ public class CoreEngineIntegrationTests
         {
             await e.Accept(n);
         }
-        await e.Core.ProjectAsync(Qc);
+        await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         // Append more → projection becomes stale.
         for (var n = 11; n <= 15; n++)
         {
             await e.Accept(n);
         }
-        (await e.Core.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.Stale);
-        (await e.Core.QueryAsync(Qc, QuerySpec.All)).Stale.Should().BeTrue();
+        (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Stale);
+        (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Stale.Should().BeTrue();
 
         // Re-project → current again, all 15 rows, no duplicates.
-        var second = await e.Core.ProjectAsync(Qc);
+        var second = await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         second.Inserted.Should().Be(15);
-        (await e.Core.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.Projected);
+        (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Projected);
 
         // Re-projecting unchanged raw is idempotent.
-        var third = await e.Core.ProjectAsync(Qc);
+        var third = await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         third.Inserted.Should().Be(15);
-        (await e.Core.QueryAsync(Qc, QuerySpec.All)).Rows.Should().HaveCount(15);
+        (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().HaveCount(15);
     }
 
     [Fact]
@@ -116,23 +116,23 @@ public class CoreEngineIntegrationTests
         var e = new Engine();
         e.DeclareHints();
         var id = await e.Accept(1);
-        await e.Core.ProjectAsync(Qc);
+        await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         // Backing store goes down.
         e.Store.IsAvailable = false;
 
         // Intake keeps working (raw store is formbase-owned)...
-        var duringOutage = await e.Core.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-2","qty":2}"""));
+        var duringOutage = await e.Core.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-2","qty":2}"""), cancellationToken: TestContext.Current.CancellationToken);
         duringOutage.Should().NotBe(default(DocumentId));
         // ...document reads keep working...
-        (await e.Core.GetDocumentAsync(id)).Should().NotBeNull();
+        (await e.Core.GetDocumentAsync(id, TestContext.Current.CancellationToken)).Should().NotBeNull();
         // ...only record queries fail, and distinctly.
         await FluentActions.Awaiting(() => e.Core.QueryAsync(Qc, QuerySpec.All))
             .Should().ThrowAsync<ProjectionUnavailableException>();
 
         // Recovery needs no re-projection — the table survived.
         e.Store.IsAvailable = true;
-        (await e.Core.QueryAsync(Qc, QuerySpec.All)).Rows.Should().HaveCount(1);
+        (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().HaveCount(1);
     }
 
     [Fact]
@@ -141,8 +141,8 @@ public class CoreEngineIntegrationTests
         var e = new Engine();
         e.DeclareHints();
         var id = await e.Accept(1);
-        await e.Core.ProjectAsync(Qc);
-        (await e.Core.QueryAsync(Qc, QuerySpec.All)).Rows.Should().HaveCount(1);
+        await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().HaveCount(1);
 
         // A rebuild that fails after the drop (store unavailable mid-projection).
         e.Store.IsAvailable = false;
@@ -150,13 +150,13 @@ public class CoreEngineIntegrationTests
         e.Store.IsAvailable = true;
 
         // The record path honestly reports NotProjected (not empty, not stale data)...
-        (await e.Core.GetProjectionStatusAsync(Qc)).State.Should().Be(ProjectionState.NotProjected);
+        (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.NotProjected);
         await FluentActions.Awaiting(() => e.Core.QueryAsync(Qc, QuerySpec.All)).Should().ThrowAsync<NotProjectedException>();
         // ...while the raw source of truth is untouched.
-        (await e.Core.GetDocumentAsync(id)).Should().NotBeNull();
+        (await e.Core.GetDocumentAsync(id, TestContext.Current.CancellationToken)).Should().NotBeNull();
 
         // And a fresh projection fully recovers.
-        (await e.Core.ProjectAsync(Qc)).Inserted.Should().Be(1);
-        (await e.Core.QueryAsync(Qc, QuerySpec.All)).Rows.Should().HaveCount(1);
+        (await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken)).Inserted.Should().Be(1);
+        (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().HaveCount(1);
     }
 }

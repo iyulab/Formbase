@@ -28,7 +28,7 @@ public abstract class SchemaProposerContract
     {
         var proposer = await CreateWithNoKnowledgeAsync();
 
-        (await proposer.ProposeAsync(Qc)).Should().BeNull(
+        (await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull(
             "the port contract makes 'cannot propose' a null, which turns projection into a no-op");
     }
 
@@ -37,7 +37,7 @@ public abstract class SchemaProposerContract
     {
         var proposer = await CreateKnowingLotAndQtyAsync();
 
-        var schema = await proposer.ProposeAsync(Qc);
+        var schema = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema.Should().NotBeNull();
         schema!.TableName.Should().Be("qc");
@@ -51,8 +51,8 @@ public abstract class SchemaProposerContract
     {
         var proposer = await CreateKnowingLotAndQtyAsync();
 
-        var first = await proposer.ProposeAsync(Qc);
-        var second = await proposer.ProposeAsync(Qc);
+        var first = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+        var second = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         first!.Fingerprint().Should().Be(second!.Fingerprint(),
             "two proposals from unchanged knowledge must materialize the same table");

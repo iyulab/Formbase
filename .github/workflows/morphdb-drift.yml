@@ -38,4 +38,4 @@ jobs:
       - name: Test (MorphDB live contract, latest image)
         env:
           FORMBASE_MORPHDB_IMAGE: ghcr.io/iyulab/morphdb:latest
-        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true
+        run: dotnet test --solution Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true

@@ -45,12 +45,12 @@ public class ProjectionUnverifiedTests
     {
         var state = new InMemoryProjectionState();
 
-        await state.MarkUnverifiedAsync(Qc); // no stamp yet — must be a no-op, not an insert
-        (await state.GetAsync(Qc)).Should().BeNull();
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken); // no stamp yet — must be a no-op, not an insert
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
 
-        await state.SetProjectedAsync(Qc, Stamp);
-        await state.MarkUnverifiedAsync(Qc);
-        (await state.GetAsync(Qc))!.Verified.Should().BeFalse();
+        await state.SetProjectedAsync(Qc, Stamp, TestContext.Current.CancellationToken);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeFalse();
     }
 
     [Fact]
@@ -61,13 +61,13 @@ public class ProjectionUnverifiedTests
         hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
         var store = new InMemoryProjectionStore();
         var state = new InMemoryProjectionState();
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var proposer = new HintSchemaProposer(hints);
-        await new Projector(raw, proposer, store, state).ProjectAsync(Qc);
+        await new Projector(raw, proposer, store, state).ProjectAsync(Qc, TestContext.Current.CancellationToken);
         // Simulate the aftermath of a failed rebuild whose cleanup also failed: the table is now
         // suspect, and the state was marked unverified rather than cleared.
-        await state.MarkUnverifiedAsync(Qc);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
         var query = new RecordQuery(raw, proposer, store, state);
         var act = () => query.QueryAsync(Qc, QuerySpec.All);
@@ -82,7 +82,7 @@ public class ProjectionUnverifiedTests
         var raw = new InMemoryRawStore();
         var hints = new InMemoryFieldHintSource();
         hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""));
+        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         // A state whose ClearAsync fails but whose MarkUnverifiedAsync works — the exact split the
         // tri-state exists for.

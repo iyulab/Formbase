@@ -38,10 +38,10 @@ public sealed class EuPublicTransportServicesResultNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(PublicTransportResultNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(PublicTransportResultNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(PublicTransportResultNoticeType);
+        var result = await engine.ProjectAsync(PublicTransportResultNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -62,10 +62,10 @@ public sealed class EuPublicTransportServicesResultNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(PublicTransportResultNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(PublicTransportResultNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(PublicTransportResultNoticeType);
+        var result = await engine.ProjectAsync(PublicTransportResultNoticeType, TestContext.Current.CancellationToken);
 
         withoutValueKey.Should().BeGreaterThan(0, "the fixture must contain at least one notice with " +
             "no totalValue key, or this test is not exercising the case it claims to");

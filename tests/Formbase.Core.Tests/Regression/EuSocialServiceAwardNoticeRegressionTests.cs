@@ -39,10 +39,10 @@ public sealed class EuSocialServiceAwardNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(SocialServiceAwardNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(SocialServiceAwardNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(SocialServiceAwardNoticeType);
+        var result = await engine.ProjectAsync(SocialServiceAwardNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -69,10 +69,10 @@ public sealed class EuSocialServiceAwardNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(SocialServiceAwardNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(SocialServiceAwardNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(SocialServiceAwardNoticeType);
+        var result = await engine.ProjectAsync(SocialServiceAwardNoticeType, TestContext.Current.CancellationToken);
 
         result.AbsentFieldCounts.Should().NotContainKey("totalValue",
             "no notice in this real sample lacks the key, so the absent count for it must not " +

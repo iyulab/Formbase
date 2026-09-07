@@ -29,13 +29,13 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
     {
         var type = await ProjectedFormTypeAsync();
 
-        var deleted = await _client.DeleteAsync($"/formtypes/{type}/declaration");
+        var deleted = await _client.DeleteAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken);
         deleted.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        (await _client.GetAsync($"/formtypes/{type}/declaration")).StatusCode
+        (await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.NotFound);
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("notProjected",
             "the table is gone, so the state has to agree — a form type reading notProjected while " +
             "its rows sat there would be the unsafe outcome, not this one");
@@ -53,9 +53,9 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
         var type = await ProjectedFormTypeAsync();
         var before = await RowsAsync(type);
 
-        await _client.DeleteAsync($"/formtypes/{type}/declaration");
+        await _client.DeleteAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken);
         await DeclareAsync(type);
-        (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null)))
+        (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)))
             .GetProperty("projected").GetBoolean().Should().BeTrue();
 
         (await RowsAsync(type)).Should().BeEquivalentTo(before,
@@ -71,12 +71,12 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
     public async Task Documents_accepted_while_undeclared_are_included_when_it_is_declared_again()
     {
         var type = await ProjectedFormTypeAsync();
-        await _client.DeleteAsync($"/formtypes/{type}/declaration");
+        await _client.DeleteAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken);
 
         await AcceptAsync(type, """{"total":99}""");
 
         await DeclareAsync(type);
-        await _client.PostAsync($"/formtypes/{type}/projection", null);
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
 
         (await RowsAsync(type)).Should().Contain(99L,
             "intake never required a declaration, so those documents were in raw all along");
@@ -93,15 +93,15 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
     public async Task A_form_type_declared_again_serves_nothing_until_it_is_projected()
     {
         var type = await ProjectedFormTypeAsync();
-        await _client.DeleteAsync($"/formtypes/{type}/declaration");
+        await _client.DeleteAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken);
 
         await DeclareAsync(type);
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("notProjected",
             "a surviving stamp would make the same declaration read as already built");
 
-        var query = await _client.GetAsync($"/formtypes/{type}/records");
+        var query = await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken);
         query.StatusCode.Should().Be(HttpStatusCode.Conflict,
             "rows from the previous projection would otherwise be served as if a run had produced " +
             "them — the table was supposed to go with the declaration");
@@ -110,7 +110,7 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
     [Fact]
     public async Task Removing_a_declaration_that_is_not_there_says_so()
     {
-        var response = await _client.DeleteAsync($"/formtypes/{NewFormType()}/declaration");
+        var response = await _client.DeleteAsync($"/formtypes/{NewFormType()}/declaration", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ReadAsync(response)).GetProperty("type").GetString()
@@ -127,9 +127,9 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
         var type = NewFormType();
         await DeclareAsync(type);
 
-        (await _client.DeleteAsync($"/formtypes/{type}/declaration")).StatusCode
+        (await _client.DeleteAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.NoContent);
-        (await _client.GetAsync($"/formtypes/{type}/declaration")).StatusCode
+        (await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.NotFound);
     }
 

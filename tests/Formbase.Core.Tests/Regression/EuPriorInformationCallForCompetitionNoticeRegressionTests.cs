@@ -36,10 +36,10 @@ public sealed class EuPriorInformationCallForCompetitionNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(PinCfcNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(PinCfcNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(PinCfcNoticeType);
+        var result = await engine.ProjectAsync(PinCfcNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -68,10 +68,10 @@ public sealed class EuPriorInformationCallForCompetitionNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(PinCfcNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(PinCfcNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(PinCfcNoticeType);
+        var result = await engine.ProjectAsync(PinCfcNoticeType, TestContext.Current.CancellationToken);
 
         result.AbsentFieldCounts.Should().ContainKey("totalValue");
         result.AbsentFieldCounts["totalValue"].Should().Be(missingKeyCount);

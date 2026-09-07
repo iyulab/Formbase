@@ -34,7 +34,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         var type = NewFormType();
         await AcceptAsync(type, """{"total":1}""");
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records");
+        var response = await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict,
             "'nothing has been built' and 'nothing matched' call for different remedies, and an " +
@@ -48,7 +48,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
     {
         var type = await SeedProjectedAsync(("total", 1), ("total", 2));
 
-        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records"));
+        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
 
         result.GetProperty("stale").GetBoolean().Should().BeFalse();
         var rows = result.GetProperty("rows").EnumerateArray().ToList();
@@ -69,7 +69,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
     {
         var type = await SeedProjectedAsync(("total", 1), ("total", 2), ("total", 3));
 
-        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?filter=total:2"));
+        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?filter=total:2", TestContext.Current.CancellationToken));
 
         var rows = result.GetProperty("rows").EnumerateArray().ToList();
         rows.Should().HaveCount(1, "a filter that failed to compare would return every row instead");
@@ -82,7 +82,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         var type = await SeedProjectedAsync(("total", 1), ("total", 2), ("total", 3));
 
         var result = await ReadAsync(
-            await _client.GetAsync($"/formtypes/{type}/records?orderBy=-total&limit=2"));
+            await _client.GetAsync($"/formtypes/{type}/records?orderBy=-total&limit=2", TestContext.Current.CancellationToken));
 
         result.GetProperty("rows").EnumerateArray()
             .Select(r => r.GetProperty("total").GetInt64())
@@ -95,7 +95,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         var type = await SeedProjectedAsync(("total", 1));
         await AcceptAsync(type, """{"total":2}""");
 
-        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records"));
+        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
 
         result.GetProperty("stale").GetBoolean().Should().BeTrue(
             "the caller can decide whether an answer from an earlier point in the stream is good " +
@@ -109,7 +109,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
     {
         var type = await SeedProjectedAsync(("total", 1));
 
-        var response = await _client.GetAsync($"/formtypes/{type}/records?filter=total");
+        var response = await _client.GetAsync($"/formtypes/{type}/records?filter=total", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "a dropped filter widens the result — the caller would read rows they asked to exclude");
@@ -124,10 +124,10 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         Declare(type, ("label", ColumnType.Text));
         await AcceptAsync(type, """{"label":"09:30"}""");
         await AcceptAsync(type, """{"label":"10:30"}""");
-        await _client.PostAsync($"/formtypes/{type}/projection", null);
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
 
         var result = await ReadAsync(
-            await _client.GetAsync($"/formtypes/{type}/records?filter=label:09:30"));
+            await _client.GetAsync($"/formtypes/{type}/records?filter=label:09:30", TestContext.Current.CancellationToken));
 
         result.GetProperty("rows").GetArrayLength().Should().Be(1,
             "only the first colon separates column from value, so a value may hold more");

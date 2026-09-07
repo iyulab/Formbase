@@ -31,7 +31,7 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
         var response = await PostAsync("orders", """{"customer":"ada","total":42}""");
 
         response.StatusCode.Should().Be(HttpStatusCode.Created,
-            await response.Content.ReadAsStringAsync());
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         var accepted = await ReadAsync(response);
         accepted.GetProperty("documentId").GetGuid().Should().NotBeEmpty();
@@ -48,7 +48,7 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
         var accepted = await ReadAsync(await PostAsync("orders", Body));
         var id = accepted.GetProperty("documentId").GetGuid();
 
-        var read = await _client.GetAsync($"/documents/{id}");
+        var read = await _client.GetAsync($"/documents/{id}", TestContext.Current.CancellationToken);
         read.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var document = await ReadAsync(read);
@@ -77,7 +77,7 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
 
         // The key is the identity, so the document is addressable by it directly — that equality is
         // what makes a retry safe to issue without first asking what the previous attempt produced.
-        var stored = await ReadAsync(await _client.GetAsync($"/documents/{key}"));
+        var stored = await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken));
         stored.GetProperty("documentId").GetGuid().Should().Be(key);
         stored.GetProperty("body").GetRawText().Should().Be("""{"total":1}""");
     }
@@ -92,11 +92,11 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
     {
         var key = Guid.NewGuid();
         await PostAsync("orders", """{"total":1}""", key);
-        var before = (await ReadAsync(await _client.GetAsync($"/documents/{key}")))
+        var before = (await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken)))
             .GetProperty("watermark").GetInt64();
 
         await PostAsync("orders", """{"total":1}""", key);
-        var after = (await ReadAsync(await _client.GetAsync($"/documents/{key}")))
+        var after = (await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken)))
             .GetProperty("watermark").GetInt64();
 
         after.Should().Be(before, "a retry is not a new document, so it takes no new position");
@@ -125,7 +125,7 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
         };
         request.Headers.Add("Idempotency-Key", "not-a-uuid");
 
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "a key the store cannot use as an identity would stop deduplicating without saying so");
@@ -145,7 +145,7 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
     [Fact]
     public async Task An_unknown_document_is_a_404_rather_than_an_empty_reply()
     {
-        var response = await _client.GetAsync($"/documents/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/documents/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ReadAsync(response)).GetProperty("status").GetInt32().Should().Be(404);
@@ -158,7 +158,7 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
     [Fact]
     public async Task The_openapi_document_describes_both_operations()
     {
-        var response = await _client.GetAsync("/openapi/v1.json");
+        var response = await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var paths = (await ReadAsync(response)).GetProperty("paths");

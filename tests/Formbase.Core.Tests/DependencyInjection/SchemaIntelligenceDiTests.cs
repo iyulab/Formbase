@@ -124,13 +124,13 @@ public class SchemaIntelligenceDiTests
         await using var provider = BuildWithIntelligence();
         DeclareQcReport(provider.GetRequiredService<InMemoryFieldHintSource>());
         var engine = provider.GetRequiredService<FormbaseEngine>();
-        await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""));
+        await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await engine.ProjectAsync(Qc);
+        var result = await engine.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.UnresolvedReferences.Should().Equal(["grade_now"],
             "a declared reference is unresolved whether or not intelligence proposed the rest");
-        var row = (await engine.QueryAsync(Qc, QuerySpec.All)).Rows.Should().ContainSingle().Subject;
+        var row = (await engine.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle().Subject;
         row["lot_label"].Should().Be("L-1", "the declared source key still reads the raw key it named");
         row["grade_now"].Should().BeNull();
         row["note"].Should().Be("n", "and the inferred column carries data like any other");
@@ -165,13 +165,13 @@ public class SchemaIntelligenceDiTests
         provider.GetRequiredService<InMemoryFieldHintSource>().Declare(inspection);
         var engine = provider.GetRequiredService<FormbaseEngine>();
         await engine.AcceptAsync(inspection.Type, DocumentBody.Parse(
-            """{"lot_no":"L-1","qty":7,"unit":"EA","approved_price":12.5,"remark":"r"}"""));
+            """{"lot_no":"L-1","qty":7,"unit":"EA","approved_price":12.5,"remark":"r"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = await engine.ProjectAsync(inspection.Type);
+        var result = await engine.ProjectAsync(inspection.Type, TestContext.Current.CancellationToken);
 
         result.UnresolvedReferences.Should().Equal(["unit"],
             "the adapter maps a soft binding to Reference, which this stage does not resolve");
-        var row = (await engine.QueryAsync(inspection.Type, QuerySpec.All)).Rows.Should().ContainSingle().Subject;
+        var row = (await engine.QueryAsync(inspection.Type, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle().Subject;
         row.Keys.Should().Equal(["lot_no", "qty", "unit", "approved_price", "remark"],
             "the declared columns keep their generated order and none is proposed twice");
         row["lot_no"].Should().Be("L-1");
@@ -185,9 +185,9 @@ public class SchemaIntelligenceDiTests
     {
         await using var provider = BuildWithIntelligence();
         await provider.GetRequiredService<FormbaseEngine>()
-            .AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""));
+            .AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
-        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc);
+        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.TableName.Should().Be("qc", "with nothing declared the form-type name is the convention");
         schema.Columns.Select(c => c.Name).Should().Equal("lot", "grade", "note");
@@ -198,13 +198,13 @@ public class SchemaIntelligenceDiTests
     {
         var services = new ServiceCollection();
         var raw = new InMemoryRawStore();
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""));
+        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""), cancellationToken: TestContext.Current.CancellationToken);
         services.AddSingleton<IRawStore>(raw);
         services.AddSingleton<IChatClient>(new ScriptedChatClient(ModelProposal));
         services.AddLlmSchemaProposer();
         await using var provider = services.BuildServiceProvider();
 
-        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc);
+        var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Columns.Select(c => c.Name).Should().Equal("lot", "grade", "note");
     }

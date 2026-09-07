@@ -4,6 +4,7 @@
     <RootNamespace>Formbase.Host.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
     <!-- Test method naming / style relaxations, matching the core suite. -->
     <NoWarn>$(NoWarn);CA1707;CA1711;CA1822;CA1859</NoWarn>
   </PropertyGroup>
@@ -14,9 +15,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
-    <PackageReference Include="coverlet.collector" />
     <PackageReference Include="AwesomeAssertions" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Npgsql" />

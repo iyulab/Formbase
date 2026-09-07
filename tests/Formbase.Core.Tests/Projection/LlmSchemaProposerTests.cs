@@ -66,7 +66,7 @@ public class LlmSchemaProposerTests
             },"required":["name"]}
             """));
 
-        var schema = await proposer.ProposeAsync(Qc);
+        var schema = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Columns.Select(c => c.Type).Should().Equal(
             ColumnType.Text, ColumnType.Integer, ColumnType.Decimal, ColumnType.Boolean,
@@ -117,7 +117,7 @@ public class LlmSchemaProposerTests
         var proposer = new LlmSchemaProposer(raw, new ScriptedChatClient(
             """{"type":"object","title":"drop table students","properties":{"lot":{"type":"string"}},"required":[]}"""));
 
-        var schema = await proposer.ProposeAsync(Qc);
+        var schema = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.TableName.Should().Be("qc");
     }
@@ -129,7 +129,7 @@ public class LlmSchemaProposerTests
         var proposer = new LlmSchemaProposer(raw, new ScriptedChatClient(
             """{"type":"object","properties":{"qty":{"type":"integer"},"lot":{"type":"string"}},"required":["lot"]}"""));
 
-        var schema = await proposer.ProposeAsync(Qc);
+        var schema = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Columns.Select(c => c.Name).Should().Equal(["lot", "qty"],
             "a reordered but otherwise identical proposal must not change the schema fingerprint");
@@ -144,12 +144,12 @@ public class LlmSchemaProposerTests
         var store = new InMemoryProjectionStore();
         var projector = new Projector(raw, proposer, store, new InMemoryProjectionState());
 
-        var result = await projector.ProjectAsync(Qc);
+        var result = await projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue("swapping the schema intelligence must never touch the core");
         result.Inserted.Should().Be(2);
         result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 });
-        (await store.QueryAsync("qc", QuerySpec.All)).Should().HaveCount(2);
+        (await store.QueryAsync("qc", QuerySpec.All, TestContext.Current.CancellationToken)).Should().HaveCount(2);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public class LlmSchemaProposerTests
         var client = new ScriptedChatClient(
             """{"type":"object","properties":{"lot":{"type":"string"}},"required":["lot"]}""");
 
-        await new LlmSchemaProposer(raw, client).ProposeAsync(Qc);
+        await new LlmSchemaProposer(raw, client).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         var prompt = client.LastMessages.Should().ContainSingle(m => m.Role == ChatRole.User).Subject.Text;
         prompt.Should().Contain($"Sample documents ({LlmSchemaProposer.SampleLimit})");

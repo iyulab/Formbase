@@ -71,7 +71,7 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
             "is a promise nobody is keeping — add the case that provokes it, or stop documenting it");
 
         using var response = await Provokers[type](this);
-        var payload = await response.Content.ReadAsStringAsync();
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(status, payload);
         JsonDocument.Parse(payload).RootElement.GetProperty("type").GetString()
@@ -89,8 +89,8 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
     {
         using var response = await _client.PostAsync(
             $"/formtypes/{NewFormType()}/documents",
-            new StringContent("this is not json", Encoding.UTF8, "application/json"));
-        var payload = await response.Content.ReadAsStringAsync();
+            new StringContent("this is not json", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(400, payload);
         JsonDocument.Parse(payload).RootElement.GetProperty("type").GetString()

@@ -14,7 +14,7 @@ public class HintSchemaProposerTests
     {
         var proposer = new HintSchemaProposer(new InMemoryFieldHintSource());
 
-        (await proposer.ProposeAsync(Qc)).Should().BeNull();
+        (await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class HintSchemaProposerTests
         var hints = new InMemoryFieldHintSource();
         hints.Declare(new FormTypeHints(Qc, "qc", []));
 
-        (await new HintSchemaProposer(hints).ProposeAsync(Qc)).Should().BeNull();
+        (await new HintSchemaProposer(hints).ProposeAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class HintSchemaProposerTests
             new FieldHint("qty", ColumnType.Integer),
         ]));
 
-        var schema = await new HintSchemaProposer(hints).ProposeAsync(Qc);
+        var schema = await new HintSchemaProposer(hints).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema.Should().NotBeNull();
         schema!.TableName.Should().Be("qc_requests");

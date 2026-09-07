@@ -26,7 +26,7 @@ public class DeclaredFirstSchemaProposerTests
     [Fact]
     public async Task Nothing_declared_and_nothing_inferred_proposes_nothing()
     {
-        var schema = await Compose(null, null).ProposeAsync(Qc);
+        var schema = await Compose(null, null).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema.Should().BeNull("composing two silences must stay a no-op projection, not a bare table");
     }
@@ -36,7 +36,7 @@ public class DeclaredFirstSchemaProposerTests
     {
         var declared = new TableSchema("qc", [new ColumnDef("lot", ColumnType.Text)]);
 
-        var schema = await Compose(declared, null).ProposeAsync(Qc);
+        var schema = await Compose(declared, null).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema.Should().BeSameAs(declared);
     }
@@ -47,7 +47,7 @@ public class DeclaredFirstSchemaProposerTests
         var declared = new TableSchema("qc", [new ColumnDef("qty", ColumnType.Decimal, Nullable: false)]);
         var inferred = new TableSchema("qc", [new ColumnDef("qty", ColumnType.Integer)]);
 
-        var schema = await Compose(declared, inferred).ProposeAsync(Qc);
+        var schema = await Compose(declared, inferred).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Columns.Should().ContainSingle().Which
             .Should().BeEquivalentTo(declared.Columns[0], "values cannot outvote a stated type");
@@ -62,7 +62,7 @@ public class DeclaredFirstSchemaProposerTests
         var inferred = new TableSchema("qc",
             [new ColumnDef("lot", ColumnType.Text), new ColumnDef("lot_no", ColumnType.Text)]);
 
-        var schema = await Compose(declared, inferred).ProposeAsync(Qc);
+        var schema = await Compose(declared, inferred).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Columns.Select(c => c.Name).Should().Equal(["lot"],
             "one table cannot hold two columns of the same name, and the raw key is already claimed");
@@ -75,7 +75,7 @@ public class DeclaredFirstSchemaProposerTests
         var inferred = new TableSchema("qc",
             [new ColumnDef("note", ColumnType.Text), new ColumnDef("lot", ColumnType.Text)]);
 
-        var schema = await Compose(declared, inferred).ProposeAsync(Qc);
+        var schema = await Compose(declared, inferred).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Columns.Select(c => c.Name).Should().Equal(["lot", "note"],
             "column order is part of the shape's identity, so it must not depend on what was inferred");
@@ -88,7 +88,7 @@ public class DeclaredFirstSchemaProposerTests
         var inferred = new TableSchema("qc", [new ColumnDef("lot", ColumnType.Text)],
             [new RelationDef("defect", RelationKind.Reference, "defects", "code")]);
 
-        var schema = await Compose(declared, inferred).ProposeAsync(Qc);
+        var schema = await Compose(declared, inferred).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Relations.Should().ContainSingle(r => r.Name == "defect",
             "dropping what the other side found is the same silence this composition exists to remove");
@@ -102,7 +102,7 @@ public class DeclaredFirstSchemaProposerTests
         var inferred = new TableSchema("qc", [new ColumnDef("lot", ColumnType.Text)],
             [new RelationDef("defect", RelationKind.Child, "guesses", "guessed_key")]);
 
-        var schema = await Compose(declared, inferred).ProposeAsync(Qc);
+        var schema = await Compose(declared, inferred).ProposeAsync(Qc, TestContext.Current.CancellationToken);
 
         schema!.Relations.Should().ContainSingle().Which.TargetTable.Should().Be("defects");
     }

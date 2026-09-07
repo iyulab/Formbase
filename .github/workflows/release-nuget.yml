@@ -84,7 +84,7 @@ jobs:
 
       # Gate the release on a green suite — never publish an unverified package.
       - name: Test
-        run: dotnet test Formbase.slnx --no-build --configuration Release --verbosity normal
+        run: dotnet test --solution Formbase.slnx --no-build --configuration Release --verbosity normal
 
       # Packs every IsPackable project in the solution: Formbase.Core, Formbase.MorphDb,
       # Formbase.Postgres, Formbase.DependencyInjection, Formbase.SchemaIntelligence.

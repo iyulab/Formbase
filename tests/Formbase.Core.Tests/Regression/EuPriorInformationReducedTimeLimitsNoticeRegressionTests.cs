@@ -38,10 +38,10 @@ public sealed class EuPriorInformationReducedTimeLimitsNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(ReducedTimeLimitsNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(ReducedTimeLimitsNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(ReducedTimeLimitsNoticeType);
+        var result = await engine.ProjectAsync(ReducedTimeLimitsNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -67,10 +67,10 @@ public sealed class EuPriorInformationReducedTimeLimitsNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(ReducedTimeLimitsNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(ReducedTimeLimitsNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(ReducedTimeLimitsNoticeType);
+        var result = await engine.ProjectAsync(ReducedTimeLimitsNoticeType, TestContext.Current.CancellationToken);
 
         result.AbsentFieldCounts.Should().ContainKey("totalValue");
         result.AbsentFieldCounts["totalValue"].Should().Be(missingKeyCount);

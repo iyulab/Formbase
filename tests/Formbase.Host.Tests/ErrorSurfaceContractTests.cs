@@ -51,8 +51,8 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
             Content = new StringContent("""{"total":1}""", Encoding.UTF8, "application/json")
         };
 
-        var response = await _client.SendAsync(request);
-        var payload = await response.Content.ReadAsStringAsync();
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(400, payload);
 
@@ -76,8 +76,8 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
             Content = new StringContent("""{"total":1}""", Encoding.UTF8, "application/json")
         };
 
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
-        (await response.Content.ReadAsStringAsync()).Should().NotBeEmpty();
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotBeEmpty();
     }
 }

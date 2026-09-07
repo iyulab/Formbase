@@ -46,7 +46,7 @@ public sealed class PostgresMixedColdStartRaceTests
 
         await act.Should().NotThrowAsync();
 
-        (await state.GetAsync(type))?.Watermark.Should().Be(new Watermark(1));
-        (await hints.GetHintsAsync(type)).Should().NotBeNull();
+        (await state.GetAsync(type, TestContext.Current.CancellationToken))?.Watermark.Should().Be(new Watermark(1));
+        (await hints.GetHintsAsync(type, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 }

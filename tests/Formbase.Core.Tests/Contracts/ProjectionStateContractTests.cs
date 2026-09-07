@@ -24,7 +24,7 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        (await state.GetAsync(Qc)).Should().BeNull();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -32,9 +32,9 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "quality_checks", fingerprint: "fp-abc"));
+        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "quality_checks", fingerprint: "fp-abc"), TestContext.Current.CancellationToken);
 
-        var stamp = await state.GetAsync(Qc);
+        var stamp = await state.GetAsync(Qc, TestContext.Current.CancellationToken);
         stamp.Should().Be(new ProjectionStamp(new Watermark(7), "quality_checks", "fp-abc"));
     }
 
@@ -42,11 +42,11 @@ public abstract class ProjectionStateContractTests
     public async Task Clear_forgets_the_stamp()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7));
+        await state.SetProjectedAsync(Qc, Stamp(7), TestContext.Current.CancellationToken);
 
-        await state.ClearAsync(Qc);
+        await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
 
-        (await state.GetAsync(Qc)).Should().BeNull();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -64,11 +64,11 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7, fingerprint: "fp-old"));
-        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"));
+        await state.SetProjectedAsync(Qc, Stamp(7, fingerprint: "fp-old"), TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"), TestContext.Current.CancellationToken);
 
         // A second row for the same form type would make the read ambiguous; the write is an upsert.
-        (await state.GetAsync(Qc)).Should().Be(Stamp(9, fingerprint: "fp-new"));
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(9, fingerprint: "fp-new"));
     }
 
     [Fact]
@@ -76,24 +76,24 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "qc"));
-        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"));
+        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "qc"), TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), TestContext.Current.CancellationToken);
 
-        (await state.GetAsync(Qc)).Should().Be(Stamp(7, tableName: "qc"));
-        (await state.GetAsync(Work)).Should().Be(Stamp(3, tableName: "work"));
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(7, tableName: "qc"));
+        (await state.GetAsync(Work, TestContext.Current.CancellationToken)).Should().Be(Stamp(3, tableName: "work"));
     }
 
     [Fact]
     public async Task Clearing_one_form_type_leaves_the_others_alone()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7));
-        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"));
+        await state.SetProjectedAsync(Qc, Stamp(7), TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), TestContext.Current.CancellationToken);
 
-        await state.ClearAsync(Qc);
+        await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
 
-        (await state.GetAsync(Qc)).Should().BeNull();
-        (await state.GetAsync(Work)).Should().Be(Stamp(3, tableName: "work"));
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await state.GetAsync(Work, TestContext.Current.CancellationToken)).Should().Be(Stamp(3, tableName: "work"));
     }
 
     [Fact]
@@ -101,20 +101,20 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7));
+        await state.SetProjectedAsync(Qc, Stamp(7), TestContext.Current.CancellationToken);
 
-        (await state.GetAsync(Qc))!.Verified.Should().BeTrue("a completed projection records verified integrity");
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeTrue("a completed projection records verified integrity");
     }
 
     [Fact]
     public async Task Marking_unverified_flips_the_stamp_without_forgetting_it()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7));
+        await state.SetProjectedAsync(Qc, Stamp(7), TestContext.Current.CancellationToken);
 
-        await state.MarkUnverifiedAsync(Qc);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
-        var stamp = await state.GetAsync(Qc);
+        var stamp = await state.GetAsync(Qc, TestContext.Current.CancellationToken);
         stamp!.Verified.Should().BeFalse();
         stamp.Watermark.Should().Be(new Watermark(7), "the mark changes integrity, not what was recorded");
     }
@@ -124,20 +124,20 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.MarkUnverifiedAsync(Qc);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
-        (await state.GetAsync(Qc)).Should().BeNull("nothing was projected, so there is nothing to distrust");
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull("nothing was projected, so there is nothing to distrust");
     }
 
     [Fact]
     public async Task Re_setting_a_projection_restores_verified()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7));
-        await state.MarkUnverifiedAsync(Qc);
+        await state.SetProjectedAsync(Qc, Stamp(7), TestContext.Current.CancellationToken);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
-        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"));
+        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"), TestContext.Current.CancellationToken);
 
-        (await state.GetAsync(Qc))!.Verified.Should().BeTrue("a fresh projection clears the unverified mark");
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeTrue("a fresh projection clears the unverified mark");
     }
 }

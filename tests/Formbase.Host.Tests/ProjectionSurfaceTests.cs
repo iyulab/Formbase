@@ -32,12 +32,12 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         var type = NewFormType();
         await AcceptAsync(type, """{"total":1}""");
 
-        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
         run.GetProperty("projected").GetBoolean().Should().BeFalse(
             "documents are accepted without a declaration, so having none is a state, not an error");
         run.GetProperty("inserted").GetInt32().Should().Be(0);
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("notProjected");
         status.GetProperty("rawHead").GetInt64().Should().BeGreaterThan(0,
             "the raw stream advanced even though nothing was projected — that gap is exactly what " +
@@ -52,11 +52,11 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":2}""");
 
-        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
         run.GetProperty("projected").GetBoolean().Should().BeTrue();
         run.GetProperty("inserted").GetInt32().Should().Be(2);
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("projected");
         status.GetProperty("projectedWatermark").GetInt64().Should()
             .Be(status.GetProperty("rawHead").GetInt64(),
@@ -69,11 +69,11 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         var type = NewFormType();
         await DeclareAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
-        await _client.PostAsync($"/formtypes/{type}/projection", null);
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
 
         await AcceptAsync(type, """{"total":2}""");
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("stale");
         status.GetProperty("rawHead").GetInt64().Should()
             .BeGreaterThan(status.GetProperty("projectedWatermark").GetInt64());
@@ -91,8 +91,8 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":2}""");
 
-        var first = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
-        var second = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
+        var first = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
+        var second = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
 
         second.GetProperty("inserted").GetInt32().Should().Be(first.GetProperty("inserted").GetInt32(),
             "a second run rebuilds from the same raw stream — rows accumulating across runs would " +
@@ -112,7 +112,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         await DeclareAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
 
         status.GetProperty("lastRun").ValueKind.Should().Be(JsonValueKind.Null,
             "this host has not projected this form type since it started, so it has no observation " +
@@ -132,11 +132,11 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":[1,2]}"""); // an array where the declaration expects a scalar
 
-        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null));
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
         run.GetProperty("skipped").GetArrayLength().Should().Be(1,
             "the structurally mismatched document must be skipped, not silently coerced");
 
-        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection"));
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         var lastRun = status.GetProperty("lastRun");
         lastRun.GetProperty("insertedCount").GetInt32().Should().Be(1);
         lastRun.GetProperty("skippedCount").GetInt32().Should().Be(1,
@@ -168,7 +168,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     [Fact]
     public async Task The_openapi_document_lists_exactly_the_four_states()
     {
-        var document = await ReadAsync(await _client.GetAsync("/openapi/v1.json"));
+        var document = await ReadAsync(await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken));
 
         var states = document.GetProperty("components").GetProperty("schemas")
             .GetProperty("ProjectionStateWire").GetProperty("enum")

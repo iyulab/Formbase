@@ -47,7 +47,7 @@ jobs:
       # Live tests are excluded from compilation unless their opt-in flag is set, so the default
       # suite needs no Docker host or service containers. The Postgres suite runs in its own job.
       - name: Test
-        run: dotnet test Formbase.slnx --no-build --configuration Release --verbosity normal
+        run: dotnet test --solution Formbase.slnx --no-build --configuration Release --verbosity normal
 
   postgres-live:
     name: Postgres Live Contract
@@ -81,7 +81,7 @@ jobs:
 
       # The flag changes which files compile, so restore/build/test all carry it.
       - name: Test (Postgres live contract)
-        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludePostgresLiveTests=true
+        run: dotnet test --solution Formbase.slnx --configuration Release --verbosity normal -p:IncludePostgresLiveTests=true
 
   morphdb-live:
     name: MorphDB Live Contract
@@ -113,7 +113,7 @@ jobs:
       # This is the job that catches a MorphDB.Client release drifting from the server: the client
       # comes from nuget.org and the server from ghcr, so nothing here pins them to each other.
       - name: Test (MorphDB live contract)
-        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true
+        run: dotnet test --solution Formbase.slnx --configuration Release --verbosity normal -p:IncludeMorphDbLiveTests=true
 
   durable-live:
     name: Durable Live Contract
@@ -150,11 +150,13 @@ jobs:
       # and running them all here would repeat what the two jobs above already cover -- twice the
       # container minutes for no extra signal.
       #
-      # The filter is the weak point: a run that matches nothing still exits zero, so renaming the
-      # namespace would leave this job green and covering nothing. If you move these tests, move this
-      # line with them.
+      # The filter names the namespace exactly, and the run is scoped to the one project that holds
+      # it: the test platform fails a module in which zero tests ran (exit code 8), so a renamed
+      # namespace turns this job red instead of leaving it green and covering nothing -- and the
+      # host-test project, which never matches, must not be in the run. If you move these tests,
+      # move this line with them.
       - name: Test (durable live contract)
-        run: dotnet test Formbase.slnx --configuration Release --verbosity normal -p:IncludeLiveTests=true --filter "FullyQualifiedName~Live.Durable"
+        run: dotnet test --project tests/Formbase.Core.Tests/Formbase.Core.Tests.csproj --configuration Release --verbosity normal -p:IncludeLiveTests=true --filter-namespace Formbase.Core.Tests.Live.Durable
 
   compose-durability:
     name: Compose Durability

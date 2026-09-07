@@ -43,13 +43,13 @@ public sealed class MorphDbReferenceNullabilityLiveTests
             new ColumnDef("lot", ColumnType.Text, Nullable: false),
             new ColumnDef("unit_price", ColumnType.Decimal, Nullable: false,
                 Binding: FieldBinding.Reference, BindingTarget: "items.price"),
-        ]));
+        ]), TestContext.Current.CancellationToken);
 
         try
         {
             // Positive control first: the same table takes the same row when the box is filled.
             // Without this, a refusal proves nothing — a typo in the table name refuses too.
-            var accepted = await store.BulkInsertAsync(table, [Row("L-0", 12.5m)]);
+            var accepted = await store.BulkInsertAsync(table, [Row("L-0", 12.5m)], TestContext.Current.CancellationToken);
             accepted.Should().Be(1);
 
             // Now the row the engine emits for an unresolved reference: the box left empty.
@@ -62,12 +62,12 @@ public sealed class MorphDbReferenceNullabilityLiveTests
             refusal.Which.Message.Should().ContainAny("null", "NULL");
 
             // The refusal was total, not partial: the accepted row is the only one there.
-            var rows = await store.QueryAsync(table, QuerySpec.All);
+            var rows = await store.QueryAsync(table, QuerySpec.All, TestContext.Current.CancellationToken);
             rows.Should().ContainSingle();
         }
         finally
         {
-            await store.DropTableAsync(table);
+            await store.DropTableAsync(table, TestContext.Current.CancellationToken);
         }
     }
 
@@ -114,25 +114,25 @@ public sealed class MorphDbReferenceNullabilityLiveTests
 
         for (var n = 1; n <= 3; n++)
         {
-            await engine.AcceptAsync(qc, DocumentBody.Parse($$"""{"lot":"L-{{n}}","unit_price":12.5}"""));
+            await engine.AcceptAsync(qc, DocumentBody.Parse($$"""{"lot":"L-{{n}}","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         try
         {
-            var projection = await engine.ProjectAsync(qc);
+            var projection = await engine.ProjectAsync(qc, TestContext.Current.CancellationToken);
 
             projection.Inserted.Should().Be(3,
                 "the relaxation is what lets a required reference declaration land at all");
             projection.UnresolvedReferences.Should().Equal(["unit_price"]);
 
-            var all = await engine.QueryAsync(qc, QuerySpec.All);
+            var all = await engine.QueryAsync(qc, QuerySpec.All, TestContext.Current.CancellationToken);
             all.Rows.Should().HaveCount(3);
             all.Rows.Should().OnlyContain(r => r["unit_price"] == null,
                 "the document's own copy is not the referenced value, so the box stays empty");
         }
         finally
         {
-            await store.DropTableAsync(table);
+            await store.DropTableAsync(table, TestContext.Current.CancellationToken);
         }
     }
 }

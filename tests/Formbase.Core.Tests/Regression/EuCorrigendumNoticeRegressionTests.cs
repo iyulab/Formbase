@@ -35,10 +35,10 @@ public sealed class EuCorrigendumNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(CorrigendumNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(CorrigendumNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(CorrigendumNoticeType);
+        var result = await engine.ProjectAsync(CorrigendumNoticeType, TestContext.Current.CancellationToken);
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count);
@@ -64,10 +64,10 @@ public sealed class EuCorrigendumNoticeRegressionTests
 
         foreach (var notice in notices)
         {
-            await engine.AcceptAsync(CorrigendumNoticeType, DocumentBody.Parse(notice.GetRawText()));
+            await engine.AcceptAsync(CorrigendumNoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var result = await engine.ProjectAsync(CorrigendumNoticeType);
+        var result = await engine.ProjectAsync(CorrigendumNoticeType, TestContext.Current.CancellationToken);
 
         result.AbsentFieldCounts.Should().ContainKey("totalValue");
         result.AbsentFieldCounts["totalValue"].Should().Be(missingKeyCount);
