@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Formbase.Core.Errors;
 using Formbase.SchemaIntelligence;
 using Microsoft.AspNetCore.Diagnostics;
@@ -76,7 +77,7 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 e.StatusCode,
                 "invalid-request",
                 "The request could not be read",
-                e.Message),
+                DescribeUnreadableRequest(e)),
 
             // A form type is a validated primitive, so a blank one is refused where it is
             // constructed rather than at the edge — which means every route taking one from the
@@ -99,6 +100,46 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
 
         await problem.ExecuteAsync(httpContext).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// Says what the caller got wrong without saying what the host is made of.
+    /// <para>
+    /// The framework's own message for a body it could not bind names the parameter and its CLR
+    /// type — "Failed to read parameter \"DeclarationRequest request\" from the request body as
+    /// JSON." A caller reading that learns nothing they can act on (which field? what is allowed?)
+    /// and learns one thing they should never have been told: an internal type name, on a public
+    /// surface, in a repository whose language policy scrubs exactly that from published text.
+    /// </para>
+    /// <para>
+    /// The deserializer already knows the useful half. A <see cref="JsonException"/> carries the
+    /// JSON <c>Path</c> of the value it choked on, which is the answer to "which field" in the
+    /// caller's own vocabulary — the document they sent, not the type we bound it to. Its own
+    /// message is not reused: it names the CLR target type too.
+    /// </para>
+    /// </summary>
+    private static string DescribeUnreadableRequest(BadHttpRequestException exception)
+    {
+        if (exception.InnerException is not JsonException json)
+        {
+            // No JSON underneath: a body too large, headers too long, a malformed chunked stream.
+            // The framework's message for those describes the request rather than the host, so it
+            // is the caller's answer already.
+            return exception.Message;
+        }
+
+        // "$" is the document itself, not a field inside it -- a truncated or malformed body stops
+        // at the root. Reporting it as "the value at '$'" would send the caller looking for a field
+        // that is not what went wrong.
+        var at = string.IsNullOrEmpty(json.Path) || json.Path == "$" ? null : json.Path;
+        var position = json.LineNumber is null
+            ? null
+            : $" (line {json.LineNumber + 1}, position {json.BytePositionInLine + 1})";
+
+        return at is null
+            ? $"The request body is not valid JSON{position}."
+            : $"The request body could not be read: the value at '{at}' is not one this field accepts{position}. "
+              + "See docs/API.md for the shape of this request.";
     }
 
     /// <summary>

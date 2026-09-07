@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **A body the host cannot read now says what is wrong with it.** Binding failures were answered
+  with the framework's own message, which named the parameter and the type it was binding to
+  (`Failed to read parameter "…Request request" …`) and nothing a caller could act on. The response
+  now names the offending value by its JSON path in the document they sent — `the value at
+  '$.fields[0].type' is not one this field accepts (line 1, position 79)` — and points at the page
+  listing what is accepted. A body that never parsed says so instead of pointing at a field. No
+  problem response carries an internal identifier, and a test sweeps the wrong-request surface to
+  keep it that way.
 - **The MorphDB the bundle and the docs name is now `0.11.1`.** The compatibility pair is unchanged
   — `Formbase.* 0.9.0` still pairs with MorphDB `0.11.x` — but the concrete tag the install
   instructions, the compose bundle, and the live-suite fixtures reach for had stayed at `0.11.0`
