@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- **Liveness and readiness probes, and a healthcheck that can actually run them.** The host is
+  published as an image and answered nothing an orchestrator asks; its own compose bundle waited on
+  postgres and on MorphDB's `/health`, then started this service blind. `/health/live` says the
+  process is serving, `/health/ready` says the stores it was composed with answered — separated
+  because a deployment that conflates them restarts this host in response to an outage somewhere
+  else. Readiness performs a read rather than re-stating configuration, so it cannot be green
+  through an outage. The runtime image carries neither curl nor wget, so the container healthcheck
+  asks the host with the host: `dotnet Formbase.Host.dll --health-check` reads `/health/ready` over
+  the loopback port and exits 0 or 1. None of these are in `docs/API.md` — that page is the
+  consumer's surface, and these are the operator's.
+
 ### Changed
 
 - **A body the host cannot read now says what is wrong with it.** Binding failures were answered

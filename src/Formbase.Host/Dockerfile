@@ -34,10 +34,11 @@ USER $APP_UID
 
 EXPOSE 8080
 
-# No HEALTHCHECK: this image has neither curl nor wget, and the host has no self-probe mode to
-# invoke instead. A healthcheck that assumes a package the base image does not carry reports
-# unhealthy for a reason that has nothing to do with the service. Readiness is observed from
-# outside, over the published port, until the host grows a probe of its own.
+# The image has neither curl nor wget, so the healthcheck asks the host with the host: the same
+# binary, invoked with a flag, reads /health/ready over the loopback port and exits 0 or 1. A
+# healthcheck that assumed a package the base image does not carry would report unhealthy for a
+# reason that has nothing to do with the service.
+HEALTHCHECK --interval=10s --timeout=5s --retries=12 --start-period=20s     CMD ["dotnet", "Formbase.Host.dll", "--health-check"]
 
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production

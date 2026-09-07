@@ -3,8 +3,18 @@ using System.Text.Json.Serialization;
 using Formbase.Host.Composition;
 using Formbase.Host.Endpoints;
 using Formbase.Host.ErrorHandling;
+using Formbase.Host.Health;
 using Formbase.Host.Namespaces;
 using Formbase.Host.Projection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+
+// Before anything is composed: invoked with the probe flag this process is a client of a host
+// already running in the same container, not a second host. Composing stores here would open a
+// second connection pool on every healthcheck tick.
+if (args.Contains(SelfProbe.Flag, StringComparer.Ordinal))
+{
+    return await SelfProbe.RunAsync("/health/ready");
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +34,15 @@ builder.Services.AddSingleton<LastProjectionRunTracker>();
 builder.Services.AddSchemaIntelligence(builder.Configuration);
 
 // Errors answer as RFC 9457 problem details, including the ones no endpoint catches.
+// A probe is what an orchestrator asks before it sends traffic, and this host is published as an
+// image (release-docker.yml) while answering nothing of the kind -- its own compose bundle waits on
+// postgres and on the sibling's /health and then starts this service blind. Liveness and readiness
+// are separated because they mean different things to whoever is waiting: the process being up is
+// not the same as its stores answering, and conflating them makes a restart the response to an
+// outage in something else.
+builder.Services.AddHealthChecks()
+    .AddCheck<StoresHealthCheck>("stores", tags: ["ready"]);
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
 
@@ -56,6 +75,12 @@ app.UseStatusCodePages();
 // from this host's own data.
 app.UseMiddleware<NamespaceSelectorMiddleware>();
 
+// Not documented in docs/API.md and deliberately: that page is the consumer's surface, and these
+// are the operator's. They carry no data and take no input.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+app.MapHealthChecks("/health");
+
 app.MapOpenApi();
 app.MapDocumentEndpoints();
 app.MapProjectionEndpoints();
@@ -64,6 +89,8 @@ app.MapDeclarationEndpoints();
 app.MapSettingsEndpoints();
 
 app.Run();
+
+return 0;
 
 /// <summary>
 /// Named so the test host can reference the entry point. Top-level statements otherwise compile to
