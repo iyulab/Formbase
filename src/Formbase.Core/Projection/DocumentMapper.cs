@@ -92,6 +92,16 @@ internal static class DocumentMapper
         switch (column.Type)
         {
             case ColumnType.Text:
+                // A scalar has a text form; an array or an object does not. Writing the structure's
+                // JSON into a text column produced a plausible value ('["ITA"]') where every other
+                // column type records a skip for the same input -- a wrong value is never found, an
+                // empty one can be filled. A caller who wants the structure kept declares Jsonb.
+                if (field.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
+                {
+                    reason = $"field '{column.Name}' is a JSON {(field.ValueKind == JsonValueKind.Array ? "array" : "object")}, not a scalar, and cannot be projected as Text; declare the column as Jsonb to keep the structure";
+                    return false;
+                }
+
                 value = field.ValueKind == JsonValueKind.String ? field.GetString() : field.GetRawText();
                 return true;
 

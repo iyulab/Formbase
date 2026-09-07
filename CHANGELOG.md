@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **An array or object arriving for a `Text` column was projected as its JSON string, skip-free.**
+  Every other column type records a `ProjectionSkip` when the value does not fit the declaration;
+  `Text` alone turned a structural mismatch into a plausible value — `'["ITA"]'` in a column
+  declared to hold a country — with nothing reported, so a query for the declared value found
+  nothing and no one learned why. A structured value in a `Text` column is now a skip like any
+  other mismatch, with a reason that names the column and points at the declaration that keeps
+  the structure (`Jsonb`). Scalars are unchanged: a number or a boolean still lands as its text
+  form. **Wire change**: rows that used to carry such a JSON string are skipped instead; a
+  re-projection after upgrading reports them in `skipped`, and the projection status's last-run
+  counts show the difference.
+
 ## 0.9.0
 
 Pairs with MorphDB `0.11.x`, up from `0.9.x` — the `MorphDB.Client` dependency had already moved

@@ -231,7 +231,7 @@ append advisory lock은 성능을 포기하고 정합성을 샀다(`PostgresRawS
 |---|---|---|
 | 어댑터에 정책성 로직 | `MorphDbProjectionStore` — 오프셋을 페이지로 조립 | 개선 대상. 로드맵 등재 |
 | ~~문서-코드 불일치~~ | ~~`README.md` "Six ports"~~ | ✅ 해소 (2026-07-20) |
-| **다중값(배열) 값이 Text 컬럼에 JSON 문자열로 채워진다** | `DocumentMapper` — `ColumnType.Text` 분기가 문자열이 아닌 값에 `GetRawText()`를 돌려준다. `Timestamp`·`Decimal`은 같은 입력에 `ProjectionSkip`을 남기는데 `Text`만 그럴듯한 값으로 메운다 — "틀린 값은 발견되지 않는다"의 사례 | 개선 대상. 로드맵 등재 |
+| ~~다중값(배열) 값이 Text 컬럼에 JSON 문자열로 채워진다~~ | ~~`DocumentMapper` — `ColumnType.Text` 분기가 배열·객체에 `GetRawText()`를 돌려준다~~ | ✅ **해소** — 배열·객체는 다른 타입과 같이 `ProjectionSkip`(사유가 `Jsonb` 선언을 가리킨다). 스칼라는 그대로 |
 | **부재와 null을 구별하지 못함** | `DocumentMapper.cs` — `!present`와 `JsonValueKind.Null`이 같은 분기. 투영에서 *"칸을 비웠다"*와 *"그 칸이 없었다"*가 같은 `null`이 된다 | 🟡 **부분 해소** — `ProjectionResult.AbsentFieldCounts`가 투영 단위 집계로 드러낸다. **행 단위 구별은 미해소**(C1 잔존) |
 | ~~선언 어휘가 평탄함~~ | ~~`FieldHint`~~ | ✅ **선언 층 해소** (0.6.0 — `RelationHint`(Child·Reference) + `FieldBinding` + `SourceKey` + `DeclarationVersion`). **의미 실행은 아래 두 행으로 이월** |
 | ~~`FieldBinding.Reference`가 그때 값을 돌려준다~~ | ~~`Projector` 경로~~ | ✅ **해소** (`f5e8164`) — 미해결 참조 칼럼은 이제 **비워서** 투영하고 `ProjectionResult.UnresolvedReferences`로 이름을 보고한다(문서의 값을 대신 채우지 않는다 — §1 「미결정을 그럴듯한 기본값으로 메우지 않는다」 정렬) |

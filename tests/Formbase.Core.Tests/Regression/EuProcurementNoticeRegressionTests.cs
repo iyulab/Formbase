@@ -16,10 +16,13 @@ namespace Formbase.Core.Tests.Regression;
 /// are what an actual publisher sent, not what this project expects to receive. In particular,
 /// <c>totalValueCurrency</c> arrives as a single-element array in the source, because the format
 /// treats a monetary value's currency as inherently repeatable even when only one is present — a
-/// shape this engine has no declaration for. Declaring it as a scalar column is what every consumer
-/// of this kind of data has to do today, and this test pins what that declaration actually produces,
-/// so a future change to <c>DocumentMapper</c>'s handling of arrays in scalar columns shows up here
-/// as an intentional, reviewed diff rather than a silent behavior change.
+/// shape that fits <c>Jsonb</c> and no scalar type. Declaring it as <c>Text</c> is the mistake a
+/// consumer of this kind of data makes first, and these tests pin what that declaration produces —
+/// a skip per affected notice, with a reason naming the declaration that fits — so a change to
+/// <c>DocumentMapper</c>'s handling of arrays in scalar columns shows up here as an intentional,
+/// reviewed diff rather than a silent behavior change. (Until 0.9.0 the same declaration produced
+/// no skip and a JSON string in the column; that behaviour was pinned here too, and its test was
+/// rewritten when the mapper changed, as its own comment asked.)
 /// </para>
 /// <para>
 /// Offline by design: the fixture is a committed, fixed snapshot (<c>Fixtures/eu-procurement-cn-standard-sample.json</c>),
@@ -32,9 +35,9 @@ public sealed class EuProcurementNoticeRegressionTests
     private static readonly FormTypeRef NoticeType = FormTypeRef.Create("eu_procurement_notice");
 
     [Fact]
-    public async Task All_fixture_documents_are_accepted_and_projected()
+    public async Task All_fixture_documents_are_accepted_and_projected_under_a_declaration_that_fits_their_shape()
     {
-        var provider = BuildProvider();
+        var provider = BuildProvider(currencyColumnType: ColumnType.Jsonb);
         var engine = provider.GetRequiredService<FormbaseEngine>();
         var notices = LoadFixture();
 
@@ -47,47 +50,46 @@ public sealed class EuProcurementNoticeRegressionTests
 
         result.Projected.Should().BeTrue();
         result.Inserted.Should().Be(notices.Count,
-            "every fixture document maps into the declared columns — none of them trips a skip, " +
-            "which is itself worth knowing given the shape mismatch below");
+            "with the array-valued currency declared as Jsonb, every fixture document maps into the declared columns");
         result.Skipped.Should().BeEmpty();
     }
 
     /// <summary>
     /// The regression this fixture exists to catch: a real source document's currency is
-    /// structurally an array, and today's engine has no declaration for "this column holds a
-    /// multi-valued scalar" — the closest available type is <c>Text</c>. This asserts what that
-    /// mismatch currently produces: the array survives as a JSON-encoded string, not the bare
-    /// currency code a reader of the column would expect.
-    /// <para>
-    /// If this assertion starts failing, that is good news, not a broken test: it means the mapper's
-    /// handling of arrays into scalar columns changed. Read the diff, decide whether it is the
-    /// declared-multiplicity axis this fixture was written to eventually measure (see ROADMAP.md
-    /// P1), and update this test to describe the new behavior rather than reverting it back to green.
-    /// </para>
+    /// structurally an array, and the closest scalar declaration a first-time consumer reaches for
+    /// is <c>Text</c>. This asserts what that mismatch produces: exactly the notices that carry a
+    /// currency are skipped, each with a reason naming the column and the declaration that fits
+    /// (<c>Jsonb</c>); the rest project. Until 0.9.0 the same declaration produced no skip and the
+    /// literal text <c>["EUR"]</c> in the column — a plausible value where every other column type
+    /// recorded a skip — and this test pinned that; it was rewritten when the mapper changed, as
+    /// its own comment asked.
     /// </summary>
     [Fact]
-    public async Task Todays_engine_silently_json_encodes_the_arrayvalued_currency_into_the_text_column()
+    public async Task A_text_declaration_for_the_arrayvalued_currency_skips_exactly_those_notices_and_names_the_fix()
     {
         var provider = BuildProvider();
         var engine = provider.GetRequiredService<FormbaseEngine>();
         var notices = LoadFixture();
+        var withArrayCurrency = notices.Count(n =>
+            n.TryGetProperty("totalValueCurrency", out var v) && v.ValueKind == JsonValueKind.Array);
 
         foreach (var notice in notices)
         {
             await engine.AcceptAsync(NoticeType, DocumentBody.Parse(notice.GetRawText()), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        await engine.ProjectAsync(NoticeType, TestContext.Current.CancellationToken);
+        var result = await engine.ProjectAsync(NoticeType, TestContext.Current.CancellationToken);
         var rows = (await engine.QueryAsync(NoticeType, QuerySpec.All, TestContext.Current.CancellationToken)).Rows;
 
-        var withCurrency = rows.Where(r => r["totalValueCurrency"] is not null).ToList();
-        withCurrency.Should().NotBeEmpty("the fixture must contain at least one notice with a currency, " +
-            "or this test is not exercising the mismatch it claims to");
-
-        withCurrency.All(r => LooksLikeAJsonArrayLiteral(r["totalValueCurrency"])).Should().BeTrue(
-            "a one-element array like [\"EUR\"] is stored as the literal text '[\"EUR\"]', not the " +
-            "currency code alone — a multi-valued field is silently stringified into a text "
-            + "column, which is a known and documented gap");
+        withArrayCurrency.Should().BeGreaterThan(0, "the fixture must contain at least one notice with an " +
+            "array-valued currency, or this test is not exercising the mismatch it claims to");
+        result.Skipped.Should().HaveCount(withArrayCurrency,
+            "a structured value in a Text column is a skip, like the same value in any other scalar column");
+        result.Skipped.Should().AllSatisfy(skip =>
+            skip.Reason.Should().Contain("totalValueCurrency").And.Contain("Jsonb"));
+        result.Inserted.Should().Be(notices.Count - withArrayCurrency);
+        rows.Should().OnlyContain(r => r["totalValueCurrency"] == null || !LooksLikeAJsonArrayLiteral(r["totalValueCurrency"]),
+            "no row carries an array's JSON as a text value any more");
     }
 
     /// <summary>

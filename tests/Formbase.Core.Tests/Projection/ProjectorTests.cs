@@ -147,6 +147,44 @@ public class ProjectorTests
     }
 
     [Fact]
+    public async Task A_structured_value_in_a_text_column_is_a_skip_not_a_json_string()
+    {
+        // Text was the one target that filled a structural mismatch with a plausible value: an array
+        // arriving for a text column landed as its JSON ('["L-1"]'), skip-free, where Integer or
+        // Timestamp would have recorded a skip. Same input, same answer now -- and the reason points
+        // at the declaration that keeps the structure.
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":["L-1","L-2"],"qty":1}""");
+        await h.Accept("""{"lot":{"id":"L-3"},"qty":2}""");
+        await h.Accept("""{"lot":"L-4","qty":3}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Inserted.Should().Be(1);
+        result.Skipped.Should().HaveCount(2);
+        result.Skipped.Should().AllSatisfy(s => s.Reason.Should().Contain("lot").And.Contain("Jsonb"));
+        var rows = await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken);
+        rows.Should().ContainSingle().Which["lot"].Should().Be("L-4");
+    }
+
+    [Fact]
+    public async Task A_scalar_that_is_not_a_string_still_projects_into_a_text_column()
+    {
+        // The structural rule is about arrays and objects only. A number or a boolean has one text
+        // form and keeps landing as it did.
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":42,"qty":1}""");
+        await h.Accept("""{"lot":true,"qty":2}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Inserted.Should().Be(2);
+        result.Skipped.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task A_type_mismatch_skips_the_document()
     {
         var h = new Harness();
