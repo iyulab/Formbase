@@ -80,8 +80,8 @@ A published image is the same artifact, built from the same Dockerfile the relea
 before it pushes — pull it instead of building from source:
 
 ```bash
-docker pull ghcr.io/iyulab/formbase:0.8.0
-docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.8.0
+docker pull ghcr.io/iyulab/formbase:0.9.0
+docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.9.0
 ```
 
 By default it composes the in-process stores, which needs nothing else running and loses everything
@@ -156,7 +156,7 @@ var result = await engine.QueryAsync(qc, new QuerySpec(
 
 ## Architecture
 
-Eight ports define the engine; everything else composes them.
+Nine ports define the engine; everything else composes them.
 
 | Port | Responsibility |
 |------|----------------|
@@ -166,6 +166,7 @@ Eight ports define the engine; everything else composes them.
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
 | `IProjector` | Drop-and-rebuild the projected table from raw. |
 | `IProjectionState` | Track the watermark each projection reached. |
+| `IProjectionTrigger` | Decide whether a form type's projection should run *now* — the seam where projection-automation policy plugs in. Pure decision; the host owns the cadence. |
 | `IRecordQuery` | Query projected records; distinguish not-projected / stale / unavailable. |
 | `IProjectionStore` | The typed-table target — the adapter seam over the backing database. |
 

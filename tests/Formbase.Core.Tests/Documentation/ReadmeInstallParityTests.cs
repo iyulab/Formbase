@@ -44,6 +44,27 @@ public sealed class ReadmeInstallParityTests
     }
 
     [Fact]
+    public void The_image_tag_the_install_section_pulls_is_the_released_version()
+    {
+        // The install section states the release a third time, thirty lines below the other two:
+        // as the tag on the published image. The two statements above were held and this one was
+        // not, and it is the one a reader pastes into a terminal — so it went stale across a release
+        // while the sentence beside it was correct.
+        var declared = Regex.Match(
+            File.ReadAllText(Path.Combine(RepoRoot, "Directory.Build.props")),
+            @"<Version>(?<v>[^<]+)</Version>").Groups["v"].Value;
+
+        var pulled = Regex.Matches(Readme, @"ghcr\.io/iyulab/formbase:(?<v>\d+\.\d+\.\d+)")
+            .Select(m => m.Groups["v"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        pulled.Should().NotBeEmpty("the install section tells a reader which image to pull");
+        pulled.Should().AllBe(declared,
+            "a bump publishes that image tag, so an example naming another tag pulls the previous release");
+    }
+
+    [Fact]
     public void Every_packable_project_is_listed_and_nothing_else_is()
     {
         var packable = Directory
