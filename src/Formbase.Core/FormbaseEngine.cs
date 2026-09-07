@@ -60,4 +60,13 @@ public sealed class FormbaseEngine
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
         return ProjectionStatus.Evaluate(stamp, rawHead, schema);
     }
+
+    /// <summary>
+    /// The documents the last completed projection could not map, and why — empty both when that run
+    /// mapped everything and when the form type was never projected. A caller that needs to tell
+    /// those apart reads <see cref="GetProjectionStatusAsync"/>, where the first answers
+    /// <c>projected</c> and the second <c>notProjected</c>.
+    /// </summary>
+    public Task<IReadOnlyList<ProjectionSkip>> GetProjectionSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+        => _projectionState.GetSkipsAsync(type, cancellationToken);
 }

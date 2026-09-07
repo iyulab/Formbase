@@ -23,6 +23,7 @@ PUT    /formtypes/{type}/declaration   # Put a declaration in force
 DELETE /formtypes/{type}/declaration   # Remove it, and the projection it built
 POST   /formtypes/{type}/projection    # Rebuild the projected table
 GET    /formtypes/{type}/projection    # Read projection state
+GET    /formtypes/{type}/projection/skips  # Read what the last run could not map
 GET    /formtypes/{type}/records       # Query projected records
 GET    /settings                       # What this instance was composed as
 GET    /openapi/v1.json                # The generated OpenAPI document
@@ -326,6 +327,36 @@ is not `notProjected` — but nothing vouches for its rows.
 Staleness has two axes. **Data**: the raw stream advanced past what was projected. **Shape**: the
 declaration was re-declared after the run. A redeclaration never moves the watermark, so the
 watermarks alone cannot show the second one.
+
+---
+
+## What a projection skipped
+
+```http
+GET /formtypes/orders/projection/skips
+```
+
+```json
+{
+  "skipped": [
+    { "documentId": "0f3c1e2a-1c4d-4e6a-9a11-2b7c9d0e4f55", "reason": "field 'deadline' is not convertible to Timestamp" }
+  ],
+  "count": 1
+}
+```
+
+`state` answers whether the projection caught up with raw; this answers what it left behind getting
+there. **A run that inserted 2 of 150 documents is `projected` and current** — the watermark reached
+the head, because the 148 documents it could not map were read and recorded rather than skipped over
+silently. Those 148 reasons are here, and nowhere else.
+
+**Unlike `lastRun`, this is durable.** It is recorded with the projection itself, so it survives a
+restart and answers for a run a different instance performed. A new run replaces it, because skips
+describe one run: after a re-declaration that fixes the mismatch, a clean run leaves `count: 0`.
+
+`count: 0` means the same thing for "the last run mapped everything" and "this form type was never
+projected" — read `GET /formtypes/{type}/projection` to tell those apart (`projected` versus
+`notProjected`).
 
 ---
 

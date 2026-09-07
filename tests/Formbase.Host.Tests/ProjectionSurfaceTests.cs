@@ -145,6 +145,102 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     }
 
     /// <summary>
+    /// The half the status count cannot answer. <c>lastRun.skippedCount</c> says how many documents
+    /// were dropped; this says which ones and why — the question anyone acting on a loss asks next,
+    /// and the one the run response used to answer for exactly as long as the caller held it.
+    /// </summary>
+    [Fact]
+    public async Task The_skips_of_the_last_run_are_readable_after_the_run_response_is_gone()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":1}""");
+        await AcceptAsync(type, """{"total":[1,2]}""");
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
+        var skippedInRun = run.GetProperty("skipped")[0];
+
+        var skips = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken));
+
+        skips.GetProperty("count").GetInt32().Should().Be(1);
+        var recorded = skips.GetProperty("skipped")[0];
+        recorded.GetProperty("documentId").GetString().Should()
+            .Be(skippedInRun.GetProperty("documentId").GetString(),
+                "the record names the same document the run reported — a reader who missed the run "
+                + "response gets the same answer, not a summary of it");
+        recorded.GetProperty("reason").GetString().Should()
+            .Be(skippedInRun.GetProperty("reason").GetString());
+    }
+
+    /// <summary>
+    /// The issue's shape, at the surface: a run where almost nothing landed reports <c>projected</c>
+    /// and a watermark that caught up with raw. Status alone reads as success; the losses are here.
+    /// </summary>
+    [Fact]
+    public async Task A_projection_that_dropped_most_documents_still_reports_projected_and_names_every_loss()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":1}""");
+        for (var i = 0; i < 5; i++)
+        {
+            await AcceptAsync(type, """{"total":[1,2]}""");
+        }
+
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
+
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
+        status.GetProperty("state").GetString().Should().Be("projected",
+            "the run completed and reached the head — which is exactly why the state alone cannot "
+            + "carry this news");
+
+        var skips = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken));
+        skips.GetProperty("count").GetInt32().Should().Be(5);
+        skips.GetProperty("skipped").EnumerateArray().Should().OnlyContain(
+            s => s.GetProperty("reason").GetString()!.Contains("total"),
+            "a reason that does not name the column leaves the reader to guess which declaration to fix");
+    }
+
+    [Fact]
+    public async Task A_form_type_that_was_never_projected_has_no_skips()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":1}""");
+
+        var skips = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken));
+
+        skips.GetProperty("count").GetInt32().Should().Be(0);
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
+        status.GetProperty("state").GetString().Should().Be("notProjected",
+            "empty here means the same thing for 'never ran' and 'ran cleanly', so the status "
+            + "endpoint is what a caller reads to tell them apart");
+    }
+
+    /// <summary>
+    /// A later run answers for itself. Leaving the previous run's reasons would report a loss the
+    /// current table does not have — the mirror of the defect this endpoint exists to fix.
+    /// </summary>
+    [Fact]
+    public async Task A_clean_rerun_clears_the_previous_runs_skips()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":[1,2]}""");
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
+        (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken)))
+            .GetProperty("count").GetInt32().Should().Be(1);
+
+        await RedeclareAsync(type, expectedVersion: 1, "other");
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
+
+        (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken)))
+            .GetProperty("count").GetInt32().Should().Be(0,
+                "the declaration no longer asks for the field that could not be mapped, so nothing "
+                + "was dropped this time and the previous answer has stopped being true");
+    }
+
+    /// <summary>
     /// The engine can hold a state this surface has no name for only if someone adds one without
     /// deciding what it is called. The mapping is total by construction, so this asserts the
     /// property rather than the four cases: every state the engine declares crosses.
@@ -194,6 +290,23 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// Replaces a declaration already in force. A plain declare is refused with a version conflict
+    /// once one exists, deliberately — replacing is the act that has to say which version it read.
+    /// </summary>
+    private async Task RedeclareAsync(string type, int expectedVersion, params string[] fields)
+    {
+        var response = await _client.PutAsJsonAsync($"/formtypes/{type}/declaration", new
+        {
+            tableName = type,
+            declarationVersion = expectedVersion + 1,
+            expectedDeclarationVersion = expectedVersion,
+            fields = fields.Select(f => new { name = f, type = "integer" }).ToArray(),
+        });
+
+        response.IsSuccessStatusCode.Should().BeTrue(await response.Content.ReadAsStringAsync());
     }
 
     private async Task AcceptAsync(string type, string body)

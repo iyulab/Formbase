@@ -41,7 +41,7 @@ public sealed class PostgresMixedColdStartRaceTests
 
         var act = async () => await Task.WhenAll(
             raw.HeadAsync(type),
-            state.SetProjectedAsync(type, new ProjectionStamp(new Watermark(1), "invoice_table", "fp-race")),
+            state.SetProjectedAsync(type, new ProjectionStamp(new Watermark(1), "invoice_table", "fp-race"), []),
             hints.DeclareAsync(new FormTypeHints(type, "invoice_table", [new FieldHint("n", ColumnType.Integer)])));
 
         await act.Should().NotThrowAsync();

@@ -366,8 +366,10 @@ public class ProjectorTests
     {
         public Task<ProjectionStamp?> GetAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult<ProjectionStamp?>(null);
-        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, CancellationToken cancellationToken = default)
+        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, IReadOnlyList<ProjectionSkip> skips, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+        public Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProjectionSkip>>([]);
         public Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromException(failure);
         // The same outage that fails the cleanup fails the fallback too — the worst case, where the

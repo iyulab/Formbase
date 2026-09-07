@@ -196,6 +196,46 @@
         }
       }
     },
+    "/formtypes/{type}/projection/skips": {
+      "get": {
+        "tags": [
+          "ProjectionEndpoints"
+        ],
+        "summary": "Lists the documents the last projection could not map, and why",
+        "description": "The status endpoint reports that a projection caught up with raw; this reports what it left behind getting there. A run that inserted 2 of 150 documents is \u0027projected\u0027 and current on that endpoint \u2014 the 148 reasons are here. Recorded with the projection itself, so it survives a restart and answers for runs another instance performed; a new run replaces it, because skips describe one run. Empty both when nothing was skipped and when the form type was never projected \u2014 the status endpoint is what separates those.",
+        "operationId": "GetProjectionSkips",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectionSkipsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/formtypes/{type}/records": {
       "get": {
         "tags": [
@@ -912,6 +952,29 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "ProjectionSkipsResponse": {
+        "required": [
+          "skipped",
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedDocumentResponse"
+            }
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },

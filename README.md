@@ -165,7 +165,7 @@ Nine ports define the engine; everything else composes them.
 | `IFieldHintSource` | Supply the declared structure for a form type — the input to schema proposal. |
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
 | `IProjector` | Drop-and-rebuild the projected table from raw. |
-| `IProjectionState` | Track the watermark each projection reached. |
+| `IProjectionState` | Record what the last completed projection did — the watermark it reached, and the `ProjectionSkip`s it produced. |
 | `IProjectionTrigger` | Decide whether a form type's projection should run *now* — the seam where projection-automation policy plugs in. Pure decision; the host owns the cadence. |
 | `IRecordQuery` | Query projected records; distinguish not-projected / stale / unavailable. |
 | `IProjectionStore` | The typed-table target — the adapter seam over the backing database. |

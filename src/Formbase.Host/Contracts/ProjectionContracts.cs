@@ -34,6 +34,23 @@ public sealed record ProjectionRunResponse(
 public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason);
 
 /// <summary>
+/// What the last completed projection dropped. Unlike <see cref="LastRunResponse"/> — which is this
+/// host instance's own memory of the run it performed — this is read from the recorded projection
+/// state, so it survives a restart and answers for runs another instance performed.
+/// </summary>
+/// <param name="Skipped">
+/// The skipped documents in the order the run produced them. Empty when that run mapped every
+/// document, and also empty when the form type was never projected: read
+/// <c>GET /formtypes/{type}/projection</c> to tell those apart.
+/// </param>
+/// <param name="Count">
+/// How many entries <see cref="Skipped"/> holds. Named separately because the count is the first
+/// thing a caller checking "did this run lose anything" reads, and making them count an array they
+/// then discard is work the answer can do for them.
+/// </param>
+public sealed record ProjectionSkipsResponse(IReadOnlyList<SkippedDocumentResponse> Skipped, int Count);
+
+/// <summary>
 /// Whether a form type has a queryable projection and whether it can be trusted, with the two
 /// watermarks that justify the answer.
 /// </summary>

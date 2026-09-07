@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Added
+
+- **The skips of the last projection are kept, not just returned.** `CONSTITUTION.md` calls a
+  mapping failure a `ProjectionSkip` *record*, and until now it was a return value: the run that
+  produced it handed it back to whoever called it and nothing stored it, so a host driving
+  projection on a timer generated the reasons every tick and dropped them every tick. A completed
+  projection now records its skips next to its stamp, and `IProjectionState.GetSkipsAsync` reads
+  them back in the order the run produced them. They stay a derivative — raw is the truth and
+  re-projecting regenerates them — which is why only the last run's are kept and why clearing a
+  form type forgets them with the stamp.
+- **`GET /formtypes/{type}/projection/skips`** answers which documents the last projection could not
+  map, and why. The status endpoint reports that a projection caught up with raw; a run that
+  inserted 2 of 150 documents is `projected` and current there, and this is where the other 148
+  reasons are. Unlike `lastRun` on the status response — this host instance's own memory — it is
+  read from the recorded state, so it survives a restart and answers for a run another instance
+  performed. `count: 0` means the same for "mapped everything" and "never projected"; the status
+  endpoint separates those.
+
+### Breaking
+
+- **`IProjectionState.SetProjectedAsync` takes the run's skips.** The signature gained an
+  `IReadOnlyList<ProjectionSkip>` parameter rather than offering a second method, so there is no way
+  to record that a projection completed while staying silent about what it dropped — which is the
+  gap the entry above closes. An implementation outside this repository adds the parameter and a
+  `GetSkipsAsync`; passing an empty list preserves the previous behaviour exactly.
+
 ### Fixed
 
 - **An array or object arriving for a `Text` column was projected as its JSON string, skip-free.**

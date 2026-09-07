@@ -52,6 +52,16 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
             -- completed projections, so true is the honest default.
             ALTER TABLE "{_bootstrap.Schema}".projection_state
                 ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT true;
+            -- What the last completed projection dropped, and why. Keyed by form type like the
+            -- stamp and replaced with it, because the two describe the same run: `ordinal` keeps the
+            -- order the projector produced so a reader sees the same sequence twice.
+            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".projection_skips (
+                form_type   text   NOT NULL,
+                ordinal     int    NOT NULL,
+                document_id uuid   NOT NULL,
+                reason      text   NOT NULL,
+                PRIMARY KEY (form_type, ordinal)
+            );
             """;
     }
 
@@ -74,12 +84,21 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         return new ProjectionStamp(new Watermark(reader.GetInt64(0)), reader.GetString(1), reader.GetString(2), reader.GetBoolean(3));
     }
 
-    public async Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, CancellationToken cancellationToken = default)
+    public async Task SetProjectedAsync(
+        FormTypeRef type,
+        ProjectionStamp stamp,
+        IReadOnlyList<ProjectionSkip> skips,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stamp);
+        ArgumentNullException.ThrowIfNull(skips);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        // One transaction, because a stamp without its skips is the state this whole record exists to
+        // prevent: a status surface that says the run completed while the reasons it dropped rows are
+        // the previous run's, or missing.
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
             $"""
             INSERT INTO "{_bootstrap.Schema}".projection_state (form_type, watermark, table_name, schema_fingerprint, verified, updated_at)
@@ -100,6 +119,70 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await ReplaceSkipsAsync(connection, type, skips, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ReplaceSkipsAsync(
+        NpgsqlConnection connection,
+        FormTypeRef type,
+        IReadOnlyList<ProjectionSkip> skips,
+        CancellationToken cancellationToken)
+    {
+        await using (var delete = new NpgsqlCommand(
+            $"""DELETE FROM "{_bootstrap.Schema}".projection_skips WHERE form_type = @type""",
+            connection))
+        {
+            delete.Parameters.AddWithValue("type", type.Value);
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (skips.Count == 0)
+        {
+            return;
+        }
+
+        // Binary copy rather than a parameterized insert per row: a badly mapped run skips every
+        // document it read, so the row count here tracks the size of the intake, not the size of the
+        // failure.
+        await using var writer = await connection.BeginBinaryImportAsync(
+            $"""COPY "{_bootstrap.Schema}".projection_skips (form_type, ordinal, document_id, reason) FROM STDIN (FORMAT BINARY)""",
+            cancellationToken).ConfigureAwait(false);
+
+        for (var ordinal = 0; ordinal < skips.Count; ordinal++)
+        {
+            await writer.StartRowAsync(cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(type.Value, NpgsqlDbType.Text, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(ordinal, NpgsqlDbType.Integer, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(skips[ordinal].DocumentId.Value, NpgsqlDbType.Uuid, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(skips[ordinal].Reason, NpgsqlDbType.Text, cancellationToken).ConfigureAwait(false);
+        }
+
+        await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            $"""
+            SELECT document_id, reason FROM "{_bootstrap.Schema}".projection_skips
+                WHERE form_type = @type
+                ORDER BY ordinal
+            """,
+            connection);
+        command.Parameters.AddWithValue("type", type.Value);
+
+        var skips = new List<ProjectionSkip>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            skips.Add(new ProjectionSkip(DocumentId.From(reader.GetGuid(0)), reader.GetString(1)));
+        }
+
+        return skips;
     }
 
     public async Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
@@ -108,7 +191,10 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
-            $"""DELETE FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type""",
+            $"""
+            DELETE FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type;
+            DELETE FROM "{_bootstrap.Schema}".projection_skips WHERE form_type = @type;
+            """,
             connection);
         command.Parameters.AddWithValue("type", type.Value);
 

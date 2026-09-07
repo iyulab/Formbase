@@ -33,6 +33,19 @@ internal static class ProjectionEndpoints
                 "Branch on all four states — notProjected, projected, stale, unverified.")
             .Produces<ProjectionStatusResponse>();
 
+        routes.MapGet("/formtypes/{type}/projection/skips", GetSkipsAsync)
+            .WithName("GetProjectionSkips")
+            .WithSummary("Lists the documents the last projection could not map, and why")
+            .WithDescription(
+                "The status endpoint reports that a projection caught up with raw; this reports what " +
+                "it left behind getting there. A run that inserted 2 of 150 documents is 'projected' " +
+                "and current on that endpoint — the 148 reasons are here. Recorded with the " +
+                "projection itself, so it survives a restart and answers for runs another instance " +
+                "performed; a new run replaces it, because skips describe one run. Empty both when " +
+                "nothing was skipped and when the form type was never projected — the status " +
+                "endpoint is what separates those.")
+            .Produces<ProjectionSkipsResponse>();
+
         return routes;
     }
 
@@ -72,5 +85,18 @@ internal static class ProjectionEndpoints
             status.ProjectedWatermark.Value,
             status.RawHead.Value,
             LastRunResponse.FromTracked(runTracker.TryGet(formType))));
+    }
+
+    private static async Task<IResult> GetSkipsAsync(
+        string type,
+        FormbaseEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var skips = await engine.GetProjectionSkipsAsync(FormTypeRef.Create(type), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(new ProjectionSkipsResponse(
+            [.. skips.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason))],
+            skips.Count));
     }
 }
