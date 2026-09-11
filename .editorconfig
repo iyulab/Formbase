@@ -1,0 +1,7 @@
+# Line endings are LF everywhere, working tree included -- see .gitattributes for why. Without
+# this line the formatter does not check them, so a Windows checkout and a Linux CI runner can
+# disagree and both stay green.
+root = true
+
+[*]
+end_of_line = lf
