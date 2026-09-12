@@ -63,6 +63,47 @@ public class M3lHintAdapterTests
         fields["unit"].Nullable.Should().BeTrue("the '?' suffix is the one nullability signal the vocabulary keeps");
     }
 
+    private const string FormWithRelationsSection =
+        """
+        ## Inspection
+
+        - id: identifier @pk @generated
+        - inspector_id: identifier @reference(Employee)
+
+        ### Relations
+        - >Employee: many-to-one
+        - <InspectionDefect: one-to-many
+        - <>Tag
+
+        ## Employee
+
+        - id: identifier @pk
+        """;
+
+    // The free-form Relations section is a construct the adapter does not decode: each entry is
+    // recorded as an unresolved gap that keeps the source line, so the measured demand stays
+    // countable and readable whatever shape the parser gives the entry. Field-level @reference is
+    // the structured path and is filled, not counted here.
+    [Fact]
+    public void Each_relations_section_entry_is_an_unresolved_gap_that_keeps_its_source_line()
+    {
+        var result = M3lHintAdapter.Adapt(FormWithRelationsSection);
+
+        var relationGaps = result.Gaps
+            .Where(g => g.Model == "Inspection" && g.Construct.StartsWith("relations section:", StringComparison.Ordinal))
+            .ToList();
+        relationGaps.Should().HaveCount(3, "one gap per entry of the section");
+        relationGaps.Should().OnlyContain(g => g.Kind == VocabularyGapKind.Unresolved && g.Field == null);
+        relationGaps.Select(g => g.Construct).Should().SatisfyRespectively(
+            c => c.Should().Contain(">Employee: many-to-one"),
+            c => c.Should().Contain("<InspectionDefect: one-to-many"),
+            c => c.Should().Contain("<>Tag"));
+
+        // The entries do not leak into the hint as fields, and the structured reference still fills.
+        result.Hints[0].Fields.Select(f => f.Name).Should().BeEquivalentTo(["id", "inspector_id"]);
+        result.Hints[0].Relations.Should().ContainSingle(r => r.Name == "inspector_id");
+    }
+
     [Fact]
     public void The_reference_relation_is_filled_not_dropped()
     {
