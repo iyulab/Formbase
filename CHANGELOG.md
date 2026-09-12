@@ -68,6 +68,17 @@
   re-projection after upgrading reports them in `skipped`, and the projection status's last-run
   counts show the difference.
 
+### Dependencies
+
+- The .NET 10.0.12 servicing line (`Microsoft.Extensions.DependencyInjection*`,
+  `Microsoft.AspNetCore.OpenApi`, `Microsoft.AspNetCore.Mvc.Testing`), `Microsoft.Extensions.AI.*`
+  10.10.0, `M3L.Native` 0.8.0 and `Microsoft.NET.Test.Sdk` 18.10.0. Patch and minor only.
+  `M3L.Native` 0.8.0 parses the entries of a `### Relations` section into `direction`, `name` /
+  `target` and `cardinality` instead of passing the line on as text; the adapter still records
+  those entries as a vocabulary gap, so the gap's construct text now shows the parsed object
+  rather than the bare line — the count is unchanged. `Microsoft.OpenApi` stays on 2.x on purpose
+  (see the comment in `Directory.Packages.props`).
+
 ## 0.9.0
 
 Pairs with MorphDB `0.11.x`, up from `0.9.x` — the `MorphDB.Client` dependency had already moved
