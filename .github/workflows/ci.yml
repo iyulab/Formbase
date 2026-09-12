@@ -226,7 +226,14 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore Formbase.slnx
 
+      # Four live-test directories are removed from the default compilation, and `dotnet format`
+      # works off the compilation -- so without this the gate does not see them at all (1,785 lines
+      # across 20 files). `dotnet format` takes no -p:, but MSBuild reads environment variables as
+      # properties. IncludeLiveTests opens Postgres, MorphDB and, through them, Durable.
       - name: Check formatting
+        env:
+          IncludeLiveTests: 'true'
+          IncludeLlmLiveTests: 'true'
         run: dotnet format Formbase.slnx --verify-no-changes --verbosity diagnostic
 
       - name: Check for vulnerable packages
