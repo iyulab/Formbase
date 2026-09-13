@@ -49,8 +49,8 @@ A document's life:
 ## Install
 
 Current release: **0.10.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.10.0` pairs with MorphDB `0.11.x`**. Pin the MorphDB server image to
-that line (`ghcr.io/iyulab/morphdb:0.11.1`); the compatible pair is stated with every release in
+together — **`Formbase.* 0.10.0` pairs with MorphDB `0.12.x`**. Pin the MorphDB server image to
+that line (`ghcr.io/iyulab/morphdb:0.12.0`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
 Start with the core and the DI helpers, then add only the adapters you actually run:

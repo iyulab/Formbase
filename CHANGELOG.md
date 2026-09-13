@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Pairs with MorphDB `0.12.x` — the bundle, the docs and the live fixtures now name `0.12.0`.
+
+### Dependencies
+
+- `MorphDB.Client` to 0.12.0, and the MorphDB server image in `docker-compose.yml`, the README and
+  the live fixtures to `0.12.0`. MorphDB 0.12.0 removes four wire members no code path ever
+  honoured (a webhook delivery's field casing, an export request's `filter`/`orderBy`, the hub's
+  second `Subscribe` argument, the client's `ChangeNotification.OldData`); this project uses none of
+  them, and the live MorphDB suite passes unchanged against the `0.12.0` image (310/310).
+
 ## 0.10.0
 
 Pairs with MorphDB `0.11.x`, unchanged — the bundle and the docs now name `0.11.1`, the newest
