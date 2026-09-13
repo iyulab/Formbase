@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.10.0
+
+Pairs with MorphDB `0.11.x`, unchanged — the bundle and the docs now name `0.11.1`, the newest
+member of that line. One port breaks: `IProjectionState.SetProjectedAsync` now takes the run's
+skips, so an implementation outside this repository gains a parameter and a `GetSkipsAsync`; the
+HTTP surface only grows (`/health/live`, `/health/ready`, `GET /formtypes/{type}/projection/skips`).
+One wire value changes: an array or object arriving for a `Text` column is now a recorded
+`ProjectionSkip` instead of a silently stringified value.
 
 ### Added
 
@@ -42,7 +49,7 @@
   problem response carries an internal identifier, and a test sweeps the wrong-request surface to
   keep it that way.
 - **The MorphDB the bundle and the docs name is now `0.11.1`.** The compatibility pair is unchanged
-  — `Formbase.* 0.9.0` still pairs with MorphDB `0.11.x` — but the concrete tag the install
+  — `Formbase.*` still pairs with MorphDB `0.11.x` — but the concrete tag the install
   instructions, the compose bundle, and the live-suite fixtures reach for had stayed at `0.11.0`
   after `0.11.1` was published. A pair names a line; the tag beside it should name the newest
   published member of that line, because that is the one a reader will actually run.
