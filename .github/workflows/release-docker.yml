@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Read version and prepare image name
         id: version
@@ -73,7 +73,7 @@ jobs:
       # and a green suite in a sibling workflow is not a gate on this one — the two runs succeed
       # and fail independently, so each publishes only what it verified itself.
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -81,10 +81,10 @@ jobs:
         run: dotnet test --solution Formbase.slnx --configuration Release --verbosity normal
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -94,7 +94,7 @@ jobs:
       # following it gets whatever we shipped. So the image proves it starts here, before the push
       # step — not in a workflow that happens to run alongside this one.
       - name: Build amd64 locally for verification
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: src/Formbase.Host/Dockerfile
@@ -143,7 +143,7 @@ jobs:
       # this point is recovered by re-running that run, which keeps this condition true.
       - name: Build and push Docker image
         if: github.event_name == 'push'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: src/Formbase.Host/Dockerfile
