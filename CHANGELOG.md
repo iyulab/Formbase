@@ -11,6 +11,11 @@ Pairs with MorphDB `0.12.x` — the bundle, the docs and the live fixtures now n
   honoured (a webhook delivery's field casing, an export request's `filter`/`orderBy`, the hub's
   second `Subscribe` argument, the client's `ChangeNotification.OldData`); this project uses none of
   them, and the live MorphDB suite passes unchanged against the `0.12.0` image (310/310).
+- `M3L.Native` to 0.10.0. Both releases since 0.8.0 are additive: 0.9.0 adds
+  `@unique(..., nulls: "not_distinct")`, and 0.10.0 lets a registered attribute target an enum
+  value and checks such usages against the registry. The hint adapter reads neither and does not
+  surface M3L diagnostics, so the hints it derives are unchanged.
+- `xunit.v3` to 4.0.1 (tests only).
 
 ## 0.10.0
 
