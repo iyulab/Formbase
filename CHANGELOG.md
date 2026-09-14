@@ -17,6 +17,13 @@ Pairs with MorphDB `0.12.x` — the bundle, the docs and the live fixtures now n
   surface M3L diagnostics, so the hints it derives are unchanged.
 - `xunit.v3` to 4.0.1 (tests only).
 
+### Internal
+
+- The CI and release workflows run the Node.js 24 majors of the actions they use (`actions/checkout`
+  v7, `actions/setup-dotnet` v6, `actions/cache` v6, `docker/build-push-action` v7,
+  `docker/login-action` v4, `docker/setup-buildx-action` v4). The Node.js 20 majors ran only because
+  the runner forced them onto Node.js 24; no input any step passes changed meaning.
+
 ## 0.10.0
 
 Pairs with MorphDB `0.11.x`, unchanged — the bundle and the docs now name `0.11.1`, the newest
