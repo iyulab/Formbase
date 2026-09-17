@@ -48,8 +48,8 @@ A document's life:
 
 ## Install
 
-Current release: **0.10.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.10.0` pairs with MorphDB `0.12.x`**. Pin the MorphDB server image to
+Current release: **0.10.1**. Formbase projects into MorphDB over its client, so the two move
+together — **`Formbase.* 0.10.1` pairs with MorphDB `0.12.x`**. Pin the MorphDB server image to
 that line (`ghcr.io/iyulab/morphdb:0.12.0`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
@@ -80,8 +80,8 @@ A published image is the same artifact, built from the same Dockerfile the relea
 before it pushes — pull it instead of building from source:
 
 ```bash
-docker pull ghcr.io/iyulab/formbase:0.10.0
-docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.10.0
+docker pull ghcr.io/iyulab/formbase:0.10.1
+docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.10.1
 ```
 
 By default it composes the in-process stores, which needs nothing else running and loses everything

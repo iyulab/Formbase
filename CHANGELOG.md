@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.10.1
 
-Pairs with MorphDB `0.12.x` — the bundle, the docs and the live fixtures now name `0.12.0`.
+Pairs with MorphDB `0.12.x` — the bundle, the docs and the live fixtures now name `0.12.0`. A patch:
+nothing in the public surface moves. Besides the MorphDB pair it carries `M3L.Native` 0.10.0, whose
+two releases since 0.8.0 are additive on the surface the hint adapter reads, and the workflows now
+run the Node.js 24 majors of the actions they already used.
 
 ### Dependencies
 
