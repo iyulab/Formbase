@@ -11,6 +11,7 @@
   the live fixtures to `0.12.1`. The producer's release is a patch carrying its own dependency round
   and a documentation correction; no wire member moves. The live MorphDB suite passes unchanged
   against the `0.12.1` image (310/310).
+- `Microsoft.NET.Test.Sdk` to 18.10.1 (tests only).
 
 ## 0.10.1
 
