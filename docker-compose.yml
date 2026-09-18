@@ -32,7 +32,7 @@ services:
     # earlier one refuses the request outright — it rejects JSON members it does not know — so
     # lowering this past 0.10.0 stops the bundle at start-up rather than misconfiguring it.
     # Within the pair the README states, this tracks the newest published patch.
-    image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.12.0}
+    image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.12.1}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- `MorphDB.Client` to 0.12.1, and the MorphDB server image in `docker-compose.yml`, the README and
+  the live fixtures to `0.12.1`. The producer's release is a patch carrying its own dependency round
+  and a documentation correction; no wire member moves. The live MorphDB suite passes unchanged
+  against the `0.12.1` image (310/310).
+
 ## 0.10.1
 
 Pairs with MorphDB `0.12.x` — the bundle, the docs and the live fixtures now name `0.12.0`. A patch:
