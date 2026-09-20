@@ -139,16 +139,63 @@ public static class M3lHintAdapter
     {
         if (field.Array)
         {
+            // An array lands in one JSONB column, which says nothing about what is inside it: the
+            // element type and its own nullability are declared here and carried nowhere.
+            gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Unresolved,
+                $"array of {field.Type ?? "(named type)"}",
+                "An array degrades to a JSONB column; the element type and its nullability drop."));
             return ColumnType.Jsonb;
         }
 
-        switch (field.Type)
+        var mapped = MapScalarType(field.Type);
+        if (mapped is null)
+        {
+            gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Unresolved,
+                $"type {field.Type}", "Unmapped M3L type; degraded to Text."));
+            return ColumnType.Text;
+        }
+
+        if (field.Params is { Count: > 0 })
+        {
+            // string(200), decimal(10,2) — a declared bound on the value, and the flat vocabulary
+            // has one type and no room for its parameters.
+            gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Constraint,
+                $"{field.Type}({string.Join(",", field.Params.Select(FormatParam))})",
+                "A declared type parameter (length, precision/scale) has no hint slot."));
+        }
+
+        return mapped.Value;
+    }
+
+    // Parameters arrive as JSON numbers, so a whole number reads back as "50.0". The gap records
+    // the declaration as it was written — the construct is evidence, and evidence that does not
+    // look like the source is harder to trace back to it.
+    private static string FormatParam(System.Text.Json.JsonElement param)
+    {
+        if (param.ValueKind == System.Text.Json.JsonValueKind.Number
+            && param.TryGetDouble(out var number)
+            && number == Math.Floor(number)
+            && Math.Abs(number) < long.MaxValue)
+        {
+            return ((long)number).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return param.ToString();
+    }
+
+    private static ColumnType? MapScalarType(string? type)
+    {
+        switch (type)
         {
             case "string" or "text" or "email" or "phone" or "url" or "enum":
                 return ColumnType.Text;
-            case "integer":
+            case "byte" or "short" or "integer" or "long":
+                // The whole integer ladder lands in one slot: Integer is emitted as a 64-bit
+                // column, so the widest rung still fits and none of them loses a value.
                 return ColumnType.Integer;
-            case "decimal" or "float" or "money":
+            case "decimal" or "float" or "double" or "money" or "percentage":
+                // One non-integral numeric slot, exact by default; the approximate types and the
+                // fixed-point shorthands share it.
                 return ColumnType.Decimal;
             case "boolean":
                 return ColumnType.Boolean;
@@ -162,9 +209,7 @@ public static class M3lHintAdapter
                 // A named type that is another model/enum in the document — degrade to Text.
                 return ColumnType.Text;
             default:
-                gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Unresolved,
-                    $"type {field.Type}", "Unmapped M3L type; degraded to Text."));
-                return ColumnType.Text;
+                return null;
         }
     }
 

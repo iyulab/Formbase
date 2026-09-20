@@ -181,4 +181,96 @@ public class M3lHintAdapterTests
         result.Gaps.Should().Contain(g =>
             g.Field == "status" && g.Kind == VocabularyGapKind.Constraint && g.Construct == "inline enum");
     }
+
+    private const string NumericLadderForm =
+        """
+        ## Measurement
+
+        - id: identifier @pk
+        - flags: byte
+        - revision: short
+        - counted: integer
+        - total: long
+        - ratio: float
+        - precise: double
+        - amount: decimal(10,2)
+        - price: money
+        - share: percentage
+        - payload: binary
+        """;
+
+    // The catalog states a width for every numeric rung, and the flat vocabulary has exactly two
+    // numeric slots to put them in. Integer is emitted as a 64-bit column, so the whole integer
+    // ladder fits it without losing a value; the approximate and fixed-point types share Decimal.
+    // Neither collapse is a gap — a gap here would claim the vocabulary cannot carry a value it
+    // demonstrably can.
+    [Theory]
+    [InlineData("flags", ColumnType.Integer)]
+    [InlineData("revision", ColumnType.Integer)]
+    [InlineData("counted", ColumnType.Integer)]
+    [InlineData("total", ColumnType.Integer)]
+    [InlineData("ratio", ColumnType.Decimal)]
+    [InlineData("precise", ColumnType.Decimal)]
+    [InlineData("amount", ColumnType.Decimal)]
+    [InlineData("price", ColumnType.Decimal)]
+    [InlineData("share", ColumnType.Decimal)]
+    public void Every_numeric_type_maps_to_a_numeric_slot_without_a_gap(string field, ColumnType expected)
+    {
+        var result = M3lHintAdapter.Adapt(NumericLadderForm);
+
+        result.Hints[0].Fields.Single(f => f.Name == field).Type.Should().Be(expected);
+        result.Gaps.Should().NotContain(g => g.Field == field && g.Kind == VocabularyGapKind.Unresolved);
+    }
+
+    // The boundary the mapping stops at, pinned on purpose: binary is the one catalog type with no
+    // slot in the flat vocabulary, so it degrades to Text and is counted. Were it ever mapped
+    // silently, this measurement would stop reporting a demand that is real.
+    [Fact]
+    public void Binary_has_no_slot_and_stays_a_measured_gap()
+    {
+        var result = M3lHintAdapter.Adapt(NumericLadderForm);
+
+        result.Hints[0].Fields.Single(f => f.Name == "payload").Type.Should().Be(ColumnType.Text);
+        result.Gaps.Should().Contain(g =>
+            g.Field == "payload" && g.Kind == VocabularyGapKind.Unresolved && g.Construct == "type binary");
+    }
+
+    private const string ParameterisedAndArrayForm =
+        """
+        ## Catalogue
+
+        - id: identifier @pk
+        - code: string(50)
+        - price: decimal(10,2)
+        - tags: string?[]
+        """;
+
+    // A declared parameter is a bound on the value, and the flat vocabulary has one type per field
+    // and nowhere to put the bound. Dropping it is expected; dropping it *uncounted* is not — the
+    // gap list is the measurement, so a loss that never reaches it cannot be designed against.
+    [Fact]
+    public void Declared_type_parameters_are_measured_not_silently_dropped()
+    {
+        var result = M3lHintAdapter.Adapt(ParameterisedAndArrayForm);
+
+        var fields = result.Hints[0].Fields.ToDictionary(f => f.Name);
+        fields["code"].Type.Should().Be(ColumnType.Text, "the parameter drops, the type still maps");
+        fields["price"].Type.Should().Be(ColumnType.Decimal);
+        result.Gaps.Should().Contain(g =>
+            g.Field == "code" && g.Kind == VocabularyGapKind.Constraint && g.Construct == "string(50)");
+        result.Gaps.Should().Contain(g =>
+            g.Field == "price" && g.Kind == VocabularyGapKind.Constraint && g.Construct == "decimal(10,2)");
+    }
+
+    // An array still lands in one JSONB column — that part is unchanged. What is new is that the
+    // element type and its nullability are counted on the way out instead of vanishing.
+    [Fact]
+    public void An_array_field_records_what_the_jsonb_column_cannot_say()
+    {
+        var result = M3lHintAdapter.Adapt(ParameterisedAndArrayForm);
+
+        result.Hints[0].Fields.Single(f => f.Name == "tags").Type.Should().Be(ColumnType.Jsonb);
+        result.Gaps.Should().Contain(g =>
+            g.Field == "tags" && g.Kind == VocabularyGapKind.Unresolved && g.Construct == "array of string");
+    }
 }

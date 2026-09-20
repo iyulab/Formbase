@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Changed
+
+- The M3L hint adapter now maps the whole numeric catalog. `byte`, `short` and `long` join
+  `integer` in the integer slot — that slot is emitted as a 64-bit column, so no rung of the ladder
+  loses a value — and `double` and `percentage` join `float`, `decimal` and `money` in the decimal
+  slot. Until now a field declared with any of those five names was reported as an unmapped type
+  and degraded to a text column, which understated what the vocabulary can carry. `binary` is
+  deliberately unchanged: it is the one catalog type with no slot to map to, so it still degrades
+  to text with a recorded gap.
+- The M3L hint adapter counts two losses it used to let through unrecorded. A declared type
+  parameter (`string(50)`, `decimal(10,2)`) is recorded as a constraint gap, and an array field —
+  which lands in a single JSONB column — is recorded with the element type and item nullability it
+  cannot carry. Neither behaviour changes: the same columns come out. What changes is that the gap
+  list, which exists to make the loss countable, no longer omits these two.
+
 ### Dependencies
 
 - `M3L.Native` to 0.12.0. Both releases since 0.10.0 are additive on the .NET surface: 0.11.0 adds a
