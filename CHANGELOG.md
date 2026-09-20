@@ -4,9 +4,11 @@
 
 ### Dependencies
 
-- `M3L.Native` to 0.11.0. The release adds a multi-file validation entry point (`ValidateMulti` and
-  its typed and result-returning siblings) alongside the existing multi-file parse; nothing the hint
-  adapter reads changes, and it surfaces no M3L diagnostics.
+- `M3L.Native` to 0.12.0. Both releases since 0.10.0 are additive on the .NET surface: 0.11.0 adds a
+  multi-file validation entry point (`ValidateMulti` and its typed and result-returning siblings)
+  alongside the existing multi-file parse, and 0.12.0 widens the type catalog with `byte`, `short`
+  and `double` and states `float` as 32-bit. Parser output is unchanged for every model that already
+  parsed; the three new type names are mapped by the hint adapter in this same release.
 - `MorphDB.Client` to 0.12.1, and the MorphDB server image in `docker-compose.yml`, the README and
   the live fixtures to `0.12.1`. The producer's release is a patch carrying its own dependency round
   and a documentation correction; no wire member moves. The live MorphDB suite passes unchanged
