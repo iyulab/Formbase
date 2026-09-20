@@ -3,7 +3,14 @@
 # down — so a deployment and the suite that vouches for it are the same three things in the same
 # order, rather than two arrangements that agree until one of them changes.
 #
-# Copy .env.example to .env before the first run.
+# Copy .env.example to .env before the first run, and bring it up with `--build`. The host below is
+# built from this tree, and `docker compose up` without it reuses the image the last build produced:
+# the bundle then deploys a checkout that no longer exists, and says nothing about it. The service
+# still answers -- `/settings` and the OpenAPI document come back `200` from any build -- so what
+# distinguishes them is the readiness probe: `/health/ready` is `404` on a build that predates the
+# store health checks and `200` on a current one, and the container health check below is the same
+# question asked from inside. A stale bundle therefore never reports healthy; it sits in `starting`
+# until it fails, which is the honest outcome but not an obvious one to read.
 
 services:
   postgres:

@@ -262,9 +262,16 @@ the host, the MorphDB it projects into, and the PostgreSQL both keep their state
 
 ```bash
 cp .env.example .env
-docker compose up -d
-curl http://127.0.0.1:8080/settings
+docker compose up -d --build
+curl http://127.0.0.1:8080/health/ready
 ```
+
+`--build` is not optional the way it usually is. The host service is built from this tree rather
+than pulled, and `up` on its own reuses whatever image the last build left behind — so a checkout
+that has moved on since then comes up serving the older one, silently. The readiness endpoint is
+what tells the two apart: it is the one that answers for the stores, and a build that predates them
+answers `404` where a current one answers `200`. `GET /settings` answers either way, which is why
+it is not the check to open with.
 
 Two things about the shape are worth knowing, because both are decisions rather than defaults.
 

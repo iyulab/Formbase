@@ -17,6 +17,16 @@
   cannot carry. Neither behaviour changes: the same columns come out. What changes is that the gap
   list, which exists to make the loss countable, no longer omits these two.
 
+### Documentation
+
+- The compose bundle is documented as needing `--build`, and its opening smoke check is now
+  `GET /health/ready` rather than `GET /settings`. The host service is built from the tree, so
+  `docker compose up` on its own brings back whatever image the last build left — a checkout that
+  has moved on since then comes up serving the older one. `/settings` answers `200` from any
+  build and so cannot tell the two apart; the readiness probe answers `404` on a build that
+  predates the store health checks. The container health check already asked the same question
+  from inside and a stale bundle never reported healthy, but nothing said to look there.
+
 ### Dependencies
 
 - `M3L.Native` to 0.12.0. Both releases since 0.10.0 are additive on the .NET surface: 0.11.0 adds a
