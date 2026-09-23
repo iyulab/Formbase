@@ -65,6 +65,78 @@
             }
           }
         }
+      },
+      "get": {
+        "tags": [
+          "DocumentEndpoints"
+        ],
+        "summary": "Reads a page of a form type\u0027s raw stream",
+        "description": "Documents come back as they were accepted, oldest first, after the \u0060after\u0060 watermark (default 0, the start of the stream) \u2014 whether or not the form type has a declaration or a projection, so fields nothing has declared are readable here. \u0060limit\u0060 defaults to 100 and is at most 1000; \u0060limit=0\u0060 reads only \u0060rawHead\u0060. The page never reaches past \u0060rawHead\u0060, so a caller continues from the last watermark it received until that watermark equals \u0060rawHead\u0060.",
+        "operationId": "ListDocuments",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/documents/{id}": {
@@ -828,6 +900,29 @@
           },
           "keyField": {
             "type": "string"
+          }
+        }
+      },
+      "DocumentPageResponse": {
+        "required": [
+          "documents",
+          "rawHead"
+        ],
+        "type": "object",
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoredDocumentResponse"
+            }
+          },
+          "rawHead": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },

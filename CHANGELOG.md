@@ -2,8 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- `GET /formtypes/{type}/documents` reads a form type's raw stream page by page, oldest first, after
+  a watermark cursor (`after`, `limit` — default 100, at most 1000). Until now the only raw read was a
+  single document by an id the caller had to already hold, and records carry only declared columns —
+  so across the HTTP boundary, fields nothing had declared could not be read at all. Each page
+  carries `rawHead`, read before the page and never passed, so a caller is caught up exactly when the
+  last watermark it received equals it; `limit=0` reads the head alone. An out-of-range `limit` or a
+  negative `after` is refused with `400` rather than adjusted. In `Formbase.Core`,
+  `FormbaseEngine.ReadDocumentsAsync` and `DocumentPage` are the same read for an embedding host.
+
 ### Changed
 
+- The README's HTTP surface summary no longer says writing a declaration is not on the surface: `PUT`
+  and `DELETE /formtypes/{type}/declaration` have been served since 0.8.0.
 - `POST /formtypes/{type}/projection` says why it built nothing. A run on a form type with no
   declaration answered `200` with `projected: false` and three empty diagnostic lists — and empty
   lists read as "nothing was lost", so the response looked like a successful run with nothing to

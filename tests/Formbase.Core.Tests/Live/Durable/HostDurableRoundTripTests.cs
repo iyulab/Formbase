@@ -115,6 +115,50 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// The stream read over the real raw store, with another form type's documents interleaved so its
+    /// positions are not simply 1..n. A partial declaration and a projection sit in between, and the
+    /// fields nothing declared must still come back — that is what a consumer across the container
+    /// boundary reads here and nowhere else.
+    /// </summary>
+    [Fact]
+    public async Task A_form_types_stream_pages_over_the_real_raw_store_with_undeclared_fields()
+    {
+        var type = NewFormType();
+        var other = NewFormType();
+        for (var n = 1; n <= 3; n++)
+        {
+            await AcceptAsync(type, $$"""{"total":{{n}},"note":"n{{n}}"}""");
+            await AcceptAsync(other, """{"total":0}""");
+        }
+
+        await DeclareAsync(type);
+        await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
+
+        var notes = new List<string?>();
+        long after = 0;
+        long head;
+        while (true)
+        {
+            var page = await ReadAsync(await _client.GetAsync(
+                $"/formtypes/{type}/documents?after={after}&limit=2", TestContext.Current.CancellationToken));
+            head = page.GetProperty("rawHead").GetInt64();
+            var documents = page.GetProperty("documents").EnumerateArray().ToList();
+            if (documents.Count == 0)
+            {
+                break;
+            }
+
+            documents.Should().OnlyContain(d => d.GetProperty("formType").GetString() == type);
+            notes.AddRange(documents.Select(d => d.GetProperty("body").GetProperty("note").GetString()));
+            after = documents[^1].GetProperty("watermark").GetInt64();
+        }
+
+        notes.Should().Equal(["n1", "n2", "n3"],
+            "the undeclared field is in the stream whatever the declaration and projection did");
+        after.Should().Be(head);
+    }
+
+    /// <summary>
     /// Removing a declaration drops a table in MorphDB and forgets state in PostgreSQL — two
     /// services, one operation. The in-process version of this cannot fail the way the real one can.
     /// </summary>

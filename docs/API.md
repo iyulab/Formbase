@@ -17,6 +17,7 @@ precondition they must satisfy.
 
 ```yaml
 POST   /formtypes/{type}/documents     # Accept a document
+GET    /formtypes/{type}/documents     # Read a form type's stream, page by page
 GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
 PUT    /formtypes/{type}/declaration   # Put a declaration in force
@@ -142,6 +143,54 @@ GET /documents/0f0e9a2c-3d4b-4c11-9a1e-6b8d5f2a7c33
 **This always works.** It reads the raw store, so it answers whether or not the form type has ever
 been projected — the body comes back as it was sent, and `watermark` is the document's position in
 that form type's append-only stream.
+
+---
+
+## Reading a form type's stream
+
+```http
+GET /formtypes/orders/documents?after=12&limit=100
+```
+
+```json
+{
+  "documents": [
+    {
+      "documentId": "5b1d0c7e-8a0f-4f5e-9c2d-3e4f5a6b7c8d",
+      "formType": "orders",
+      "watermark": 13,
+      "appendedAt": "2026-08-04T09:31:00+00:00",
+      "body": { "customer": "ada", "total": 42, "note": "rush" }
+    }
+  ],
+  "rawHead": 13
+}
+```
+
+**This always works, too** — it reads the raw store, so it answers before a declaration exists and
+after one does, and it carries every field the documents were sent with. That is what it is for: a
+declared projection answers only for its declared columns, and a single read needs an id you were
+handed at intake, so this is the one place a caller that did not send the documents can see what
+nothing has declared yet.
+
+Each document has the shape a single read returns. They come oldest first.
+
+**Page by watermark.** `after` is the last watermark you received (omit it, or send `0`, to start
+from the beginning); the next page begins after it. `rawHead` is the form type's latest watermark,
+read before the page, and the page never reaches past it — so you have read everything when the last
+watermark you received equals `rawHead`, and a page read at that point comes back empty rather than
+refused. Documents appended while you page wait for your next request.
+
+- **`limit`** — defaults to `100`, at most `1000`. `limit=0` returns no documents and only
+  `rawHead`: the cheap way to ask whether anything new has arrived.
+- A `limit` outside `0`–`1000` or a negative `after` is refused with `400`
+  `/problems/invalid-request` rather than adjusted. A page cut short to the server's maximum without
+  saying so would read as the end of the stream.
+
+A form type that has never received a document answers an empty page with `rawHead: 0`.
+
+The stream is read-only and unfiltered by design. Selecting documents by their content is what a
+declaration and its projection are for; the raw store is append-only, so nothing here changes it.
 
 ---
 

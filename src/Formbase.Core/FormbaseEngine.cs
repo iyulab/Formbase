@@ -7,7 +7,8 @@ namespace Formbase.Core;
 
 /// <summary>
 /// The core engine surface a consumer (host, adapter) drives. A thin composition over the ports:
-/// accept documents (raw-first, no declaration required), read a document (the human's question),
+/// accept documents (raw-first, no declaration required), read a document (the human's question) or
+/// a page of a form type's raw stream,
 /// project a form type, query records (the system's question), and inspect projection status.
 /// Holds no logic of its own beyond wiring and status derivation.
 /// </summary>
@@ -43,6 +44,36 @@ public sealed class FormbaseEngine
     /// <summary>Reads a single document by id — the human's question. Always available.</summary>
     public Task<StoredDocument?> GetDocumentAsync(DocumentId id, CancellationToken cancellationToken = default)
         => _rawStore.GetAsync(id, cancellationToken);
+
+    /// <summary>
+    /// Reads a page of a form type's raw stream after <paramref name="after"/>, oldest first — the
+    /// documents as they were accepted, whether or not anything has been declared or projected for
+    /// them. The head is read first and the page stops at it, so documents appended while the page is
+    /// being read wait for the next page rather than appearing past the head it reports.
+    /// </summary>
+    public async Task<DocumentPage> ReadDocumentsAsync(FormTypeRef type, Watermark after, int limit, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(limit);
+
+        var head = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var documents = new List<StoredDocument>();
+        if (limit == 0 || after >= head)
+        {
+            return new DocumentPage(documents, head);
+        }
+
+        await foreach (var document in _rawStore.StreamAsync(type, after, cancellationToken).ConfigureAwait(false))
+        {
+            if (document.Watermark > head || documents.Count == limit)
+            {
+                break;
+            }
+
+            documents.Add(document);
+        }
+
+        return new DocumentPage(documents, head);
+    }
 
     /// <summary>Projects a form type's raw documents into its queryable table.</summary>
     public Task<ProjectionResult> ProjectAsync(FormTypeRef type, CancellationToken cancellationToken = default)

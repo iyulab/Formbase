@@ -7,9 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace Formbase.Host.Endpoints;
 
 /// <summary>
-/// Intake and raw reads — the two operations that hold whatever a form type's declaration and
-/// projection are doing. Accepting a document never requires a declaration, and reading one back is
-/// always available, so these are the endpoints a caller can rely on before anything else exists.
+/// Intake and raw reads — the operations that hold whatever a form type's declaration and projection
+/// are doing. Accepting a document never requires a declaration, and reading documents back — one by
+/// id, or a form type's stream page by page — is always available, so these are the endpoints a
+/// caller can rely on before anything else exists.
 /// </summary>
 internal static class DocumentEndpoints
 {
@@ -18,6 +19,12 @@ internal static class DocumentEndpoints
     /// verbatim: a key written into it would become part of the document the caller sent.
     /// </summary>
     internal const string IdempotencyKeyHeader = "Idempotency-Key";
+
+    /// <summary>The page a stream read returns when the caller names no size.</summary>
+    internal const int DefaultPageSize = 100;
+
+    /// <summary>The largest page a stream read returns — one request holds one page in memory.</summary>
+    internal const int MaxPageSize = 1000;
 
     public static IEndpointRouteBuilder MapDocumentEndpoints(this IEndpointRouteBuilder routes)
     {
@@ -29,6 +36,19 @@ internal static class DocumentEndpoints
                 "Send an Idempotency-Key header to make re-submission safe: the same key returns the " +
                 "same document without appending a second copy.")
             .Produces<AcceptedDocumentResponse>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status400BadRequest);
+
+        routes.MapGet("/formtypes/{type}/documents", ListAsync)
+            .WithName("ListDocuments")
+            .WithSummary("Reads a page of a form type's raw stream")
+            .WithDescription(
+                "Documents come back as they were accepted, oldest first, after the `after` watermark " +
+                "(default 0, the start of the stream) — whether or not the form type has a declaration " +
+                "or a projection, so fields nothing has declared are readable here. `limit` defaults to " +
+                "100 and is at most 1000; `limit=0` reads only `rawHead`. The page never reaches past " +
+                "`rawHead`, so a caller continues from the last watermark it received until that " +
+                "watermark equals `rawHead`.")
+            .Produces<DocumentPageResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
         routes.MapGet("/documents/{id:guid}", GetAsync)
@@ -85,6 +105,37 @@ internal static class DocumentEndpoints
         return Results.Created($"/documents/{id.Value}", new AcceptedDocumentResponse(id.Value, type));
     }
 
+    private static async Task<IResult> ListAsync(
+        string type,
+        long? after,
+        int? limit,
+        FormbaseEngine engine,
+        CancellationToken cancellationToken)
+    {
+        if (after is < 0)
+        {
+            return Problem("after is a watermark and cannot be negative; omit it to read from the start.");
+        }
+
+        // Refused rather than clamped: a caller who asked for more than a page holds and silently
+        // received fewer would read the short page as the end of the stream.
+        if (limit is < 0 or > MaxPageSize)
+        {
+            return Problem($"limit must be between 0 and {MaxPageSize}.");
+        }
+
+        var page = await engine.ReadDocumentsAsync(
+                FormTypeRef.Create(type),
+                new Watermark(after ?? 0),
+                limit ?? DefaultPageSize,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(new DocumentPageResponse(
+            page.Documents.Select(ToResponse).ToList(),
+            page.RawHead.Value));
+    }
+
     private static async Task<IResult> GetAsync(
         Guid id,
         FormbaseEngine engine,
@@ -98,13 +149,11 @@ internal static class DocumentEndpoints
                 statusCode: StatusCodes.Status404NotFound,
                 title: "No such document",
                 type: "/problems/no-such-document")
-            : Results.Ok(new StoredDocumentResponse(
-                stored.Id.Value,
-                stored.Type.Value,
-                stored.Watermark.Value,
-                stored.AppendedAt,
-                stored.Body.Root));
+            : Results.Ok(ToResponse(stored));
     }
+
+    private static StoredDocumentResponse ToResponse(StoredDocument stored) =>
+        new(stored.Id.Value, stored.Type.Value, stored.Watermark.Value, stored.AppendedAt, stored.Body.Root);
 
     private static IResult Problem(string detail) =>
         Results.Problem(

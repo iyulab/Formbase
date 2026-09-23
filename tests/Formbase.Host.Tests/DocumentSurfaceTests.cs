@@ -7,8 +7,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace Formbase.Host.Tests;
 
 /// <summary>
-/// The two operations the surface can promise unconditionally: a document is accepted without a
-/// declaration, and it can be read back whatever the projection is doing.
+/// The operations the surface can promise unconditionally: a document is accepted without a
+/// declaration, and it can be read back — by id, or in its form type's stream — whatever the
+/// projection is doing.
 /// <para>
 /// They run against the host as it is built, not against the engine behind it. The engine's
 /// idempotency has its own tests; what is untested until here is whether the HTTP surface carries
@@ -152,19 +153,124 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
     }
 
     /// <summary>
+    /// The reason the stream read exists: before anything is declared, the documents' fields are
+    /// readable over HTTP without knowing any document's id. Records answer only for declared columns
+    /// and a single read needs an id the caller received at intake, so without this a consumer on the
+    /// other side of the container boundary could not see what has not been declared yet.
+    /// </summary>
+    [Fact]
+    public async Task A_form_types_stream_is_readable_before_anything_is_declared()
+    {
+        var type = UniqueType();
+        await PostAsync(type, """{"wo":"WO-1","started":"2024-03-11"}""");
+        await PostAsync(type, """{"wo":"WO-2","tech":"kim"}""");
+        await PostAsync(UniqueType(), """{"elsewhere":true}""");
+
+        var page = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/documents", TestContext.Current.CancellationToken));
+
+        var documents = page.GetProperty("documents").EnumerateArray().ToList();
+        documents.Select(d => d.GetProperty("body").GetRawText()).Should().Equal(
+            """{"wo":"WO-1","started":"2024-03-11"}""",
+            """{"wo":"WO-2","tech":"kim"}""");
+        documents.Should().OnlyContain(d => d.GetProperty("formType").GetString() == type,
+            "a form type's stream carries its own documents and no other type's");
+        page.GetProperty("rawHead").GetInt64().Should().Be(documents[^1].GetProperty("watermark").GetInt64(),
+            "a page that reached the end of the stream ends at the head it reports");
+    }
+
+    /// <summary>
+    /// Paging by watermark: each page continues after the last watermark the caller received, the
+    /// pages together are the stream in order with nothing repeated or skipped, and a caller that has
+    /// read to the head gets an empty page rather than an error.
+    /// </summary>
+    [Fact]
+    public async Task The_stream_pages_by_watermark_until_the_caller_reaches_the_head()
+    {
+        var type = UniqueType();
+        for (var i = 1; i <= 5; i++)
+        {
+            await PostAsync(type, $$"""{"n":{{i}}}""");
+        }
+
+        var seen = new List<string>();
+        long after = 0;
+        long head;
+        while (true)
+        {
+            var page = await ReadAsync(await _client.GetAsync(
+                $"/formtypes/{type}/documents?after={after}&limit=2", TestContext.Current.CancellationToken));
+            head = page.GetProperty("rawHead").GetInt64();
+            var documents = page.GetProperty("documents").EnumerateArray().ToList();
+            documents.Count.Should().BeLessThanOrEqualTo(2);
+            if (documents.Count == 0)
+            {
+                break;
+            }
+
+            seen.AddRange(documents.Select(d => d.GetProperty("body").GetRawText()));
+            after = documents[^1].GetProperty("watermark").GetInt64();
+        }
+
+        seen.Should().Equal("""{"n":1}""", """{"n":2}""", """{"n":3}""", """{"n":4}""", """{"n":5}""");
+        after.Should().Be(head, "the caller is caught up exactly when its cursor equals the head");
+    }
+
+    [Fact]
+    public async Task A_zero_limit_reads_only_the_head()
+    {
+        var type = UniqueType();
+        await PostAsync(type, """{"n":1}""");
+
+        var page = await ReadAsync(await _client.GetAsync(
+            $"/formtypes/{type}/documents?limit=0", TestContext.Current.CancellationToken));
+
+        page.GetProperty("documents").GetArrayLength().Should().Be(0);
+        page.GetProperty("rawHead").GetInt64().Should().BeGreaterThan(0,
+            "the head is what a caller polling for new documents asks for, without paying for a page");
+    }
+
+    [Fact]
+    public async Task A_form_type_with_no_documents_reads_an_empty_page_at_head_zero()
+    {
+        var page = await ReadAsync(await _client.GetAsync(
+            $"/formtypes/{UniqueType()}/documents", TestContext.Current.CancellationToken));
+
+        page.GetProperty("documents").GetArrayLength().Should().Be(0);
+        page.GetProperty("rawHead").GetInt64().Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("limit=-1")]
+    [InlineData("limit=1001")]
+    [InlineData("after=-1")]
+    public async Task A_page_request_that_cannot_be_honoured_is_refused(string query)
+    {
+        var response = await _client.GetAsync(
+            $"/formtypes/{UniqueType()}/documents?{query}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "a limit clamped to what the server holds would read as the end of the stream");
+        (await ReadAsync(response)).GetProperty("type").GetString().Should().Be("/problems/invalid-request");
+    }
+
+    /// <summary>
     /// The surface is meant to be described, not only served — an endpoint absent from the document
     /// is invisible to a consumer generating a client from it.
     /// </summary>
     [Fact]
-    public async Task The_openapi_document_describes_both_operations()
+    public async Task The_openapi_document_describes_the_document_operations()
     {
         var response = await _client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var paths = (await ReadAsync(response)).GetProperty("paths");
-        paths.TryGetProperty("/formtypes/{type}/documents", out _).Should().BeTrue();
+        paths.TryGetProperty("/formtypes/{type}/documents", out var documents).Should().BeTrue();
+        documents.TryGetProperty("post", out _).Should().BeTrue();
+        documents.TryGetProperty("get", out _).Should().BeTrue();
         paths.TryGetProperty("/documents/{id}", out _).Should().BeTrue();
     }
+
+    private static string UniqueType() => "stream-" + Guid.NewGuid().ToString("N");
 
     private Task<HttpResponseMessage> PostAsync(string type, string body, Guid? idempotencyKey = null)
     {
