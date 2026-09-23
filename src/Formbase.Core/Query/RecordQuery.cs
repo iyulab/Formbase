@@ -41,7 +41,7 @@ public sealed class RecordQuery : IRecordQuery
         if (stamp is null || schema is null)
         {
             // No projection (or its schema is gone): distinct from an empty result.
-            throw new NotProjectedException(type);
+            throw new NotProjectedException(type, hasSchema: schema is not null);
         }
 
         var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
@@ -51,7 +51,7 @@ public sealed class RecordQuery : IRecordQuery
         {
             // The current declaration's table was never built (e.g. the declaration moved to a new
             // table name without a re-projection): a projection gap, not a backend outage.
-            throw new NotProjectedException(type);
+            throw new NotProjectedException(type, hasSchema: true);
         }
 
         if (status.State == ProjectionState.Unverified)

@@ -1,6 +1,7 @@
 using Formbase.Core;
 using Formbase.Core.Primitives;
 using Formbase.Host.Contracts;
+using Formbase.Host.Composition;
 using Formbase.Host.Projection;
 
 namespace Formbase.Host.Endpoints;
@@ -22,7 +23,9 @@ internal static class ProjectionEndpoints
                 "A run is bounded to the raw head it saw when it started, so documents that arrive " +
                 "mid-run are left for the next one rather than landing under a watermark that does " +
                 "not cover them. A form type with no declaration answers projected: false — " +
-                "documents are accepted without one, so having none is not a failure.")
+                "documents are accepted without one, so having none is not a failure — and says why " +
+                "in notProjectedReason: noDeclaration when only a declaration can give it a shape, " +
+                "nothingToInfer when schema intelligence is installed but had nothing to infer from.")
             .Produces<ProjectionRunResponse>();
 
         routes.MapGet("/formtypes/{type}/projection", GetStatusAsync)
@@ -53,6 +56,7 @@ internal static class ProjectionEndpoints
         string type,
         FormbaseEngine engine,
         LastProjectionRunTracker runTracker,
+        SchemaIntelligenceState intelligence,
         CancellationToken cancellationToken)
     {
         var formType = FormTypeRef.Create(type);
@@ -67,7 +71,10 @@ internal static class ProjectionEndpoints
             result.ProjectedWatermark.Value,
             [.. result.Skipped.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason))],
             result.AbsentFieldCounts,
-            result.UnresolvedReferences));
+            result.UnresolvedReferences,
+            result.Projected ? null
+                : intelligence.Installed ? NotProjectedReasonWire.NothingToInfer
+                : NotProjectedReasonWire.NoDeclaration));
     }
 
     private static async Task<IResult> GetStatusAsync(

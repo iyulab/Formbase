@@ -257,7 +257,8 @@ POST /formtypes/orders/projection
   "projectedWatermark": 12,
   "skipped": [{ "documentId": "…", "reason": "…" }],
   "absentFieldCounts": { "total": 1 },
-  "unresolvedReferences": ["customerName"]
+  "unresolvedReferences": ["customerName"],
+  "notProjectedReason": null
 }
 ```
 
@@ -269,6 +270,15 @@ landing under a watermark that does not cover them.
 `projected: false` means no declaration proposed a schema **and** schema intelligence (see
 [What this instance is](#what-this-instance-is)) had nothing to observe either. That is not an
 error — documents are accepted without one — and nothing about the recorded state changes.
+The three diagnostic fields are empty on such a run, because no run happened for them to describe;
+**`notProjectedReason`** is what says so, and what would change the answer:
+
+| `notProjectedReason` | Meaning | What to do |
+|---|---|---|
+| `noDeclaration` | Nothing is declared and schema intelligence is not installed — a declaration is the only thing that can give the form type a shape | Declare field hints; running the projection again changes nothing |
+| `nothingToInfer` | Nothing is declared and schema intelligence is installed, but found nothing to infer from (no documents yet, or none with an object body) | Declare field hints, or append documents and run again |
+
+It is `null` whenever `projected` is `true`.
 
 **When schema intelligence is installed and a form type has no declaration, this endpoint asks the
 model instead of answering `projected: false`.** A model failure is not silent: an unreadable or
@@ -412,9 +422,13 @@ which is stable; `title` and `detail` are prose.
   "type": "/problems/not-projected",
   "title": "The form type has no projection yet",
   "status": 409,
-  "detail": "Form type 'orders' has no projection; declare field hints or trigger a projection."
+  "detail": "Form type 'orders' has a declared shape that has not been projected yet; trigger a projection."
 }
 ```
+
+The `not-projected` detail names the one remedy that applies: *trigger a projection* when a shape is
+declared but not built yet, *declare field hints first* when nothing is declared — a projection run
+in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 
 | Status | `type` | When |
 |---|---|---|

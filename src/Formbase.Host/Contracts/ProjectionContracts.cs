@@ -21,13 +21,39 @@ namespace Formbase.Host.Contracts;
 /// Declared columns left empty because their binding could not be resolved. Named rather than
 /// silently blank: an empty column with no explanation reads as absent data.
 /// </param>
+/// <param name="NotProjectedReason">
+/// Why nothing was built, when <see cref="Projected"/> is false; null when it is true. The three
+/// diagnostic lists above describe a run that happened, so on a run that built nothing they are
+/// empty — and empty reads as "nothing was lost". This is what says the run did not happen and
+/// what would make it happen.
+/// </param>
 public sealed record ProjectionRunResponse(
     bool Projected,
     int Inserted,
     long ProjectedWatermark,
     IReadOnlyList<SkippedDocumentResponse> Skipped,
     IReadOnlyDictionary<string, int> AbsentFieldCounts,
-    IReadOnlyList<string> UnresolvedReferences);
+    IReadOnlyList<string> UnresolvedReferences,
+    NotProjectedReasonWire? NotProjectedReason);
+
+/// <summary>
+/// Why a projection run built nothing. Both mean no field hints are declared for the form type; they
+/// differ in whether anything else could supply a shape, and so in what the caller does next.
+/// </summary>
+public enum NotProjectedReasonWire
+{
+    /// <summary>
+    /// Nothing is declared and schema intelligence is not installed on this host, so a declaration is
+    /// the only thing that can give the form type a shape. Running the projection again changes nothing.
+    /// </summary>
+    NoDeclaration,
+
+    /// <summary>
+    /// Nothing is declared, and the installed schema intelligence found nothing to infer a shape from —
+    /// no documents yet, or none with an object body. Declare field hints, or append documents and run again.
+    /// </summary>
+    NothingToInfer,
+}
 
 /// <param name="DocumentId">The document that was not mapped.</param>
 /// <param name="Reason">Why it could not be mapped into the declared shape.</param>

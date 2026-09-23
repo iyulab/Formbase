@@ -41,6 +41,26 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
             "empty page would tell the caller the wrong one");
         var problem = await ReadAsync(response);
         problem.GetProperty("type").GetString().Should().Be("/problems/not-projected");
+        problem.GetProperty("detail").GetString().Should().Contain("Declare field hints first")
+            .And.NotContain("trigger a projection",
+                "with nothing declared a projection run projects nothing — offering it as a remedy " +
+                "sends the caller round a loop the server never names");
+    }
+
+    [Fact]
+    public async Task A_declared_form_type_not_yet_projected_names_projection_as_the_remedy()
+    {
+        var type = NewFormType();
+        Declare(type, ("total", ColumnType.Integer));
+        await AcceptAsync(type, """{"total":1}""");
+
+        var response = await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var problem = await ReadAsync(response);
+        problem.GetProperty("type").GetString().Should().Be("/problems/not-projected");
+        problem.GetProperty("detail").GetString().Should().Contain("trigger a projection")
+            .And.NotContain("Declare field hints");
     }
 
     [Fact]

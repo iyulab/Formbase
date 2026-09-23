@@ -124,7 +124,7 @@
           "ProjectionEndpoints"
         ],
         "summary": "Rebuilds a form type\u0027s projected table from raw",
-        "description": "Safe to repeat and safe to retry: the table is rebuilt from the raw stream rather than updated in place, so two runs over an unchanged stream leave the same table. A run is bounded to the raw head it saw when it started, so documents that arrive mid-run are left for the next one rather than landing under a watermark that does not cover them. A form type with no declaration answers projected: false \u2014 documents are accepted without one, so having none is not a failure.",
+        "description": "Safe to repeat and safe to retry: the table is rebuilt from the raw stream rather than updated in place, so two runs over an unchanged stream leave the same table. A run is bounded to the raw head it saw when it started, so documents that arrive mid-run are left for the next one rather than landing under a watermark that does not cover them. A form type with no declaration answers projected: false \u2014 documents are accepted without one, so having none is not a failure \u2014 and says why in notProjectedReason: noDeclaration when only a declaration can give it a shape, nothingToInfer when schema intelligence is installed but had nothing to infer from.",
         "operationId": "RunProjection",
         "parameters": [
           {
@@ -862,6 +862,13 @@
           }
         }
       },
+      "NotProjectedReasonWire": {
+        "enum": [
+          "noDeclaration",
+          "nothingToInfer",
+          null
+        ]
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -907,7 +914,8 @@
           "projectedWatermark",
           "skipped",
           "absentFieldCounts",
-          "unresolvedReferences"
+          "unresolvedReferences",
+          "notProjectedReason"
         ],
         "type": "object",
         "properties": {
@@ -952,6 +960,16 @@
             "items": {
               "type": "string"
             }
+          },
+          "notProjectedReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NotProjectedReasonWire"
+              }
+            ]
           }
         }
       },

@@ -19,10 +19,12 @@ namespace Formbase.Host.Tests;
 /// </summary>
 public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
 
     public ProjectionSurfaceTests(WebApplicationFactory<Program> factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -36,6 +38,9 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         run.GetProperty("projected").GetBoolean().Should().BeFalse(
             "documents are accepted without a declaration, so having none is a state, not an error");
         run.GetProperty("inserted").GetInt32().Should().Be(0);
+        run.GetProperty("notProjectedReason").GetString().Should().Be("noDeclaration",
+            "the diagnostic lists are empty on a run that did not happen, which reads as 'nothing " +
+            "was lost' — this is the field that says the run did not happen and what would change that");
 
         var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("notProjected");
@@ -55,6 +60,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
         run.GetProperty("projected").GetBoolean().Should().BeTrue();
         run.GetProperty("inserted").GetInt32().Should().Be(2);
+        run.GetProperty("notProjectedReason").ValueKind.Should().Be(JsonValueKind.Null);
 
         var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
         status.GetProperty("state").GetString().Should().Be("projected");
@@ -271,6 +277,25 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
             .EnumerateArray().Select(v => v.GetString()).ToList();
 
         states.Should().BeEquivalentTo(["notProjected", "projected", "stale", "unverified"]);
+    }
+
+    // With intelligence installed a form type with no declaration is not a dead end — documents can
+    // still give it a shape — so the reason has to say that, not "declare or nothing". No document is
+    // appended, so the proposer has nothing to sample and never reaches the (unreachable) endpoint.
+    [Fact]
+    public async Task With_intelligence_installed_a_run_with_nothing_to_infer_says_so()
+    {
+        using var _ = LlmEnvironment.Cleared();
+        using var host = _factory.WithWebHostBuilder(b => b
+            .UseSetting("Formbase:Llm:Endpoint", "https://models.invalid")
+            .UseSetting("Formbase:Llm:ApiKey", "not-a-real-key")
+            .UseSetting("Formbase:Llm:Model", "some-model"));
+        using var client = host.CreateClient();
+
+        var run = await ReadAsync(await client.PostAsync($"/formtypes/{NewFormType()}/projection", null, TestContext.Current.CancellationToken));
+
+        run.GetProperty("projected").GetBoolean().Should().BeFalse();
+        run.GetProperty("notProjectedReason").GetString().Should().Be("nothingToInfer");
     }
 
     private static string NewFormType() => $"proj{Guid.NewGuid():N}"[..16];

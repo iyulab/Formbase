@@ -4,6 +4,20 @@
 
 ### Changed
 
+- `POST /formtypes/{type}/projection` says why it built nothing. A run on a form type with no
+  declaration answered `200` with `projected: false` and three empty diagnostic lists — and empty
+  lists read as "nothing was lost", so the response looked like a successful run with nothing to
+  do. It now carries `notProjectedReason`: `noDeclaration` when only a declaration can give the form
+  type a shape, `nothingToInfer` when schema intelligence is installed but had no documents to infer
+  from; `null` whenever `projected` is `true`. Additive on the wire.
+- The `/problems/not-projected` detail names the one remedy that applies instead of offering two.
+  It used to say "declare field hints or trigger a projection" in every case, and with nothing
+  declared the second remedy is a projection run that projects nothing — a loop the server never
+  named. With nothing declared it now says to declare first; with a declared shape not yet built it
+  says to trigger a projection. The problem `type` is unchanged. In `Formbase.Core`,
+  `NotProjectedException` takes the state as a second constructor argument and exposes it as
+  `HasSchema`.
+
 - The M3L hint adapter now maps the whole numeric catalog. `byte`, `short` and `long` join
   `integer` in the integer slot — that slot is emitted as a 64-bit column, so no rung of the ladder
   loses a value — and `double` and `percentage` join `float`, `decimal` and `money` in the decimal
