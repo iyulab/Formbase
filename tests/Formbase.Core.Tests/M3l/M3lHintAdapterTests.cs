@@ -273,4 +273,70 @@ public class M3lHintAdapterTests
         result.Gaps.Should().Contain(g =>
             g.Field == "tags" && g.Kind == VocabularyGapKind.Unresolved && g.Construct == "array of string");
     }
+
+    private const string OwnedAndComposedForm =
+        """
+        # Prefix: acme
+
+        ## Party
+        - name: string
+        - code: string
+
+        ## Customer ::aspect(Party)
+        - tier: integer
+
+        ## Vendor ::subtype(Party)
+        - rating: decimal
+
+        ## Party ::extend
+        - region: string
+        """;
+
+    // An extension's fields are merged into the target by the parser, so the column itself arrives —
+    // what drops is which owner contributed it.
+    [Fact]
+    public void An_extension_field_keeps_its_column_and_measures_the_lost_owner()
+    {
+        var result = M3lHintAdapter.Adapt(OwnedAndComposedForm);
+
+        var party = result.Hints.Single(h => h.TableName == "party");
+        party.Fields.Select(f => f.Name).Should().Equal("name", "code", "region");
+        result.Gaps.Should().ContainSingle(g => g.Field != null && g.Kind == VocabularyGapKind.Unresolved)
+            .Which.Should().Match<VocabularyGap>(g => g.Field == "region" && g.Construct == "extended by acme");
+    }
+
+    // ::aspect / ::subtype are ordinary models that name a base. Emitting one as a table of its own
+    // fields is the same composition loss inheritance already records — it must not pass silently.
+    [Fact]
+    public void A_base_model_link_is_measured_like_inheritance()
+    {
+        var result = M3lHintAdapter.Adapt(OwnedAndComposedForm);
+
+        result.Hints.Single(h => h.TableName == "customer").Fields.Select(f => f.Name).Should().Equal("tier");
+        result.Gaps.Should().Contain(g =>
+            g.Model == "Customer" && g.Field == null && g.Construct == "aspect of Party");
+        result.Gaps.Should().Contain(g =>
+            g.Model == "Vendor" && g.Field == null && g.Construct == "subtype of Party");
+    }
+
+    [Fact]
+    public void The_declared_owner_is_measured_on_every_model_it_qualifies()
+    {
+        var result = M3lHintAdapter.Adapt(OwnedAndComposedForm);
+
+        result.Gaps.Where(g => g.Construct == "owner acme").Select(g => g.Model)
+            .Should().BeEquivalentTo("Party", "Customer", "Vendor");
+        result.Hints.Single(h => h.TableName == "party").Type.Value.Should().Be("party",
+            "the form type is still the bare model name — that is the loss being measured");
+    }
+
+    [Fact]
+    public void A_document_without_owners_or_bases_records_none_of_these_gaps()
+    {
+        var result = M3lHintAdapter.Adapt(InspectionForm);
+
+        result.Gaps.Should().NotContain(g =>
+            g.Construct.StartsWith("owner ") || g.Construct.StartsWith("extended by ")
+            || g.Construct.Contains(" of ") && g.Field == null);
+    }
 }

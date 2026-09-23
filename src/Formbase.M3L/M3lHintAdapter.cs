@@ -48,6 +48,25 @@ public static class M3lHintAdapter
                 "Inherited fields are not resolved by the spike; the flat vocabulary has no composition either."));
         }
 
+        if (model.Base is not null)
+        {
+            // ::aspect(Base) / ::subtype(Base) name the model this one specialises. The adapter emits
+            // it as a table of its own fields only; the link to the base is the same composition the
+            // flat vocabulary lacks for inheritance.
+            gaps.Add(new VocabularyGap(model.Name, null, VocabularyGapKind.Unresolved,
+                $"{model.Base.Kind} of {model.Base.Model}",
+                "A base-model link (aspect/subtype) is not resolved; the hint set carries only this model's own fields."));
+        }
+
+        if (model.Prefix is not null || model.Namespace is not null)
+        {
+            // The owner qualifies the model's identity, but a FormTypeRef is the bare model name —
+            // two owners declaring the same name would collide on it.
+            gaps.Add(new VocabularyGap(model.Name, null, VocabularyGapKind.Unresolved,
+                $"owner {Owner(model.Prefix, model.Namespace)}",
+                "The owner (prefix/namespace) has no slot; the form type is identified by the bare model name."));
+        }
+
         // The free-form Relations section is a distinct M3L construct the spike does not decode
         // structurally (its entries are opaque here) — still a measured gap. Field-level @reference,
         // which is structured, is filled below.
@@ -83,6 +102,15 @@ public static class M3lHintAdapter
                 field.Kind.ToString().ToLowerInvariant(),
                 "Derived fields are query-layer, not stored declarations; the vocabulary does not carry them."));
             return;
+        }
+
+        if (field.Origin is not null)
+        {
+            // An ::extend field is merged into its target by the parser and lands here as an ordinary
+            // column; which owner contributed it is carried by the field and by nothing downstream.
+            gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Unresolved,
+                $"extended by {Owner(field.Origin.Prefix, field.Origin.Namespace) ?? field.Origin.Source ?? "(unknown)"}",
+                "A field contributed by an extension keeps its column but loses its owner; the vocabulary has no provenance slot."));
         }
 
         if (field.Label is not null && field.Label != field.Name)
@@ -212,6 +240,15 @@ public static class M3lHintAdapter
                 return null;
         }
     }
+
+    private static string? Owner(string? prefix, string? ns) =>
+        (prefix, ns) switch
+        {
+            (null, null) => null,
+            (not null, null) => prefix,
+            (null, not null) => ns,
+            _ => $"{prefix} ({ns})",
+        };
 
     private static string RefTarget(FieldAttribute attribute)
     {
