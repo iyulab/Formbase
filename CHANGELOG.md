@@ -15,6 +15,13 @@
   already has a container skips it), and CI compiles the quick start against freshly packed packages
   and exactly the packages the README installs.
 
+### Dependencies
+
+- `M3L.Native` to 0.15.0. Its parse output lists metadata, custom-section and extension keys in
+  sorted order rather than in an order that changed from run to run; its new lookup-path check
+  (`M3L-E022`) is a validation diagnostic, and the hint adapter only parses, so a declaration it
+  accepted before is accepted now.
+
 ## 0.11.0
 
 Pairs with MorphDB `0.12.x`. A minor: a form type's raw stream is now readable over HTTP, page by
