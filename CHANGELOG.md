@@ -64,14 +64,17 @@
 
 ### Dependencies
 
-- `M3L.Native` to 0.13.0. 0.11.0 adds a multi-file validation entry point (`ValidateMulti` and its
+- `M3L.Native` to 0.14.0. 0.11.0 adds a multi-file validation entry point (`ValidateMulti` and its
   typed and result-returning siblings) alongside the existing multi-file parse, and 0.12.0 widens
   the type catalog with `byte`, `short` and `double` and states `float` as 32-bit; the three new
   type names are mapped by the hint adapter in this same release. 0.13.0 adds the `# Prefix:` owner
   header, `::extend` blocks (merged into their target's fields, each carrying its origin) and the
   `::aspect` / `::subtype` base kinds, which are now ordinary models with a base rather than untyped
   generic kinds — a document that used those three words as custom kinds changes meaning. The
-  adapter's handling of them is described above.
+  adapter's handling of them is described above. 0.14.0 resolves enum inheritance into an enum's
+  values and tightens validation (a later hop of a lookup path without a reference, a value name
+  repeated across inheritance, an argument on an extend header); the hint adapter parses without
+  validating and maps enum types to text, so its output does not change.
 - `MorphDB.Client` to 0.12.1, and the MorphDB server image in `docker-compose.yml`, the README and
   the live fixtures to `0.12.1`. The producer's release is a patch carrying its own dependency round
   and a documentation correction; no wire member moves. The live MorphDB suite passes unchanged
