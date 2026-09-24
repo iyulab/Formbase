@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.11.1
+
+Pairs with MorphDB `0.12.x`. A patch: no surface moves. The packages carry their XML documentation,
+the README quick start compiles as written, and the Docker release no longer republishes a version
+already in the registry.
 
 ### Added
 
@@ -29,6 +33,9 @@
   sorted order rather than in an order that changed from run to run; its new lookup-path check
   (`M3L-E022`) is a validation diagnostic, and the hint adapter only parses, so a declaration it
   accepted before is accepted now.
+- `MorphDB.Client` to 0.12.3, and the MorphDB server image in `docker-compose.yml`, the README and
+  the live fixtures to `0.12.3` (a patch: XML documentation and packaging). The live suite passes
+  unchanged against the published `0.12.3` image.
 
 ## 0.11.0
 

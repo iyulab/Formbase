@@ -9,7 +9,7 @@
     <AnalysisLevel>latest-recommended</AnalysisLevel>
 
     <!-- Versioning -->
-    <Version>0.11.0</Version>
+    <Version>0.11.1</Version>
 
     <!-- Package Info -->
     <Authors>iyulab</Authors>

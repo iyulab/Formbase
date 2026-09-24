@@ -1,7 +1,7 @@
 # HTTP API
 
-> The released version is **0.11.0**, and the documents that describe it are the tree at its tag —
-> open a file at `v0.11.0` to read the reference for what you can install today.
+> The released version is **0.11.1**, and the documents that describe it are the tree at its tag —
+> open a file at `v0.11.1` to read the reference for what you can install today.
 >
 > A `Since x.y.z` marker names a **Formbase** version. Statements about the MorphDB a deployment
 > runs against are written in prose, because that version moves on its own line.
