@@ -247,3 +247,37 @@ jobs:
         uses: iyulab/dotnet-ci-actions/vulnerability-scan@00faf7ff62b88e11fbf88edfedcf73bdc5f2eebe # main, 2026-08-31
         with:
           project: Formbase.slnx
+
+  # Packs the solution and checks what a package consumer receives: each package's contents
+  # (readme, license, and -- once generated -- XML documentation) and whether the README quick start
+  # compiles against exactly the packages the README tells a reader to install. The repository's
+  # own build cannot see either: it compiles README code against nothing, and its tests reference
+  # packages a reader is never told to add.
+  package-consumer:
+    name: Package Consumer Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/Directory.Packages.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Package consumer check
+        uses: iyulab/dotnet-ci-actions/package-consumer-check@1f7ba8a09451596399429d57f9076da341638dcb # main, 2026-09-24
+        with:
+          project: Formbase.slnx
+          min-snippets: '1'
+          # XML documentation is not generated yet; this turns on with GenerateDocumentationFile.
+          require-xml-docs: 'false'

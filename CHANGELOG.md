@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The README quick start compiles as written. It builds a `ServiceCollection`, whose
+  `BuildServiceProvider` lives in `Microsoft.Extensions.DependencyInjection`; `Formbase.DependencyInjection`
+  depends only on the container abstractions, and the install list did not name the implementation, so
+  a console app following the README failed with `CS1061`. The install list now names it (a host that
+  already has a container skips it), and CI compiles the quick start against freshly packed packages
+  and exactly the packages the README installs.
+
 ## 0.11.0
 
 Pairs with MorphDB `0.12.x`. A minor: a form type's raw stream is now readable over HTTP, page by

@@ -61,10 +61,13 @@ dotnet add package Formbase.DependencyInjection  # AddFormbaseCore / AddFormbase
 dotnet add package Formbase.MorphDb              # IProjectionStore over MorphDB
 dotnet add package Formbase.Postgres             # durable raw store, projection state, field hints
 dotnet add package Formbase.SchemaIntelligence   # optional: LLM-backed ISchemaProposer
+dotnet add package Microsoft.Extensions.DependencyInjection  # the container the quick start builds; skip it if your host already has one
 ```
 
 `Formbase.Core` has zero external package dependencies, and the in-memory profile below needs
-nothing else — the adapters are what bring in Npgsql, the MorphDB client, and
+no service running — only a DI container to compose it in (`Formbase.DependencyInjection` depends
+on the container abstractions, not on an implementation, so a console app adds one; an ASP.NET Core
+or generic host already has it). The adapters are what bring in Npgsql, the MorphDB client, and
 `Microsoft.Extensions.AI`.
 
 **Or run it as a service.** `Formbase.Host` serves the engine over HTTP so a consumer does not have
@@ -118,6 +121,7 @@ whether intelligence is installed. Credentials are never reported back.
 
 ## Quick start
 
+<!-- snippet: compile packages="Formbase.Core Formbase.DependencyInjection Microsoft.Extensions.DependencyInjection" -->
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Formbase.Core;
