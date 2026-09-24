@@ -249,7 +249,7 @@ jobs:
           project: Formbase.slnx
 
   # Packs the solution and checks what a package consumer receives: each package's contents
-  # (readme, license, and -- once generated -- XML documentation) and whether the README quick start
+  # (XML documentation, readme, license) and whether the README quick start
   # compiles against exactly the packages the README tells a reader to install. The repository's
   # own build cannot see either: it compiles README code against nothing, and its tests reference
   # packages a reader is never told to add.
@@ -279,5 +279,3 @@ jobs:
         with:
           project: Formbase.slnx
           min-snippets: '1'
-          # XML documentation is not generated yet; this turns on with GenerateDocumentationFile.
-          require-xml-docs: 'false'

@@ -1,0 +1,17 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    API documentation travels with the package: the XML file an IDE shows beside each member is only
+    packed when it is generated. Set here rather than at the root so it covers the shipped code under
+    src/ and not tests; a project under src/ that ships no package turns it off beside its
+    IsPackable=false (an ASP.NET Core host would otherwise also publish these comments in its
+    OpenAPI document, which is a change to that contract, not to a package). CS1591 (a public member without a comment) is not an error yet, because
+    documenting every public member is a separate decision; every other documentation warning
+    (malformed XML, a param or cref that names nothing) stays an error under TreatWarningsAsErrors.
+  -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

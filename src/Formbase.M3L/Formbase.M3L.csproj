@@ -10,6 +10,8 @@
       Not packaged; whether an M3L adapter ships at all is a separate product decision.
     -->
     <IsPackable>false</IsPackable>
+    <!-- Not a package, so no API documentation file (src/Directory.Build.props). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

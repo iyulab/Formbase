@@ -5,10 +5,10 @@ namespace Formbase.Core.Schema;
 /// <summary>The kind of a declared relation between form types (Formology rules 3·4).</summary>
 public enum RelationKind
 {
-    /// <summary>Rule 3 — the target is a child entity (1:N); the child's <paramref name="KeyField"/> points back here.</summary>
+    /// <summary>Rule 3 — the target is a child entity (1:N); the child's <see cref="RelationHint.KeyField"/> points back here.</summary>
     Child,
 
-    /// <summary>Rule 4 — a foreign-key reference to the target; this type's <paramref name="KeyField"/> points at it.</summary>
+    /// <summary>Rule 4 — a foreign-key reference to the target; this type's <see cref="RelationHint.KeyField"/> points at it.</summary>
     Reference,
 }
 

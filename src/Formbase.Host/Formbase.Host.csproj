@@ -8,6 +8,8 @@
       packaging of the surface rather than a replacement for it.
     -->
     <IsPackable>false</IsPackable>
+    <!-- Not a package, so no API documentation file (src/Directory.Build.props). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

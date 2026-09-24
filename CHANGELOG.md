@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- The packages carry their XML documentation, so an IDE shows each member's comment from the package.
+
 ### Fixed
 
 - The README quick start compiles as written. It builds a `ServiceCollection`, whose

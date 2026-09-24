@@ -7,6 +7,11 @@ namespace Formbase.Core.Projection;
 /// otherwise it reports how many rows landed, which documents were skipped, per-column absence counts,
 /// and the watermark reached.
 /// </summary>
+/// <param name="Projected">
+/// Whether the run projected anything; <see langword="false"/> when nothing proposed a schema.
+/// </param>
+/// <param name="Inserted">How many rows landed in the projection.</param>
+/// <param name="Skipped">The documents the run did not project, each with its reason.</param>
 /// <param name="AbsentFieldCounts">
 /// For each declared column, how many projected rows came from documents that did not carry the field
 /// at all. An explicit <c>null</c> in the document is an answer and is not counted here — a field the
@@ -20,6 +25,7 @@ namespace Formbase.Core.Projection;
 /// so the column is left empty rather than filled with the document's own fixed-then copy — and
 /// named here, because leaving it empty without saying so is the same silence in a quieter form.
 /// </param>
+/// <param name="ProjectedWatermark">The raw-stream watermark the run projected up to.</param>
 public sealed record ProjectionResult(
     bool Projected,
     int Inserted,

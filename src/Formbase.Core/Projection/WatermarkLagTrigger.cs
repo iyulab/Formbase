@@ -7,7 +7,7 @@ namespace Formbase.Core.Projection;
 /// First-cycle <see cref="IProjectionTrigger"/>: observes the gap between the raw head and the
 /// recorded projection stamp. A shape change (redeclared fingerprint, moved table) fires
 /// immediately — the projection is answering with the wrong shape until rebuilt. Pure data lag
-/// fires only at <paramref name="lagThreshold"/> documents behind: a projection is a
+/// fires only at <c>lagThreshold</c> documents behind: a projection is a
 /// drop-and-rebuild, so rebuilding on every single document would thrash; the threshold is the
 /// policy knob between freshness and rebuild cost. Never fires when nothing proposes a schema
 /// (projection would be a no-op) or when a declared type has no documents yet.
