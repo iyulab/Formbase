@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.11.0
+
+Pairs with MorphDB `0.12.x`. A minor: a form type's raw stream is now readable over HTTP, page by
+page, and a projection that builds nothing says why — which changes the public
+`NotProjectedException` constructor in `Formbase.Core`. Everything on the wire is additive. The M3L
+hint adapter maps and records more of what a declaration says, on `M3L.Native` 0.14.0.
 
 ### Added
 
@@ -75,10 +80,10 @@
   values and tightens validation (a later hop of a lookup path without a reference, a value name
   repeated across inheritance, an argument on an extend header); the hint adapter parses without
   validating and maps enum types to text, so its output does not change.
-- `MorphDB.Client` to 0.12.1, and the MorphDB server image in `docker-compose.yml`, the README and
-  the live fixtures to `0.12.1`. The producer's release is a patch carrying its own dependency round
-  and a documentation correction; no wire member moves. The live MorphDB suite passes unchanged
-  against the `0.12.1` image (310/310).
+- `MorphDB.Client` to 0.12.2, and the MorphDB server image in `docker-compose.yml`, the README and
+  the live fixtures to `0.12.2`. The producer's releases since 0.12.0 are patches carrying dependency
+  rounds and documentation corrections; no wire member moves. The suite with the live MorphDB tests
+  passes unchanged against the published `0.12.2` image (330/330).
 - `Microsoft.NET.Test.Sdk` to 18.10.1 (tests only).
 
 ## 0.10.1
