@@ -15,6 +15,14 @@
   already has a container skips it), and CI compiles the quick start against freshly packed packages
   and exactly the packages the README installs.
 
+### Changed
+
+- The Docker release no longer republishes a version that is already in the registry. A push that
+  changed `Directory.Build.props` without changing `<Version>` used to rebuild that version from the
+  pushed commit and move its image tags onto code never released under that number; the release now
+  checks the registry first, publishes nothing when the tag exists, and fails rather than guesses when
+  the registry cannot be asked. The NuGet release was already idempotent.
+
 ### Dependencies
 
 - `M3L.Native` to 0.15.0. Its parse output lists metadata, custom-section and extension keys in

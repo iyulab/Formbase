@@ -22,13 +22,19 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
-    name: Build & Publish Image
+  gate:
+    name: Version not yet published
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
-      packages: write
+      packages: read
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      major_minor: ${{ steps.version.outputs.major_minor }}
+      image: ${{ steps.version.outputs.image }}
+      already: ${{ steps.published.outputs.already }}
 
     steps:
       - name: Checkout
@@ -48,6 +54,45 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION, image: $IMAGE"
 
+      # A push that changes Directory.Build.props without changing <Version> — a comment, a build
+      # property — fires this workflow too, and the job below would rebuild the version already
+      # published from the current commit and move its tags onto code that was never released under
+      # that number. The NuGet release is idempotent by construction (--skip-duplicate, and its tag
+      # and release steps leave an existing one alone); this is the same guard for the image. It fails
+      # closed: a registry that cannot be asked is not taken to mean "not published".
+      - name: Check whether this version is already published
+        id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin > /dev/null
+          if out=$(docker manifest inspect "$IMAGE:$VERSION" 2>&1); then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$IMAGE:$VERSION is already published; nothing to release. Bump <Version> to publish."
+          elif printf '%s' "$out" | grep -qiE 'manifest unknown|no such manifest'; then
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Could not tell whether $IMAGE:$VERSION is already published: $out"
+            exit 1
+          fi
+
+  build-and-push:
+    needs: gate
+    # A manual run publishes nothing (see the push step), so it still builds and probes the image.
+    if: needs.gate.outputs.already != 'true' || github.event_name == 'workflow_dispatch'
+    name: Build & Publish Image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       # The NuGet release refuses to publish a version the changelog does not record. This workflow
       # fires on the same version bump, and what it publishes cannot be withdrawn — an image tag
       # stays where it is pushed. So it holds the same line, by the same test, and holds it before
@@ -56,7 +101,7 @@ jobs:
       # of a version.
       - name: Verify the changelog records this version
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.gate.outputs.version }}"
           awk -v heading="## $VERSION" '
             $0 == heading { capture = 1; next }
             capture && /^## / { exit }
@@ -149,11 +194,11 @@ jobs:
           file: src/Formbase.Host/Dockerfile
           push: true
           tags: |
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
-            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.major_minor }}
-            ${{ steps.version.outputs.image }}:latest
+            ${{ needs.gate.outputs.image }}:${{ needs.gate.outputs.version }}
+            ${{ needs.gate.outputs.image }}:${{ needs.gate.outputs.major_minor }}
+            ${{ needs.gate.outputs.image }}:latest
           labels: |
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.version=${{ needs.gate.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
