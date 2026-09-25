@@ -275,7 +275,7 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Package consumer check
-        uses: iyulab/dotnet-ci-actions/package-consumer-check@6ca75ec6951f8f2cdfcf746983fe237080813997 # main, 2026-09-25
+        uses: iyulab/dotnet-ci-actions/package-consumer-check@8ab06f352d8c3e31d8c7f56dae1ecc6c3a160ef6 # main, 2026-09-25
         with:
           project: Formbase.slnx
           min-snippets: '1'
