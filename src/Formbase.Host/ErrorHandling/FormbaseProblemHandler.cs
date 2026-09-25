@@ -44,6 +44,15 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 "The projection store is not reachable",
                 e.Message),
 
+            // 422 rather than 409: nothing the caller could change about the stored document makes
+            // this request acceptable under this key, which is what a conflict would promise. A key
+            // belongs to one request (draft-ietf-httpapi-idempotency-key-header, section 2.7).
+            IdempotencyKeyReusedException e => Problem(
+                StatusCodes.Status422UnprocessableEntity,
+                "idempotency-key-reused",
+                "The idempotency key already belongs to another request",
+                e.Message),
+
             IntakeException e => Problem(
                 StatusCodes.Status503ServiceUnavailable,
                 "intake-failed",

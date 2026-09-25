@@ -50,6 +50,25 @@ public class IntakeServiceTests
     }
 
     [Fact]
+    public async Task Accept_refuses_a_key_already_holding_a_document_of_another_form_type()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store);
+        var key = DocumentId.New();
+        var other = FormTypeRef.Create("work-order");
+
+        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
+        var reuse = () => intake.AcceptAsync(other, Body("""{"other":"x"}"""), key, TestContext.Current.CancellationToken);
+
+        var refused = (await reuse.Should().ThrowAsync<IdempotencyKeyReusedException>()).Which;
+        refused.DocumentId.Should().Be(key);
+        refused.RequestedType.Should().Be(other);
+        refused.StoredType.Should().Be(Qc);
+        (await store.HeadAsync(other, TestContext.Current.CancellationToken)).Should().Be(Watermark.Zero,
+            "the refused document must not be stored under the other form type either");
+    }
+
+    [Fact]
     public async Task Accept_wraps_a_low_level_store_failure_as_IntakeException()
     {
         var intake = new IntakeService(new ThrowingRawStore());

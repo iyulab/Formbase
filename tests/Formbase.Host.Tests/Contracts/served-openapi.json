@@ -16,7 +16,7 @@
           "DocumentEndpoints"
         ],
         "summary": "Accepts a document into the raw store",
-        "description": "The document is stored verbatim; no declaration is required and none is consulted. Send an Idempotency-Key header to make re-submission safe: the same key returns the same document without appending a second copy.",
+        "description": "The document is stored verbatim; no declaration is required and none is consulted. Send an Idempotency-Key header to make re-submission safe: the same key returns the same document without appending a second copy. A key already used for a document of another form type is refused with 422.",
         "operationId": "AcceptDocument",
         "parameters": [
           {
@@ -56,6 +56,16 @@
           },
           "400": {
             "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {

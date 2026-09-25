@@ -115,6 +115,12 @@ same request lands on the same document rather than a second copy, takes no new 
 stream, and answers exactly as the first call did — a reply that revealed which attempt it was would
 teach callers to tell them apart, which is the opposite of what the key is for.
 
+**A key belongs to one form type.** Sent again for a document of another form type, it is refused
+with `422` `/problems/idempotency-key-reused` — that is a second request wearing the first one's key,
+not a retry of it, and answering it as a retry would report a document of the new type that was never
+stored. The document already held under the key is unchanged. Under the same form type the key is
+answered as a retry whatever the body says: the document keeps the body it was first stored with.
+
 The key travels in a header rather than in the body, and that is forced rather than chosen: the body
 is kept verbatim, so a key written into it would become part of the document. It must be a UUID; a
 value that cannot be an identity is refused rather than ignored, since ignoring it would stop
@@ -492,6 +498,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
+| 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies a document of another form type |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
 | 503 | `/problems/schema-proposer-unavailable` | Schema intelligence is installed but the model could not be reached (connection, timeout, auth, rate limit) |

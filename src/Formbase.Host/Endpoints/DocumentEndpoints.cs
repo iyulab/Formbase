@@ -34,9 +34,11 @@ internal static class DocumentEndpoints
             .WithDescription(
                 "The document is stored verbatim; no declaration is required and none is consulted. " +
                 "Send an Idempotency-Key header to make re-submission safe: the same key returns the " +
-                "same document without appending a second copy.")
+                "same document without appending a second copy. A key already used for a document " +
+                "of another form type is refused with 422.")
             .Produces<AcceptedDocumentResponse>(StatusCodes.Status201Created)
-            .ProducesProblem(StatusCodes.Status400BadRequest);
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         routes.MapGet("/formtypes/{type}/documents", ListAsync)
             .WithName("ListDocuments")

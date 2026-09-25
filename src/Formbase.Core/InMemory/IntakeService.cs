@@ -23,14 +23,24 @@ public sealed class IntakeService : IIntakeService
     {
         var id = idempotencyId ?? DocumentId.New();
 
+        StoredDocument stored;
         try
         {
-            var stored = await _rawStore.AppendAsync(type, id, body, cancellationToken).ConfigureAwait(false);
-            return stored.Id;
+            stored = await _rawStore.AppendAsync(type, id, body, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
         {
             throw new IntakeException($"Failed to accept document for form type '{type}'.", ex);
         }
+
+        // The store hands back what it already holds for a known id. Under the same form type that is
+        // a retry; under another it is a second request wearing the first one's key, and accepting it
+        // would report a document of this type that was never stored.
+        if (stored.Type != type)
+        {
+            throw new IdempotencyKeyReusedException(id, type, stored.Type);
+        }
+
+        return stored.Id;
     }
 }

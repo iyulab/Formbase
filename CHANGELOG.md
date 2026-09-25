@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- An `Idempotency-Key` already used for a document of one form type, sent again for another, is
+  refused with `422` `/problems/idempotency-key-reused`. It used to answer `201` naming the new form
+  type while storing nothing: the key's document stayed where it was and the new body was dropped.
+  A retry of the accepted request — same form type — still returns the same document.
+
 ## 0.11.1
 
 Pairs with MorphDB `0.12.x`. A patch: no surface moves. The packages carry their XML documentation,

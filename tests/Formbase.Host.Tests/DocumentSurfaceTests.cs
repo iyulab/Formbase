@@ -104,6 +104,30 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
     }
 
     /// <summary>
+    /// A key sent again under another form type is a second request, not a retry. Answering it as a
+    /// retry named the new form type in a 201 while the document stayed under the first one and the new
+    /// body went nowhere — so the refusal is checked together with both streams.
+    /// </summary>
+    [Fact]
+    public async Task A_key_reused_for_another_form_type_is_refused_and_stores_nothing()
+    {
+        var key = Guid.NewGuid();
+        var first = UniqueType();
+        var second = UniqueType();
+        (await PostAsync(first, """{"total":1}""", key)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var reuse = await PostAsync(second, """{"other":"x"}""", key);
+
+        reuse.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await ReadAsync(reuse)).GetProperty("type").GetString().Should().Be("/problems/idempotency-key-reused");
+        var held = await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken));
+        held.GetProperty("formType").GetString().Should().Be(first);
+        held.GetProperty("body").GetProperty("total").GetInt32().Should().Be(1);
+        var stream = await ReadAsync(await _client.GetAsync($"/formtypes/{second}/documents", TestContext.Current.CancellationToken));
+        stream.GetProperty("documents").GetArrayLength().Should().Be(0);
+    }
+
+    /// <summary>
     /// Two submissions without a key are two documents. Without this, a surface that quietly reused
     /// one identity would pass every test above.
     /// </summary>

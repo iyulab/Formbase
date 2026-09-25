@@ -188,6 +188,13 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                 return await t.DeclareAsync(type, version: 2, expected: 99);
             },
 
+            ["/problems/idempotency-key-reused"] = async t =>
+            {
+                var key = Guid.NewGuid().ToString();
+                (await t.PostDocumentAsync(NewFormType(), """{"total":1}""", key)).Dispose();
+                return await t.PostDocumentAsync(NewFormType(), """{"total":1}""", key);
+            },
+
             ["/problems/intake-failed"] = async t =>
             {
                 using var factory = t.WithStore<IRawStore>(new UnreachableRawStore());
@@ -247,8 +254,20 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
 
     private static string NewFormType() => $"pt{Guid.NewGuid():N}"[..16];
 
-    private Task<HttpResponseMessage> PostDocumentAsync(string type, string body) =>
-        _client.PostAsync($"/formtypes/{type}/documents", new StringContent(body, Encoding.UTF8, "application/json"));
+    private Task<HttpResponseMessage> PostDocumentAsync(string type, string body, string? idempotencyKey = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+
+        if (idempotencyKey is not null)
+        {
+            request.Headers.Add("Idempotency-Key", idempotencyKey);
+        }
+
+        return _client.SendAsync(request);
+    }
 
     private Task<HttpResponseMessage> DeclareAsync(string type, int version, int? expected = null) =>
         _client.PutAsJsonAsync($"/formtypes/{type}/declaration", new

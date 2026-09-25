@@ -12,7 +12,9 @@ public interface IIntakeService
     /// <summary>
     /// Accepts a document of the given form type. A first-seen form type is auto-registered
     /// (type only, not a schema). If <paramref name="idempotencyId"/> is supplied, re-submission
-    /// is safe. Returns the id under which the document was stored.
+    /// is safe: a key already holding a document of this form type returns that document's id without
+    /// storing a second one. A key already holding a document of another form type is refused with
+    /// <see cref="Errors.IdempotencyKeyReusedException"/>. Returns the id under which the document was stored.
     /// </summary>
     Task<DocumentId> AcceptAsync(
         FormTypeRef type,

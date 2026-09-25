@@ -64,6 +64,24 @@ public abstract class RawStoreContractTests
         head.Should().Be(first.Watermark, "a duplicate id must not create a second row");
     }
 
+    /// <summary>
+    /// Intake tells a retry from a reused key by the form type of what comes back, so every store has
+    /// to hand back the document it already holds — its own type, not the one this call named.
+    /// </summary>
+    [Fact]
+    public async Task Append_of_a_known_id_under_another_form_type_returns_the_original_document()
+    {
+        var store = CreateStore();
+        var id = DocumentId.New();
+
+        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var again = await store.AppendAsync(Work, id, Body("""{"other":"x"}"""), TestContext.Current.CancellationToken);
+
+        again.Type.Should().Be(Qc);
+        again.Watermark.Should().Be(first.Watermark);
+        (await store.HeadAsync(Work, TestContext.Current.CancellationToken)).Should().Be(Watermark.Zero);
+    }
+
     [Fact]
     public async Task Get_returns_the_appended_document()
     {
