@@ -25,4 +25,16 @@ public enum StoreProfile
 /// different answer.
 /// </summary>
 /// <param name="Profile">The stores this host is running on.</param>
-public sealed record StoreProfileSelection(StoreProfile Profile);
+/// <param name="Location">
+/// Where a durable profile keeps its data; null for the in-process stores, which keep it nowhere.
+/// </param>
+public sealed record StoreProfileSelection(StoreProfile Profile, DurableStoreLocation? Location = null);
+
+/// <summary>
+/// The parts of a durable composition that decide <em>which data</em> this host reads and writes,
+/// apart from the connection itself. Two hosts that agree on both read and write the same data,
+/// whatever namespace each calls itself — so they are reported, where an operator can compare them.
+/// </summary>
+/// <param name="Schema">The PostgreSQL schema holding the raw stream, projection state and declarations.</param>
+/// <param name="MorphDbProjectId">The MorphDB project holding the projected tables.</param>
+public sealed record DurableStoreLocation(string Schema, Guid MorphDbProjectId);

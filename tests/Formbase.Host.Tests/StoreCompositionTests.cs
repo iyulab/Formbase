@@ -54,6 +54,33 @@ public class StoreCompositionTests
     }
 
     /// <summary>
+    /// A namespace is a name the host answers to; the schema and the MorphDB project are where its data
+    /// lives. Two hosts that differ only in the name share one stream, so the location is recorded with
+    /// the profile decision — the default schema included, since leaving it unset is how two hosts end
+    /// up on the same one.
+    /// </summary>
+    [Fact]
+    public async Task The_durable_profile_records_where_its_data_lives()
+    {
+        await using var defaults = Compose(Durable());
+        defaults.GetRequiredService<StoreProfileSelection>().Location.Should().Be(
+            new DurableStoreLocation("formbase", Guid.Parse("6f1a6f6e-0000-4000-8000-000000000001")));
+
+        var separated = Durable();
+        separated["Formbase:Schema"] = "store";
+        await using var configured = Compose(separated);
+        configured.GetRequiredService<StoreProfileSelection>().Location!.Schema.Should().Be("store");
+    }
+
+    [Fact]
+    public async Task The_in_process_profile_records_no_location()
+    {
+        await using var services = Compose();
+
+        services.GetRequiredService<StoreProfileSelection>().Location.Should().BeNull();
+    }
+
+    /// <summary>
     /// The three Postgres stores must share one connection pool. The adapter registers the data
     /// source with TryAdd — first registration wins — so this asserts the composition hands them a
     /// single one rather than relying on that rule holding by luck.

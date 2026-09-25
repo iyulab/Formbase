@@ -30,12 +30,13 @@ internal static class StoreComposition
         var section = configuration.GetSection(Section);
         var profile = ReadProfile(section);
 
-        services.AddSingleton(new StoreProfileSelection(profile));
         services.AddFormbaseCore();
 
         return profile switch
         {
-            StoreProfile.InMemory => services.AddInMemoryStores(),
+            StoreProfile.InMemory => services
+                .AddSingleton(new StoreProfileSelection(profile))
+                .AddInMemoryStores(),
             StoreProfile.Durable => services.AddDurableStores(configuration, section),
             _ => throw new InvalidOperationException($"Unhandled store profile '{profile}'."),
         };
@@ -94,6 +95,8 @@ internal static class StoreComposition
             "the MorphDB service holding the projected tables");
 
         var projectId = RequiredProjectId(morphDb["ProjectId"]);
+
+        services.AddSingleton(new StoreProfileSelection(StoreProfile.Durable, new DurableStoreLocation(schema, projectId)));
 
         services.AddPostgresRawStore(connectionString, schema);
         services.AddPostgresProjectionState(connectionString, schema);

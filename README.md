@@ -96,7 +96,9 @@ Formbase__Store=Durable ConnectionStrings__Formbase='Host=db;Database=formbase;U
 
 PostgreSQL then holds the raw stream, the projection state and the declarations; MorphDB holds the
 projected tables. `Formbase__Schema` (default `formbase`) isolates the Postgres side, and
-`FORMBASE_MORPHDB_URL` overrides the MorphDB address for a run.
+`FORMBASE_MORPHDB_URL` overrides the MorphDB address for a run. **The namespace (`Formbase__Namespace`)
+is a name, not a location:** hosts sharing one PostgreSQL and one MorphDB each need their own schema
+and project, or they serve the same data under different names.
 
 **A durable profile missing any of those refuses to start.** Falling back to the in-process stores
 would leave the host running, answering, and losing every document on restart — a failure the
@@ -116,8 +118,8 @@ so an endpoint you have already pointed that at works here unchanged. Supplying 
 three is refused at startup: a host with half of them looks like it has intelligence installed and
 fails on the first proposal.
 
-`GET /settings` reports what an instance was composed as — its namespace, whether it is durable, and
-whether intelligence is installed. Credentials are never reported back.
+`GET /settings` reports what an instance was composed as — its namespace, whether it is durable, where
+a durable one keeps its data (schema and MorphDB project), and whether intelligence is installed. Credentials are never reported back.
 
 ## Quick start
 

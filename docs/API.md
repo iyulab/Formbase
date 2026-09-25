@@ -46,6 +46,7 @@ GET /settings
   "namespace": "default",
   "storeProfile": "durable",
   "durable": true,
+  "storage": { "schema": "formbase", "morphDbProjectId": "6f1a6f6e-0000-4000-8000-000000000001" },
   "schemaIntelligence": { "installed": true, "model": "gpt-4o-mini" }
 }
 ```
@@ -56,6 +57,11 @@ new process.
 
 **`durable` is the one to check.** An in-process host answers every request exactly as a durable one
 does and loses the documents at the next restart; nothing else about a response distinguishes them.
+
+**`storage` is where a durable host keeps its data** — the PostgreSQL schema and the MorphDB project;
+`null` for the in-process stores. It is reported apart from `namespace` because the two are not the
+same thing: two hosts reporting the same `storage` read and write the same data, whatever namespace
+each serves (see below). The connection itself is not reported.
 
 **`schemaIntelligence` is an extension, not a requirement.** Supply a model endpoint, key and name
 and the engine infers structure for fields nobody declared; supply none and every other capability is
@@ -83,7 +89,12 @@ surface even where the selection is degenerate, because one added later would me
 request written without it.
 
 The namespace's contents are the triple the host was composed with — the PostgreSQL connection and
-schema holding the raw stream, and the MorphDB project holding the projected tables. A host running
+schema holding the raw stream, and the MorphDB project holding the projected tables. **The name does
+not choose them.** Two hosts configured with different namespaces and the same database, schema and
+project serve the same data under two names, and the `404` above cannot tell — it checks which host a
+request reached, not where that host's data lives. So several namespaces sharing one PostgreSQL and one
+MorphDB need a different `Formbase__Schema` and `Formbase__MorphDb__ProjectId` each; `GET /settings`
+reports both as `storage`, so two hosts can be compared. A host running
 the in-process stores has that triple only notionally, and loses it on restart; see the README for
 selecting the durable profile.
 

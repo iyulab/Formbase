@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- `GET /settings` reports `storage` — the PostgreSQL schema and MorphDB project a durable host keeps
+  its data in (`null` in-process). Two hosts reporting the same storage serve the same data, whatever
+  namespace each answers to; the API reference and README now say that several namespaces sharing one
+  PostgreSQL and one MorphDB need a schema and a project each.
+
 ### Fixed
 
 - An `Idempotency-Key` already used for a document of one form type, sent again for another, is

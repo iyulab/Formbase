@@ -45,6 +45,41 @@ public sealed class SettingsSurfaceTests : IClassFixture<WebApplicationFactory<P
     }
 
     [Fact]
+    public async Task An_in_process_instance_reports_no_storage()
+    {
+        var settings = await ReadAsync(await _client.GetAsync("/settings", TestContext.Current.CancellationToken));
+
+        settings.GetProperty("storage").ValueKind.Should().Be(JsonValueKind.Null,
+            "the in-process stores keep nothing anywhere an operator could point a second host at");
+    }
+
+    /// <summary>
+    /// The storage is what tells two hosts apart when their namespaces differ and their data does
+    /// not, so it has to reach the surface, not only the composition.
+    /// </summary>
+    [Fact]
+    public async Task A_durable_instance_reports_the_schema_and_project_it_keeps_its_data_in()
+    {
+        // UseSetting rather than ConfigureAppConfiguration: the stores are composed while the builder
+        // is still being configured, and only settings given this way are visible by then.
+        using var durable = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Formbase:Store", "Durable");
+            builder.UseSetting("Formbase:Schema", "store");
+            builder.UseSetting("ConnectionStrings:Formbase", "Host=localhost;Database=formbase;Username=x;Password=y");
+            builder.UseSetting("Formbase:MorphDb:Url", "http://localhost:8080");
+            builder.UseSetting("Formbase:MorphDb:ProjectId", "6f1a6f6e-0000-4000-8000-000000000002");
+        });
+        using var client = durable.CreateClient();
+
+        var storage = (await ReadAsync(await client.GetAsync("/settings", TestContext.Current.CancellationToken)))
+            .GetProperty("storage");
+
+        storage.GetProperty("schema").GetString().Should().Be("store");
+        storage.GetProperty("morphDbProjectId").GetGuid().Should().Be(Guid.Parse("6f1a6f6e-0000-4000-8000-000000000002"));
+    }
+
+    [Fact]
     public async Task An_instance_with_no_model_settings_runs_without_intelligence()
     {
         var intelligence = (await ReadAsync(await _client.GetAsync("/settings", TestContext.Current.CancellationToken)))

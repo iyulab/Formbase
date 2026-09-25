@@ -29,6 +29,9 @@ internal static class SettingsEndpoints
                 selector.Name,
                 profile.Profile.ToString().ToLowerInvariant(),
                 profile.Profile == StoreProfile.Durable,
+                profile.Location is { } location
+                    ? new StorageResponse(location.Schema, location.MorphDbProjectId)
+                    : null,
                 new SchemaIntelligenceResponse(intelligence.Installed, intelligence.Model))))
             .WithName("GetSettings")
             .WithSummary("Reports what this instance was composed as")
@@ -52,12 +55,22 @@ internal static class SettingsEndpoints
 /// Whether documents survive a restart. Stated as its own field because it is the fact behind the
 /// profile name, and a caller should not have to know which names imply it.
 /// </param>
+/// <param name="Storage">
+/// Where a durable host keeps its data; null for the in-process stores. The namespace is a name this
+/// host answers to, not where its data lives: two hosts reporting the same storage read and write the
+/// same data whatever namespace each serves.
+/// </param>
 /// <param name="SchemaIntelligence">Whether structure is inferred for what nobody declared.</param>
 public sealed record SettingsResponse(
     string Namespace,
     string StoreProfile,
     bool Durable,
+    StorageResponse? Storage,
     SchemaIntelligenceResponse SchemaIntelligence);
+
+/// <param name="Schema">The PostgreSQL schema holding the raw stream, projection state and declarations.</param>
+/// <param name="MorphDbProjectId">The MorphDB project holding the projected tables.</param>
+public sealed record StorageResponse(string Schema, Guid MorphDbProjectId);
 
 /// <param name="Installed">True when a model is wired in.</param>
 /// <param name="Model">The model that answers, or null when nothing is installed.</param>

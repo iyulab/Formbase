@@ -1190,6 +1190,7 @@
           "namespace",
           "storeProfile",
           "durable",
+          "storage",
           "schemaIntelligence"
         ],
         "type": "object",
@@ -1202,6 +1203,16 @@
           },
           "durable": {
             "type": "boolean"
+          },
+          "storage": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StorageResponse"
+              }
+            ]
           },
           "schemaIntelligence": {
             "$ref": "#/components/schemas/SchemaIntelligenceResponse"
@@ -1221,6 +1232,22 @@
           },
           "reason": {
             "type": "string"
+          }
+        }
+      },
+      "StorageResponse": {
+        "required": [
+          "schema",
+          "morphDbProjectId"
+        ],
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "morphDbProjectId": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
