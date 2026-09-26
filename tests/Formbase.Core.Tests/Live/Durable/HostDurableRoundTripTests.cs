@@ -115,6 +115,29 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// PostgreSQL gives a body back as <c>jsonb</c> — properties reordered, whitespace gone — so a retry
+    /// is recognized by value over the real store, and a different body under the same key is still
+    /// refused there.
+    /// </summary>
+    [Fact]
+    public async Task A_retry_matches_the_stored_body_by_value_and_a_different_body_is_refused()
+    {
+        var type = NewFormType();
+        var key = Guid.NewGuid();
+
+        await AcceptAsync(type, """{"zeta":1,"alpha":{"b":2,"a":1}}""", key);
+        await AcceptAsync(type, """{ "alpha" : { "a" : 1, "b" : 2 }, "zeta" : 1 }""", key);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents")
+        {
+            Content = new StringContent("""{"zeta":2}""", Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("Idempotency-Key", key.ToString());
+        (await _client.SendAsync(request, TestContext.Current.CancellationToken)).StatusCode
+            .Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    /// <summary>
     /// The stream read over the real raw store, with another form type's documents interleaved so its
     /// positions are not simply 1..n. A partial declaration and a projection sit in between, and the
     /// fields nothing declared must still come back — that is what a consumer across the container

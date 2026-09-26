@@ -69,6 +69,45 @@ public class IntakeServiceTests
     }
 
     [Fact]
+    public async Task Accept_refuses_a_key_already_holding_a_different_body_of_the_same_form_type()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store);
+        var key = DocumentId.New();
+
+        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
+        var reuse = () => intake.AcceptAsync(Qc, Body("""{"n":2}"""), key, TestContext.Current.CancellationToken);
+
+        var refused = (await reuse.Should().ThrowAsync<IdempotencyKeyReusedException>()).Which;
+        refused.RequestedType.Should().Be(Qc);
+        refused.StoredType.Should().Be(Qc, "the same form type with another body is still another request");
+        refused.Message.Should().Contain("different body");
+        var held = await store.GetAsync(key, TestContext.Current.CancellationToken);
+        held!.Body.Root.GetProperty("n").GetInt32().Should().Be(1, "the document first stored under the key is unchanged");
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(new Watermark(1));
+    }
+
+    /// <summary>
+    /// A durable store gives the body back in its own normalized form, so a retry has to be recognized
+    /// by the JSON value it carries, not by its text.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"a":1,"b":[1,2]}""", """{ "b" : [1,2], "a" : 1 }""")]
+    [InlineData("""{"total":100}""", """{"total":1e2}""")]
+    public async Task Accept_treats_the_same_JSON_value_written_differently_as_a_retry(string first, string retry)
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store);
+        var key = DocumentId.New();
+
+        var original = await intake.AcceptAsync(Qc, Body(first), key, TestContext.Current.CancellationToken);
+        var again = await intake.AcceptAsync(Qc, Body(retry), key, TestContext.Current.CancellationToken);
+
+        again.Should().Be(original);
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(new Watermark(1));
+    }
+
+    [Fact]
     public async Task Accept_wraps_a_low_level_store_failure_as_IntakeException()
     {
         var intake = new IntakeService(new ThrowingRawStore());

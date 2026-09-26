@@ -22,10 +22,11 @@
 
 ### Fixed
 
-- An `Idempotency-Key` already used for a document of one form type, sent again for another, is
-  refused with `422` `/problems/idempotency-key-reused`. It used to answer `201` naming the new form
-  type while storing nothing: the key's document stayed where it was and the new body was dropped.
-  A retry of the accepted request — same form type — still returns the same document.
+- An `Idempotency-Key` sent again with a different request — another form type, or the same form
+  type with a different body — is refused with `422` `/problems/idempotency-key-reused`. It used to
+  answer `201` while storing nothing: the key's document stayed as it was and the new body was
+  dropped. A retry of the accepted request still returns the same document; bodies are compared as
+  JSON values, so property order and whitespace do not matter.
 
 ## 0.11.1
 

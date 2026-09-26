@@ -128,6 +128,25 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
     }
 
     /// <summary>
+    /// The same key and form type with another body is a second request too: answering it as a retry
+    /// reported a document that was never stored, and the body sent was dropped.
+    /// </summary>
+    [Fact]
+    public async Task A_key_reused_with_a_different_body_is_refused_and_keeps_the_first()
+    {
+        var key = Guid.NewGuid();
+        var type = UniqueType();
+        (await PostAsync(type, """{"total":1}""", key)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        using var reuse = await PostAsync(type, """{"total":2}""", key);
+
+        reuse.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await ReadAsync(reuse)).GetProperty("type").GetString().Should().Be("/problems/idempotency-key-reused");
+        var held = await ReadAsync(await _client.GetAsync($"/documents/{key}", TestContext.Current.CancellationToken));
+        held.GetProperty("body").GetProperty("total").GetInt32().Should().Be(1);
+    }
+
+    /// <summary>
     /// Two submissions without a key are two documents. Without this, a surface that quietly reused
     /// one identity would pass every test above.
     /// </summary>

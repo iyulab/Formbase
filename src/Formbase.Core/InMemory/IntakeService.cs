@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -33,10 +34,12 @@ public sealed class IntakeService : IIntakeService
             throw new IntakeException($"Failed to accept document for form type '{type}'.", ex);
         }
 
-        // The store hands back what it already holds for a known id. Under the same form type that is
-        // a retry; under another it is a second request wearing the first one's key, and accepting it
-        // would report a document of this type that was never stored.
-        if (stored.Type != type)
+        // The store hands back what it already holds for a known id. The same form type and the same
+        // body is a retry; anything else is a second request wearing the first one's key, and accepting
+        // it would report a document that was never stored while dropping the one that was sent. Bodies
+        // are compared as JSON values, not text: a durable store gives back its own normalized form
+        // (property order, whitespace), which a genuine retry must still match.
+        if (stored.Type != type || !JsonElement.DeepEquals(stored.Body.Root, body.Root))
         {
             throw new IdempotencyKeyReusedException(id, type, stored.Type);
         }

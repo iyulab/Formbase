@@ -3,10 +3,11 @@ using Formbase.Core.Primitives;
 namespace Formbase.Core.Errors;
 
 /// <summary>
-/// An idempotency key was sent for a document of one form type while it already identifies a
-/// document of another. That is not a retry — a retry repeats the request that was accepted — so
-/// answering it as one would report a document the caller never stored and drop the one it sent.
-/// The document already held under the key is unchanged.
+/// An idempotency key was sent with a request other than the one it already identifies — a document
+/// of another form type, or of the same form type with a different body. That is not a retry — a
+/// retry repeats the request that was accepted — so answering it as one would report a document the
+/// caller never stored and drop the one it sent. The document already held under the key is unchanged.
+/// <see cref="RequestedType"/> equal to <see cref="StoredType"/> means the bodies differed.
 /// </summary>
 public sealed class IdempotencyKeyReusedException : FormbaseException
 {
@@ -20,12 +21,18 @@ public sealed class IdempotencyKeyReusedException : FormbaseException
     public FormTypeRef StoredType { get; }
 
     public IdempotencyKeyReusedException(DocumentId documentId, FormTypeRef requestedType, FormTypeRef storedType)
-        : base($"Idempotency key '{documentId.Value}' already identifies a document of form type '{storedType}', " +
-               $"so it cannot be used for a document of form type '{requestedType}'. A key belongs to one request; " +
-               "send a new key for a new document.")
+        : base(Describe(documentId, requestedType, storedType))
     {
         DocumentId = documentId;
         RequestedType = requestedType;
         StoredType = storedType;
     }
+
+    private static string Describe(DocumentId documentId, FormTypeRef requestedType, FormTypeRef storedType) =>
+        (requestedType == storedType
+            ? $"Idempotency key '{documentId.Value}' already identifies a document of form type '{storedType}' " +
+              "with a different body, so this is not a retry of it. "
+            : $"Idempotency key '{documentId.Value}' already identifies a document of form type '{storedType}', " +
+              $"so it cannot be used for a document of form type '{requestedType}'. ") +
+        "A key belongs to one request; send a new key for a new document.";
 }
