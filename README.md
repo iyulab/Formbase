@@ -102,9 +102,10 @@ and project. The schema records the namespace that first used it, and a host ser
 over it refuses to start; the project is not checked, so two namespaces sharing one replace each
 other's projected tables.
 
-**A durable profile missing any of those refuses to start.** Falling back to the in-process stores
-would leave the host running, answering, and losing every document on restart — a failure the
-operator would meet as missing data long after the configuration that caused it. Provisioning the
+**A durable profile missing any of those refuses to start** — the process exits with code `78`
+(`EX_CONFIG`) and says which setting, as it does for every configuration it refuses. Falling back to
+the in-process stores would leave the host running, answering, and losing every document on restart
+— a failure the operator would meet as missing data long after the configuration that caused it. Provisioning the
 MorphDB project stays theirs: the engine never administers MorphDB.
 
 **Schema intelligence is an extension.** Supply a model endpoint, key and name and the engine infers

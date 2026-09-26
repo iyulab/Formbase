@@ -163,6 +163,13 @@ internal sealed partial class NamespaceBinding : IDisposable
         return holder;
     }
 
+    /// <summary>
+    /// Whether this host found its schema holding another namespace. The entry point reads it once
+    /// the host has stopped: a conflict found after startup stops the host from here, and the
+    /// process must not then end as if it had shut down cleanly.
+    /// </summary>
+    public bool Conflicted => _conflict is not null;
+
     public void Dispose() => _gate.Dispose();
 
     [LoggerMessage(Level = LogLevel.Critical,
@@ -176,7 +183,7 @@ internal sealed partial class NamespaceBinding : IDisposable
 /// resolves it.
 /// </summary>
 internal sealed class NamespaceBindingConflictException(string schema, string holder, string requested)
-    : Exception(
+    : HostConfigurationException(
         $"The PostgreSQL schema '{schema}' holds the namespace '{holder}', and this host serves '{requested}'. " +
         "Each namespace needs its own schema (and its own MorphDB project): set Formbase:Schema, " +
         $"or serve '{holder}' from this host.")

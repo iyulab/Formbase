@@ -121,7 +121,7 @@ public sealed class SettingsSurfaceTests : IClassFixture<WebApplicationFactory<P
     {
         var compose = () => Compose(settings);
 
-        compose.Should().Throw<InvalidOperationException>(
+        compose.Should().Throw<HostConfigurationException>(
                 "a host with some of them looks like it has intelligence installed and fails on the " +
                 "first proposal")
             .WithMessage($"*{missing}*", "the message has to name what is missing");

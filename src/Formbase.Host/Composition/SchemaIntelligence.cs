@@ -50,7 +50,7 @@ internal static class SchemaIntelligence
         if (supplied.Length != values.Length)
         {
             var missing = values.Where(v => string.IsNullOrWhiteSpace(v.Value)).Select(v => v.Setting);
-            throw new InvalidOperationException(
+            throw new HostConfigurationException(
                 $"Schema intelligence needs all of {string.Join(", ", Keys.Select(k => k.Setting))} — " +
                 $"missing {string.Join(", ", missing)}. Supply them, or supply none: a host with half " +
                 "of them looks like it has intelligence installed and fails on the first proposal.");

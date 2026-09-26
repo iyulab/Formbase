@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Formbase.Host.Composition;
@@ -16,81 +17,122 @@ if (args.Contains(SelfProbe.Flag, StringComparer.Ordinal))
     return await SelfProbe.RunAsync("/health/ready");
 }
 
-var builder = WebApplication.CreateBuilder(args);
+// A configuration the host refuses — a missing or unknown setting found while composing, or a schema
+// holding another namespace found as it starts — ends the process as a configuration error: its
+// message written once and HostConfigurationException.ExitCode, rather than an unhandled exception
+// the runtime ends like a crash.
+WebApplication app;
+try
+{
+    app = Compose(args);
+}
+catch (HostConfigurationException refused) when (OwnsProcess())
+{
+    // Nothing is logging yet: composing is what sets logging up.
+    Console.Error.WriteLine(refused.Message);
+    return HostConfigurationException.ExitCode;
+}
 
-// The engine, over whichever stores the configuration selects. In-process by default, which is
-// what lets the host's own tests exercise the real surface without standing anything up; a
-// deployment sets Formbase:Store=Durable and supplies what that profile needs.
-builder.Services.AddFormbaseStores(builder.Configuration);
+// Held before running: RunAsync disposes the host's services as it returns.
+var binding = app.Services.GetService<NamespaceBinding>();
 
-// This host's own memory of each form type's last projection run (inserted/skipped counts) — not
-// persisted, lost on restart. A host-response addition, not a core surface change: see
-// LastProjectionRunTracker.
-builder.Services.AddSingleton<LastProjectionRunTracker>();
+try
+{
+    await app.RunAsync();
+}
+catch (NamespaceBindingConflictException) when (OwnsProcess())
+{
+    // Already written: the binding logs the conflict, and the host logs the start it abandoned.
+    return HostConfigurationException.ExitCode;
+}
 
-// Optional, like a database extension: supply model settings and the engine infers structure for
-// what nobody declared. Supply none and the host runs exactly as it does now — the invariant is that
-// it starts without model credentials.
-builder.Services.AddSchemaIntelligence(builder.Configuration);
+// A conflict found after startup (the database was down when the host started) stops the host
+// through the ordinary shutdown path, which on its own would end the process as if nothing were wrong.
+return binding is { Conflicted: true }
+    ? HostConfigurationException.ExitCode
+    : 0;
 
-// Errors answer as RFC 9457 problem details, including the ones no endpoint catches.
-// A probe is what an orchestrator asks before it sends traffic, and this host is published as an
-// image (release-docker.yml) while answering nothing of the kind -- its own compose bundle waits on
-// postgres and on the sibling's /health and then starts this service blind. Liveness and readiness
-// are separated because they mean different things to whoever is waiting: the process being up is
-// not the same as its stores answering, and conflating them makes a restart the response to an
-// outage in something else.
-builder.Services.AddHealthChecks()
-    .AddCheck<StoresHealthCheck>("stores", tags: ["ready"]);
+// Only a process this host is the entry point of is this host's to end. Run inside another one — a
+// test server starting it — the refusal belongs to whoever started it, which learns of it from the
+// exception; swallowing it there would leave the caller holding a host that was already disposed.
+static bool OwnsProcess() => Assembly.GetEntryAssembly() == typeof(Program).Assembly;
 
-builder.Services.AddProblemDetails();
-builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
+static WebApplication Compose(string[] args)
+{
+    var builder = WebApplication.CreateBuilder(args);
 
-// A parameter that will not bind has to reach the handler above, and by default it only does so
-// while developing: outside Development the framework answers the short-circuit itself, with a
-// `type` that is not in the documented table. That made the error surface depend on the name the
-// instance was started under, and the name it ships under was the one where it was wrong.
-builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
+    // The engine, over whichever stores the configuration selects. In-process by default, which is
+    // what lets the host's own tests exercise the real surface without standing anything up; a
+    // deployment sets Formbase:Store=Durable and supplies what that profile needs.
+    builder.Services.AddFormbaseStores(builder.Configuration);
 
-// The namespace this host serves. One host, one namespace; the selector is how a caller names it.
-// Resolved from the container's configuration rather than read while composing: a value read at
-// composition time is fixed before any configuration source added later can be seen.
-builder.Services.AddSingleton(sp => new NamespaceSelector(
-    sp.GetRequiredService<IConfiguration>()["Formbase:Namespace"] ?? NamespaceSelector.Default));
-builder.Services.AddOpenApi(options =>
-    options.AddDocumentTransformer<NamespaceHeaderDocumentTransformer>());
+    // This host's own memory of each form type's last projection run (inserted/skipped counts) — not
+    // persisted, lost on restart. A host-response addition, not a core surface change: see
+    // LastProjectionRunTracker.
+    builder.Services.AddSingleton<LastProjectionRunTracker>();
 
-// Enum values cross as names. Ordinals would let a reordering of the wire enum change what every
-// stored client believes it is reading, without any request or response changing shape.
-builder.Services.ConfigureHttpJsonOptions(options =>
-    options.SerializerOptions.Converters.Add(
-        new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+    // Optional, like a database extension: supply model settings and the engine infers structure for
+    // what nobody declared. Supply none and the host runs exactly as it does now — the invariant is that
+    // it starts without model credentials.
+    builder.Services.AddSchemaIntelligence(builder.Configuration);
 
-var app = builder.Build();
+    // Errors answer as RFC 9457 problem details, including the ones no endpoint catches.
+    // A probe is what an orchestrator asks before it sends traffic, and this host is published as an
+    // image (release-docker.yml) while answering nothing of the kind -- its own compose bundle waits on
+    // postgres and on the sibling's /health and then starts this service blind. Liveness and readiness
+    // are separated because they mean different things to whoever is waiting: the process being up is
+    // not the same as its stores answering, and conflating them makes a restart the response to an
+    // outage in something else.
+    builder.Services.AddHealthChecks()
+        .AddCheck<StoresHealthCheck>("stores", tags: ["ready"]);
 
-app.UseExceptionHandler();
-app.UseStatusCodePages();
+    builder.Services.AddProblemDetails();
+    builder.Services.AddExceptionHandler<FormbaseProblemHandler>();
 
-// Ahead of routing: a request addressed elsewhere must not reach an endpoint that would answer
-// from this host's own data.
-app.UseMiddleware<NamespaceSelectorMiddleware>();
+    // A parameter that will not bind has to reach the handler above, and by default it only does so
+    // while developing: outside Development the framework answers the short-circuit itself, with a
+    // `type` that is not in the documented table. That made the error surface depend on the name the
+    // instance was started under, and the name it ships under was the one where it was wrong.
+    builder.Services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
 
-// Not documented in docs/API.md and deliberately: that page is the consumer's surface, and these
-// are the operator's. They carry no data and take no input.
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
-app.MapHealthChecks("/health");
+    // The namespace this host serves. One host, one namespace; the selector is how a caller names it.
+    // Resolved from the container's configuration rather than read while composing: a value read at
+    // composition time is fixed before any configuration source added later can be seen.
+    builder.Services.AddSingleton(sp => new NamespaceSelector(
+        sp.GetRequiredService<IConfiguration>()["Formbase:Namespace"] ?? NamespaceSelector.Default));
+    builder.Services.AddOpenApi(options =>
+        options.AddDocumentTransformer<NamespaceHeaderDocumentTransformer>());
 
-app.MapOpenApi();
-app.MapDocumentEndpoints();
-app.MapProjectionEndpoints();
-app.MapRecordEndpoints();
-app.MapDeclarationEndpoints();
-app.MapSettingsEndpoints();
+    // Enum values cross as names. Ordinals would let a reordering of the wire enum change what every
+    // stored client believes it is reading, without any request or response changing shape.
+    builder.Services.ConfigureHttpJsonOptions(options =>
+        options.SerializerOptions.Converters.Add(
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 
-app.Run();
+    var app = builder.Build();
 
-return 0;
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
+
+    // Ahead of routing: a request addressed elsewhere must not reach an endpoint that would answer
+    // from this host's own data.
+    app.UseMiddleware<NamespaceSelectorMiddleware>();
+
+    // Not documented in docs/API.md and deliberately: that page is the consumer's surface, and these
+    // are the operator's. They carry no data and take no input.
+    app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+    app.MapHealthChecks("/health");
+
+    app.MapOpenApi();
+    app.MapDocumentEndpoints();
+    app.MapProjectionEndpoints();
+    app.MapRecordEndpoints();
+    app.MapDeclarationEndpoints();
+    app.MapSettingsEndpoints();
+
+    return app;
+}
 
 /// <summary>
 /// Named so the test host can reference the entry point. Top-level statements otherwise compile to

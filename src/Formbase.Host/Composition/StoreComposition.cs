@@ -56,7 +56,7 @@ internal static class StoreComposition
         // assumption that they had chosen.
         return Enum.TryParse<StoreProfile>(configured, ignoreCase: true, out var profile)
             ? profile
-            : throw new InvalidOperationException(
+            : throw new HostConfigurationException(
                 $"'{Section}:Store' is '{configured}', which is not a store profile. " +
                 $"Use one of: {string.Join(", ", Enum.GetNames<StoreProfile>())}.");
     }
@@ -119,7 +119,7 @@ internal static class StoreComposition
 
     private static string Required(string? value, string key, string what) =>
         string.IsNullOrWhiteSpace(value)
-            ? throw new InvalidOperationException(
+            ? throw new HostConfigurationException(
                 $"The durable store profile needs '{key}' — {what}. " +
                 "Set it, or run the in-memory profile deliberately by leaving " +
                 $"'{Section}:Store' unset.")
@@ -134,7 +134,7 @@ internal static class StoreComposition
         // otherwise surface as MISSING_PROJECT on the first projection, long after startup.
         return Guid.TryParse(raw, out var projectId) && projectId != Guid.Empty
             ? projectId
-            : throw new InvalidOperationException(
+            : throw new HostConfigurationException(
                 $"'{Section}:MorphDb:ProjectId' is '{raw}', which is not the id of a provisioned " +
                 "MorphDB project. Create one with POST /api/projects and use the id it returns.");
     }

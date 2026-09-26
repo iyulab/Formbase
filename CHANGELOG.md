@@ -11,6 +11,11 @@
 
 ### Changed
 
+- A host that refuses its configuration — an unknown store profile, a durable profile missing a
+  setting, half a model configuration, a schema holding another namespace — exits with code `78`
+  (`EX_CONFIG`) and says why once. It used to end on an unhandled exception: the runtime's crash exit
+  code, and the message repeated under a stack trace.
+
 - A document whose JSON names a property twice in one object is refused with `400`
   `/problems/invalid-request` (and `DocumentBody.From`/`Parse` throw). It used to be accepted, and
   the durable store kept only the last value while the in-process store kept both, so the body read

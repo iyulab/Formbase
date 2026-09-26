@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using Formbase.Core.Primitives;
@@ -36,6 +37,27 @@ public sealed class NamespaceBindingLiveTests(DurableFixture fixture)
             .Where(e => e.ToString().Contains($"holds the namespace 'orders'", StringComparison.Ordinal)
                         && e.ToString().Contains("serves 'invoices'", StringComparison.Ordinal),
                 "starting would serve the orders namespace's documents under the name invoices");
+    }
+
+    /// <summary>
+    /// The refusal as a deployment meets it: the host process, not a test server. It has to end as
+    /// a configuration error (exit 78, <c>EX_CONFIG</c>) with the conflict said once — an unhandled
+    /// exception ends it like a crash, with a signal exit code and the message under a stack trace.
+    /// </summary>
+    [Fact]
+    public async Task The_refused_host_process_exits_as_a_configuration_error()
+    {
+        var schema = NewSchema();
+        await using (var first = Host("orders", schema))
+        {
+            first.CreateClient().Dispose();
+        }
+
+        var (exitCode, output) = await RunHostProcessAsync("invoices", schema);
+
+        exitCode.Should().Be(78);
+        output.Should().Contain("holds the namespace 'orders'");
+        output.Should().NotContain("Unhandled exception", "a refusal is not a crash");
     }
 
     [Fact]
@@ -117,6 +139,44 @@ public sealed class NamespaceBindingLiveTests(DurableFixture fixture)
         {
             return false;
         }
+    }
+
+    private async Task<(int ExitCode, string Output)> RunHostProcessAsync(string ns, string schema)
+    {
+        var start = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Formbase.Host.dll"));
+        start.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:0";
+        start.Environment["Formbase__Store"] = "Durable";
+        start.Environment["Formbase__Namespace"] = ns;
+        start.Environment["Formbase__Schema"] = schema;
+        start.Environment["ConnectionStrings__Formbase"] = fixture.PostgresConnectionString;
+        start.Environment["Formbase__MorphDb__Url"] = fixture.MorphDbUrl;
+        start.Environment["Formbase__MorphDb__ProjectId"] = fixture.MorphDbProjectId.ToString();
+        start.Environment.Remove("FORMBASE_MORPHDB_URL");
+
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+        var stderr = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(60));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // It started instead of refusing; stop it so the suite does not leave it serving.
+            process.Kill(entireProcessTree: true);
+            throw;
+        }
+
+        return (process.ExitCode, await stdout + await stderr);
     }
 
     private static string NewSchema() => "fb_nsbind_" + Guid.NewGuid().ToString("N")[..8];

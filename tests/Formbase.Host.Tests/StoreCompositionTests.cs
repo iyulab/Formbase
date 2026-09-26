@@ -109,7 +109,7 @@ public class StoreCompositionTests
 
         var compose = () => Compose(settings);
 
-        compose.Should().Throw<InvalidOperationException>(
+        compose.Should().Throw<HostConfigurationException>(
                 "a durable profile that fell back to the in-process stores would run, answer, and " +
                 "lose everything on restart")
             .WithMessage($"*{missing}*", "the message has to name the key the operator must set");
@@ -123,7 +123,7 @@ public class StoreCompositionTests
 
         var compose = () => Compose(settings);
 
-        compose.Should().Throw<InvalidOperationException>(
+        compose.Should().Throw<HostConfigurationException>(
             "an empty id is an unassigned value, and it would surface as MISSING_PROJECT on the " +
             "first projection rather than at startup");
     }
@@ -133,7 +133,7 @@ public class StoreCompositionTests
     {
         var compose = () => Compose(new Dictionary<string, string?> { ["Formbase:Store"] = "sqlite" });
 
-        compose.Should().Throw<InvalidOperationException>(
+        compose.Should().Throw<HostConfigurationException>(
                 "a deployment that named a profile believes it chose one; answering with the " +
                 "default would run stores it did not ask for")
             .WithMessage("*InMemory*", "the message has to say what the valid names are");

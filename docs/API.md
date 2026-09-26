@@ -99,9 +99,10 @@ so two hosts can be compared.
 namespace there, and a host configured with another name over that schema refuses to start. A host
 whose database could not be reached when it started makes the same check before its first request,
 answering `503` `/problems/namespace-unverified` until the check passes (`/settings` still answers),
-and stops if it finds the schema holding another name. The MorphDB project is not checked this way:
-two namespaces given one project replace each other's projected tables when both project the same
-table name, so keep the project apart as well. A host running the in-process stores has that triple
+and stops if it finds the schema holding another name. Either way the process exits with code `78`
+(`EX_CONFIG`), the code every configuration the host refuses ends with. The MorphDB project is not
+checked this way: two namespaces given one project replace each other's projected tables when both
+project the same table name, so keep the project apart as well. A host running the in-process stores has that triple
 only notionally, and loses it on restart; see the README for selecting the durable profile.
 
 > Authentication and authorization are not on this surface. Namespacing says *which data*, not *who
