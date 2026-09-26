@@ -102,7 +102,15 @@ answering `503` `/problems/namespace-unverified` until the check passes (`/setti
 and stops if it finds the schema holding another name. Either way the process exits with code `78`
 (`EX_CONFIG`), the code every configuration the host refuses ends with. The MorphDB project is not
 checked this way: two namespaces given one project replace each other's projected tables when both
-project the same table name, so keep the project apart as well. A host running the in-process stores has that triple
+project the same table name, so keep the project apart as well.
+
+**Upgrading a deployment where two namespaces already share a schema.** Hosts from before the schema
+recorded its namespace could share one, each serving the other's documents. The first host to start
+over such a schema claims it, and the others then refuse — so decide which namespace keeps the schema,
+and start that host first and alone rather than all of them together, which leaves the choice to
+whichever starts first. Give each other namespace its own schema and project. The documents they wrote
+while sharing stay where they are, under the namespace that claimed the schema: the raw stream does
+not record which host wrote a document, so they cannot be told apart afterwards. A host running the in-process stores has that triple
 only notionally, and loses it on restart; see the README for selecting the durable profile.
 
 > Authentication and authorization are not on this surface. Namespacing says *which data*, not *who

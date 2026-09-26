@@ -30,6 +30,13 @@
   it too. The MorphDB project is not checked: namespaces sharing one replace each other's projected
   tables of the same name.
 
+  If two namespaces already share one schema, decide which of them keeps it before upgrading, and
+  start that host first and alone: whichever starts first claims the schema, so hosts started
+  together are decided by which one got there first. Give every other namespace its own
+  `Formbase:Schema` (and MorphDB project). The documents those hosts wrote while sharing stay in the
+  claimed schema, under the namespace that claimed it — the raw stream does not record which host
+  wrote a document, so Formbase cannot separate them.
+
 ### Fixed
 
 - An `Idempotency-Key` sent again with a different request — another form type, or the same form
