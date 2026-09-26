@@ -90,7 +90,7 @@ internal static class DocumentEndpoints
         DocumentBody body;
         try
         {
-            using var document = await JsonDocument.ParseAsync(request.Body, cancellationToken: cancellationToken)
+            using var document = await JsonDocument.ParseAsync(request.Body, DocumentBody.ParseOptions, cancellationToken)
                 .ConfigureAwait(false);
             body = DocumentBody.From(document.RootElement);
         }

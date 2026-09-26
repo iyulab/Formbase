@@ -4,6 +4,11 @@
 
 ### Changed
 
+- A document whose JSON names a property twice in one object is refused with `400`
+  `/problems/invalid-request` (and `DocumentBody.From`/`Parse` throw). It used to be accepted, and
+  the durable store kept only the last value while the in-process store kept both, so the body read
+  back depended on the store.
+
 - A durable host's PostgreSQL schema records the namespace that first used it, and a host
   configured with another namespace over that schema refuses to start. Two names over one schema
   used to both start and serve each other's documents. A schema in use before this records the

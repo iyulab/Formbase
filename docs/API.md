@@ -125,7 +125,9 @@ Content-Type: application/json
 
 The document is stored **verbatim**. Nothing interprets it at intake — not a declaration, not a
 type check — so a form type with no declaration accepts documents exactly as one with a declaration
-does, and they wait in raw until a shape is declared for them.
+does, and they wait in raw until a shape is declared for them. The one thing refused is an object
+that names a property twice (`400` `/problems/invalid-request`): JSON leaves its meaning open and
+stores disagree on it, so it could not be given back as it was sent.
 
 **`Idempotency-Key` makes a retry safe.** The key becomes the document's identity, so re-sending the
 same request lands on the same document rather than a second copy, takes no new position in the
@@ -506,7 +508,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | Status | `type` | When |
 |---|---|---|
 | 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
-| 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON, the idempotency key was not a UUID, or a parameter did not bind |
+| 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON (or named a property twice), the idempotency key was not a UUID, or a parameter did not bind |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
 | 400 | `/problems/invalid-declaration` | A declaration named no table, carried no fields, or declared one twice |
 | 400 | `/problems/schema-proposal-invalid` | Schema intelligence is installed and the model responded, but the proposal was not valid JSON, not the requested shape, or named a property never observed in the sampled documents |

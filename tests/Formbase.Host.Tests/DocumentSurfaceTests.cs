@@ -282,6 +282,23 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
         page.GetProperty("rawHead").GetInt64().Should().Be(0);
     }
 
+    /// <summary>
+    /// The durable store keeps only the last of a repeated property and the in-process one keeps both,
+    /// so accepting one would make what is read back depend on the deployment.
+    /// </summary>
+    [Fact]
+    public async Task A_document_naming_a_property_twice_is_refused_and_stores_nothing()
+    {
+        var type = UniqueType();
+
+        using var response = await PostAsync(type, """{"total":1,"total":2}""");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(response)).GetProperty("type").GetString().Should().Be("/problems/invalid-request");
+        var stream = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/documents", TestContext.Current.CancellationToken));
+        stream.GetProperty("documents").GetArrayLength().Should().Be(0);
+    }
+
     [Theory]
     [InlineData("limit=-1")]
     [InlineData("limit=1001")]

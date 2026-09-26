@@ -88,4 +88,30 @@ public class DocumentBodyTests
         // Source JsonDocument is disposed; the detached body must still be readable.
         body.Root.GetProperty("k").GetString().Should().Be("v");
     }
+
+    /// <summary>
+    /// A property named twice has no agreed meaning, and stores keep different halves of it — so the
+    /// body refuses it wherever it comes from, nested or not.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"n":1,"n":2}""")]
+    [InlineData("""{"a":{"n":1,"n":2}}""")]
+    [InlineData("""{"a":[{"n":1},{"n":1,"n":2}]}""")]
+    public void A_property_named_twice_is_refused(string json)
+    {
+        var parse = () => DocumentBody.Parse(json);
+        parse.Should().Throw<JsonException>();
+
+        using var lenient = JsonDocument.Parse(json);
+        var wrap = () => DocumentBody.From(lenient.RootElement);
+        wrap.Should().Throw<ArgumentException>().WithMessage("*more than once*");
+    }
+
+    [Fact]
+    public void The_same_name_in_sibling_objects_is_not_a_duplicate()
+    {
+        var body = DocumentBody.Parse("""{"a":{"n":1},"b":{"n":2},"c":[{"n":3},{"n":4}]}""");
+
+        body.Root.GetProperty("b").GetProperty("n").GetInt32().Should().Be(2);
+    }
 }
