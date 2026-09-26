@@ -98,7 +98,9 @@ PostgreSQL then holds the raw stream, the projection state and the declarations;
 projected tables. `Formbase__Schema` (default `formbase`) isolates the Postgres side, and
 `FORMBASE_MORPHDB_URL` overrides the MorphDB address for a run. **The namespace (`Formbase__Namespace`)
 is a name, not a location:** hosts sharing one PostgreSQL and one MorphDB each need their own schema
-and project, or they serve the same data under different names.
+and project. The schema records the namespace that first used it, and a host serving another name
+over it refuses to start; the project is not checked, so two namespaces sharing one replace each
+other's projected tables.
 
 **A durable profile missing any of those refuses to start.** Falling back to the in-process stores
 would leave the host running, answering, and losing every document on restart — a failure the

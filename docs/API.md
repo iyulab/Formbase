@@ -90,13 +90,19 @@ request written without it.
 
 The namespace's contents are the triple the host was composed with — the PostgreSQL connection and
 schema holding the raw stream, and the MorphDB project holding the projected tables. **The name does
-not choose them.** Two hosts configured with different namespaces and the same database, schema and
-project serve the same data under two names, and the `404` above cannot tell — it checks which host a
-request reached, not where that host's data lives. So several namespaces sharing one PostgreSQL and one
-MorphDB need a different `Formbase__Schema` and `Formbase__MorphDb__ProjectId` each; `GET /settings`
-reports both as `storage`, so two hosts can be compared. A host running
-the in-process stores has that triple only notionally, and loses it on restart; see the README for
-selecting the durable profile.
+not choose them.** The `404` above checks which host a request reached, not where that host's data
+lives, so several namespaces sharing one PostgreSQL and one MorphDB need a different
+`Formbase__Schema` and `Formbase__MorphDb__ProjectId` each; `GET /settings` reports both as `storage`,
+so two hosts can be compared.
+
+**The schema remembers the namespace it holds.** The first durable host to use a schema records its
+namespace there, and a host configured with another name over that schema refuses to start. A host
+whose database could not be reached when it started makes the same check before its first request,
+answering `503` `/problems/namespace-unverified` until the check passes (`/settings` still answers),
+and stops if it finds the schema holding another name. The MorphDB project is not checked this way:
+two namespaces given one project replace each other's projected tables when both project the same
+table name, so keep the project apart as well. A host running the in-process stores has that triple
+only notionally, and loses it on restart; see the README for selecting the durable profile.
 
 > Authentication and authorization are not on this surface. Namespacing says *which data*, not *who
 > you are* — put the host behind a proxy that answers the second question.
@@ -510,6 +516,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies a document of another form type |
+| 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
 | 503 | `/problems/schema-proposer-unavailable` | Schema intelligence is installed but the model could not be reached (connection, timeout, auth, rate limit) |

@@ -10,11 +10,14 @@ using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
+using Formbase.Host.Composition;
+using Formbase.Host.Namespaces;
 using Formbase.SchemaIntelligence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Npgsql;
 
 namespace Formbase.Host.Tests;
 
@@ -234,6 +237,25 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                 using var client = factory.CreateClient();
 
                 return await client.PostAsync($"/formtypes/{NewFormType()}/projection", null);
+            },
+
+            ["/problems/namespace-unverified"] = async t =>
+            {
+                // A durable host whose database did not answer: the binding it must confirm before
+                // serving anything cannot be read. Nothing listens on port 1, so the refusal is the
+                // connection's, not a timeout's.
+                using var factory = t._factory.WithWebHostBuilder(builder =>
+                    builder.ConfigureTestServices(services =>
+                    {
+                        services.RemoveAll<StoreProfileSelection>();
+                        services.AddSingleton(new StoreProfileSelection(
+                            StoreProfile.Durable, new DurableStoreLocation("formbase", Guid.NewGuid())));
+                        services.AddSingleton(NpgsqlDataSource.Create("Host=127.0.0.1;Port=1;Timeout=1"));
+                        services.AddSingleton<NamespaceBinding>();
+                    }));
+                using var client = factory.CreateClient();
+
+                return await client.GetAsync($"/documents/{Guid.NewGuid()}");
             },
         };
 

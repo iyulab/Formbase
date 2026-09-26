@@ -1,6 +1,7 @@
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Host.Declarations;
+using Formbase.Host.Namespaces;
 
 namespace Formbase.Host.Composition;
 
@@ -108,6 +109,11 @@ internal static class StoreComposition
         // interface back, made the two resolve each other: a cycle the container follows until the
         // stack runs out, which ends the process rather than throwing.
         services.AddSingleton<IDeclarationWriter, PostgresDeclarationWriter>();
+
+        // The schema records the namespace it holds, and a host serving another one is refused —
+        // at startup when the database answers, ahead of the first request when it did not.
+        services.AddSingleton<NamespaceBinding>();
+        services.AddHostedService<NamespaceBindingStartupCheck>();
         return services;
     }
 

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed
+
+- A durable host's PostgreSQL schema records the namespace that first used it, and a host
+  configured with another namespace over that schema refuses to start. Two names over one schema
+  used to both start and serve each other's documents. A schema in use before this records the
+  first namespace to start over it, so a deployment with one namespace per schema sees no change.
+  A host whose database could not be reached at startup makes the check before its first request
+  and answers `503` `/problems/namespace-unverified` until it passes; the readiness probe reports
+  it too. The MorphDB project is not checked: namespaces sharing one replace each other's projected
+  tables of the same name.
+
 ### Added
 
 - `GET /settings` reports `storage` — the PostgreSQL schema and MorphDB project a durable host keeps

@@ -1,6 +1,7 @@
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Host.Composition;
+using Formbase.Host.Namespaces;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Formbase.Host.Health;
@@ -20,10 +21,20 @@ namespace Formbase.Host.Health;
 /// which is a successful read, so the probe neither writes nor depends on anything having been set
 /// up first.
 /// </para>
+/// <para>
+/// On a durable host the stores answering is not enough: they must be the ones holding this host's
+/// namespace (<see cref="NamespaceBinding"/>). A host over another namespace's schema is not ready
+/// however healthy that schema is.
+/// </para>
 /// </summary>
-internal sealed class StoresHealthCheck(IProjectionState state, StoreProfileSelection profile) : IHealthCheck
+internal sealed class StoresHealthCheck(
+    IProjectionState state,
+    StoreProfileSelection profile,
+    IServiceProvider services) : IHealthCheck
 {
     private static readonly FormTypeRef Probe = FormTypeRef.Create("formbase-health-probe");
+
+    private readonly NamespaceBinding? _binding = services.GetService<NamespaceBinding>();
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
@@ -32,7 +43,17 @@ internal sealed class StoresHealthCheck(IProjectionState state, StoreProfileSele
         try
         {
             await state.GetAsync(Probe, cancellationToken).ConfigureAwait(false);
+            if (_binding is not null)
+            {
+                await _binding.EnsureAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             return HealthCheckResult.Healthy($"{profile.Profile} stores answered.");
+        }
+        catch (NamespaceBindingConflictException conflict)
+        {
+            // Configuration, not connection details: safe to publish, and the operator's only clue.
+            return HealthCheckResult.Unhealthy(conflict.Message);
         }
         catch (Exception exception)
         {
