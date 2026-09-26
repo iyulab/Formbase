@@ -1,5 +1,11 @@
 using System.Net;
+using Formbase.Host.Composition;
+using Formbase.Host.Namespaces;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Npgsql;
 
 namespace Formbase.Host.Tests;
 
@@ -49,5 +55,30 @@ public sealed class HealthProbeTests(WebApplicationFactory<Program> factory) : I
 
         live.StatusCode.Should().Be(HttpStatusCode.OK);
         ready.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// On a durable host readiness also means the store holds this host's namespace. A binding that
+    /// cannot be confirmed is not ready — while liveness stays up, since restarting would not help.
+    /// Nothing listens on port 1, so the binding check fails the way an unreachable database does.
+    /// </summary>
+    [Fact]
+    public async Task Readiness_waits_on_the_namespace_binding_and_liveness_does_not()
+    {
+        using var durable = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<StoreProfileSelection>();
+                services.AddSingleton(new StoreProfileSelection(
+                    StoreProfile.Durable, new DurableStoreLocation("formbase", Guid.NewGuid())));
+                services.AddSingleton(NpgsqlDataSource.Create("Host=127.0.0.1;Port=1;Timeout=1"));
+                services.AddSingleton<NamespaceBinding>();
+            }));
+        using var client = durable.CreateClient();
+
+        (await client.GetAsync("/health/ready", TestContext.Current.CancellationToken)).StatusCode
+            .Should().Be(HttpStatusCode.ServiceUnavailable);
+        (await client.GetAsync("/health/live", TestContext.Current.CancellationToken)).StatusCode
+            .Should().Be(HttpStatusCode.OK);
     }
 }

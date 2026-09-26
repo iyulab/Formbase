@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- `GET /settings` reports `storage` — the PostgreSQL schema and MorphDB project a durable host keeps
+  its data in (`null` in-process). Two hosts reporting the same storage serve the same data, whatever
+  namespace each answers to; the API reference and README now say that several namespaces sharing one
+  PostgreSQL and one MorphDB need a schema and a project each.
+
 ### Changed
 
 - A document whose JSON names a property twice in one object is refused with `400`
@@ -17,13 +24,6 @@
   and answers `503` `/problems/namespace-unverified` until it passes; the readiness probe reports
   it too. The MorphDB project is not checked: namespaces sharing one replace each other's projected
   tables of the same name.
-
-### Added
-
-- `GET /settings` reports `storage` — the PostgreSQL schema and MorphDB project a durable host keeps
-  its data in (`null` in-process). Two hosts reporting the same storage serve the same data, whatever
-  namespace each answers to; the API reference and README now say that several namespaces sharing one
-  PostgreSQL and one MorphDB need a schema and a project each.
 
 ### Fixed
 
