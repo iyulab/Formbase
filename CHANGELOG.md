@@ -8,6 +8,10 @@
   the database healthy while the image was still running its init scripts on a socket-only server
   that restarts afterwards, so on a first `docker compose up` MorphDB could start against a server
   that was about to go away.
+- `.env.example` and the namespace section of the API reference say that two instances sharing a
+  MorphDB need project ids that differ in their first eight hex digits — MorphDB names a project's
+  schemas from them — rather than only different ids. Editing just the tail of the example id made the
+  second project impossible to create.
 
 ## 0.12.0
 
