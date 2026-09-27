@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.12.0
+
+Pairs with MorphDB `0.12.x`, unchanged. A durable schema now records the namespace it holds and
+refuses a host serving another name, an idempotency key belongs to one request, and a refused
+configuration ends the process with exit code `78`. Two changes are visible to existing deployments:
+hosts that shared one schema under different namespaces no longer both start (see *Upgrading* under
+the namespace section of the API reference), and a document naming a property twice is refused.
 
 ### Added
 
