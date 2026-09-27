@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The compose bundle's PostgreSQL health check asks over TCP. Asked over the Unix socket, it reported
+  the database healthy while the image was still running its init scripts on a socket-only server
+  that restarts afterwards, so on a first `docker compose up` MorphDB could start against a server
+  that was about to go away.
+
 ## 0.12.0
 
 Pairs with MorphDB `0.12.x`, unchanged. A durable schema now records the namespace it holds and

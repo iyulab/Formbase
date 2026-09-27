@@ -25,7 +25,10 @@ services:
       # this file does not reach a volume that already exists.
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U morph -d morphdb"]
+      # Over TCP on purpose. While the image runs its init scripts it serves only the Unix socket and
+      # then restarts, and a socket probe answers ready during that window -- so a dependent service
+      # started on this health check would reach a server that is about to go away.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb"]
       interval: 5s
       timeout: 5s
       retries: 10
