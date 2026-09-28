@@ -95,7 +95,7 @@ public sealed class NamespaceBindingLiveTests(DurableFixture fixture)
         {
             using var store = new PostgresRawStore(source, schema);
             await store.AppendAsync(FormTypeRef.Create("legacy"), DocumentId.New(),
-                DocumentBody.Parse("""{"total":7}"""), TestContext.Current.CancellationToken);
+                DocumentBody.Parse("""{"total":7}"""), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         await using (var first = Host("orders", schema))
