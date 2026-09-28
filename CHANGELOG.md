@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
+
+Pairs with MorphDB `0.13.x`, `0.13.1` or later. Record queries grow from equality to ranges, text
+matching and empty-column tests, and the engine counts records per group. `Formbase.Sqlite` is new: the
+whole engine's storage in one SQLite file, for a process with no database server. One breaking change
+for code: `QuerySpec.Filters` is a list of `FieldFilter` (`FieldFilter.Equal(column, value)` is the old
+entry), and an `IProjectionStore` adapter implements `AggregateAsync`. On the MorphDB store, a filter for
+records whose column is empty used to miss them.
 
 ### Added
 
@@ -33,6 +40,8 @@
   `FieldFilter.Equal(column, value)` is the old entry. `IProjectionStore` gains `AggregateAsync`, which
   an adapter implements by counting rows per group; the in-memory and MorphDB stores do, and both pass
   the same contract tests. The HTTP record endpoint still takes equality filters only.
+- `Formbase.M3L` depends on `M3L.Native` 0.17.0 (was 0.15.0), which targets .NET 10 like Formbase. The
+  parsed declarations it reads are unchanged.
 
 ### Fixed
 
