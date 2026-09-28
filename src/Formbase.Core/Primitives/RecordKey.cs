@@ -3,8 +3,9 @@ namespace Formbase.Core.Primitives;
 /// <summary>
 /// Names the record a document belongs to, so a later document can correct or retire it. Scoped to a
 /// form type: the same key under two form types names two records. Opaque to the engine — compared
-/// ordinally and stored as given, never trimmed or case-folded, because only the caller knows what makes
-/// two of its keys the same record.
+/// ordinally and stored as given, never trimmed, case-folded or Unicode-normalized, because only the caller
+/// knows what makes two of its keys the same record — normalize keys derived from file names or user input
+/// before creating them.
 /// <para>
 /// A document without a key is a record of its own, as every document was before keys existed. A
 /// document with a key replaces the key's earlier documents in the projection: the latest watermark

@@ -17,6 +17,9 @@ positionally to `AcceptAsync`/`AppendAsync`.
   `DELETE /formtypes/{type}/records?recordKey=…`, appends a retirement: a document with no body that
   takes the record out of the projection while its earlier documents stay in the raw stream. Appending
   under the key again brings the record back. Idempotency keys work for retirements as for intake.
+- Record keys are compared exactly and are not Unicode-normalized: the same text in two normalization
+  forms (a file name from one system in NFC, from another in NFD) names two records. Normalize keys that
+  come from file names or user input before sending them.
 - `RecordFold.Latest` — the fold the projector applies (latest per key, retired keys dropped), public so
   any reader of the raw stream can get records rather than appends.
 - Raw reads carry `recordKey` and `retired` (`StoredDocument.Key`, `StoredDocument.IsRetirement`). A
@@ -41,6 +44,9 @@ positionally to `AcceptAsync`/`AppendAsync`.
   reads back as a record of its own. On PostgreSQL the check runs before any change, so an up-to-date
   schema takes no table lock at startup. An existing projected table gains `fb_record_key` the next time
   it is rebuilt; until then nothing in it is keyed, because nothing appended before the upgrade was.
+  **The upgrade is one-way.** Once a record has been retired, 0.13.x can no longer read the form type's
+  raw stream (it answers `500`), and a projection it runs leaves the table empty. Back up the database
+  before upgrading if you may need to go back.
 
 ### Dependencies
 

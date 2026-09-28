@@ -1,3 +1,4 @@
+using System.Text;
 using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Primitives;
@@ -166,6 +167,20 @@ public class RecordIdentityTests
         var rows = await h.ProjectAndReadAsync();
 
         rows.Should().ContainSingle("retiring 'a' of another form type is another record");
+    }
+
+    [Fact]
+    public async Task Keys_are_not_unicode_normalized()
+    {
+        var h = new Harness();
+        var composed = "notes/가.md".Normalize(NormalizationForm.FormC);
+        var decomposed = composed.Normalize(NormalizationForm.FormD);
+        await h.Accept("""{"lot":"L-1","qty":1}""", RecordKey.Create(composed));
+        await h.Accept("""{"lot":"L-1","qty":2}""", RecordKey.Create(decomposed));
+
+        var rows = await h.ProjectAndReadAsync();
+
+        rows.Should().HaveCount(2, "the same text in two normalization forms is two keys — normalizing is the caller's call");
     }
 
     [Fact]

@@ -196,9 +196,12 @@ and the projection stops showing it. Sending a document under the key again brin
 Nothing checks that the key was ever used; retiring an unknown key appends a retirement and changes
 no row. `Idempotency-Key` works here as it does for intake.
 
-- **The key is yours and opaque.** It is compared exactly as sent — not trimmed, not case-folded —
-  and any string works, including a path or non-ASCII text; percent-encode it in the query. It is
-  scoped to the form type: the same key under two form types names two records.
+- **The key is yours and opaque.** It is compared exactly as sent — not trimmed, not case-folded,
+  not Unicode-normalized — and any string works, including a path or non-ASCII text; percent-encode it
+  in the query. It is scoped to the form type: the same key under two form types names two records.
+- **Normalize keys you derive from names.** The same text in two normalization forms is two keys, and
+  file names in particular arrive in either form depending on the system that wrote them (NFC on most,
+  NFD from some). Pick one form — NFC is the usual choice — and apply it before sending.
 - **It travels in the query**, not a header (a key is often not ASCII, which headers do not carry
   well) and not the body (which is stored verbatim).
 - A blank `recordKey` is refused with `400` rather than read as absent — a caller that meant to name a
