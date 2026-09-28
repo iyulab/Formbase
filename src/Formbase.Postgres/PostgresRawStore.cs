@@ -23,6 +23,10 @@ namespace Formbase.Postgres;
 /// <para>Schema/table creation is likewise serialized under the same lock, because <c>CREATE … IF NOT
 /// EXISTS</c> is not atomic against the catalog — two instances cold-starting against a fresh shared
 /// schema could otherwise both create it and one would fail.</para>
+/// <para><b>A schema from an earlier version is upgraded in place</b> under the same lock: the record-key
+/// column is added and the body column accepts NULL, which is how a retirement is stored. A JSON
+/// <c>null</c> document is <c>'null'::jsonb</c>, never SQL NULL, so the two cannot be confused. Documents
+/// already stored read back as records of their own.</para>
 /// </remarks>
 public sealed class PostgresRawStore : IRawStore, IDisposable
 {
@@ -49,18 +53,46 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
             CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".raw_documents (
                 id uuid PRIMARY KEY,
                 form_type text NOT NULL,
-                body jsonb NOT NULL,
+                body jsonb NULL,
                 watermark bigint NOT NULL UNIQUE,
-                appended_at timestamptz NOT NULL
+                appended_at timestamptz NOT NULL,
+                record_key text NULL
             );
+            DO $upgrade$
+            BEGIN
+                -- A table created by an earlier version. Checked first so an up-to-date schema takes no
+                -- table lock at startup; ALTER TABLE locks even when it has nothing to change.
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{_bootstrap.Schema}' AND table_name = 'raw_documents' AND column_name = 'record_key')
+                THEN
+                    ALTER TABLE "{_bootstrap.Schema}".raw_documents ADD COLUMN record_key text NULL;
+                END IF;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{_bootstrap.Schema}' AND table_name = 'raw_documents' AND column_name = 'body'
+                      AND is_nullable = 'NO')
+                THEN
+                    ALTER TABLE "{_bootstrap.Schema}".raw_documents ALTER COLUMN body DROP NOT NULL;
+                END IF;
+            END
+            $upgrade$;
             CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
                 ON "{_bootstrap.Schema}".raw_documents (form_type, watermark);
             """;
     }
 
-    public async Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default)
+    public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(body);
+        return AppendCoreAsync(type, id, body, key, cancellationToken);
+    }
+
+    public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
+        => AppendCoreAsync(type, id, body: null, key, cancellationToken);
+
+    private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key, CancellationToken cancellationToken)
+    {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -85,19 +117,20 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         var appendedAt = _clock.GetUtcNow();
         await using var insert = new NpgsqlCommand(
             $"""
-            INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at)
-            VALUES (@id, @type, @body, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), @at)
+            INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key)
+            VALUES (@id, @type, @body, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), @at, @key)
             RETURNING watermark
             """, connection, transaction);
         insert.Parameters.AddWithValue("id", id.Value);
         insert.Parameters.AddWithValue("type", type.Value);
-        insert.Parameters.Add(new NpgsqlParameter("body", NpgsqlDbType.Jsonb) { Value = body.ToJsonString() });
+        insert.Parameters.Add(new NpgsqlParameter("body", NpgsqlDbType.Jsonb) { Value = (object?)body?.ToJsonString() ?? DBNull.Value });
         insert.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = appendedAt });
+        insert.Parameters.Add(new NpgsqlParameter("key", NpgsqlDbType.Text) { Value = (object?)key?.Value ?? DBNull.Value });
 
         var watermark = (long)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        return new StoredDocument(id, type, body, new Watermark(watermark), appendedAt);
+        return new StoredDocument(id, type, body, new Watermark(watermark), appendedAt, key);
     }
 
     public async Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)
@@ -115,7 +148,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
             $"""
-            SELECT id, form_type, body, watermark, appended_at
+            SELECT id, form_type, body, watermark, appended_at, record_key
             FROM "{_bootstrap.Schema}".raw_documents
             WHERE form_type = @type AND watermark > @after
             ORDER BY watermark
@@ -148,7 +181,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
     {
         await using var command = new NpgsqlCommand(
             $"""
-            SELECT id, form_type, body, watermark, appended_at
+            SELECT id, form_type, body, watermark, appended_at, record_key
             FROM "{_bootstrap.Schema}".raw_documents WHERE id = @id
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id.Value);
@@ -160,9 +193,10 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
     private static StoredDocument ReadDocument(NpgsqlDataReader reader) => new(
         new DocumentId(reader.GetGuid(0)),
         FormTypeRef.Create(reader.GetString(1)),
-        DocumentBody.Parse(reader.GetString(2)),
+        reader.IsDBNull(2) ? null : DocumentBody.Parse(reader.GetString(2)),
         new Watermark(reader.GetInt64(3)),
-        reader.GetFieldValue<DateTimeOffset>(4));
+        reader.GetFieldValue<DateTimeOffset>(4),
+        reader.IsDBNull(5) ? null : RecordKey.Create(reader.GetString(5)));
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)
         => _bootstrap.EnsureAsync(_initDdl, cancellationToken);

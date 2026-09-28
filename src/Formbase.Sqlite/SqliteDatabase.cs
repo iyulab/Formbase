@@ -54,7 +54,21 @@ public sealed class SqliteDatabase : IDisposable
     }
 
     /// <summary>Runs <paramref name="ddl"/> once per process for <paramref name="component"/>.</summary>
-    internal async Task EnsureAsync(string component, string ddl, CancellationToken cancellationToken)
+    internal Task EnsureAsync(string component, string ddl, CancellationToken cancellationToken)
+        => EnsureAsync(component, ddl, upgrade: null, cancellationToken);
+
+    /// <summary>
+    /// Runs <paramref name="ddl"/> and then <paramref name="upgrade"/> once per process for
+    /// <paramref name="component"/>. The DDL creates what a new file needs; the upgrade brings a file
+    /// created by an earlier version up to it (<c>CREATE TABLE IF NOT EXISTS</c> leaves an existing table as
+    /// it was). The upgrade runs in an immediate transaction, so two processes opening one old file cannot
+    /// both apply it — the second waits for the first and then finds nothing left to do.
+    /// </summary>
+    internal async Task EnsureAsync(
+        string component,
+        string ddl,
+        Func<SqliteConnection, SqliteTransaction, CancellationToken, Task>? upgrade,
+        CancellationToken cancellationToken)
     {
         if (_initialized.ContainsKey(component))
         {
@@ -75,6 +89,14 @@ public sealed class SqliteDatabase : IDisposable
             // with a UI reading and a background projector writing has.
             command.CommandText = "PRAGMA journal_mode=WAL;" + ddl;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+            if (upgrade is not null)
+            {
+                await using var transaction = connection.BeginTransaction(deferred: false);
+                await upgrade(connection, transaction, cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             _initialized[component] = true;
         }
         finally

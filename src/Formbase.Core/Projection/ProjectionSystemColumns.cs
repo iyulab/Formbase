@@ -16,10 +16,17 @@ public static class ProjectionSystemColumns
     /// <summary>Column holding the source <see cref="Primitives.Watermark"/> value.</summary>
     public const string Watermark = "fb_watermark";
 
+    /// <summary>
+    /// Column holding the source document's <see cref="Primitives.RecordKey"/> — which record a row is —
+    /// or NULL for a document that is a record of its own.
+    /// </summary>
+    public const string RecordKey = "fb_record_key";
+
     /// <summary>The system columns, prepended to every projected table's domain columns.</summary>
     public static IReadOnlyList<ColumnDef> All { get; } =
     [
         new ColumnDef(DocumentId, ColumnType.Uuid, Nullable: false),
         new ColumnDef(Watermark, ColumnType.Integer, Nullable: false),
+        new ColumnDef(RecordKey, ColumnType.Text, Nullable: true),
     ];
 }

@@ -24,10 +24,12 @@ internal static class DocumentMapper
         {
             [ProjectionSystemColumns.DocumentId] = document.Id.Value,
             [ProjectionSystemColumns.Watermark] = document.Watermark.Value,
+            [ProjectionSystemColumns.RecordKey] = document.Key?.Value,
         };
 
         List<string>? absent = null;
-        var root = document.Body.Root;
+        // Only a standing record reaches here (RecordFold drops retirements), so a body is always present.
+        var root = (document.Body ?? throw new ArgumentException("A retirement has no row to map.", nameof(document))).Root;
         foreach (var column in domainColumns)
         {
             if (!TryConvert(root, column, out var value, out var fieldAbsent, out reason))

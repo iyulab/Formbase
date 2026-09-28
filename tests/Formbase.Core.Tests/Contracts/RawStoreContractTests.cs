@@ -22,7 +22,7 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        var stored = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
+        var stored = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         stored.Watermark.Should().Be(new Watermark(1));
     }
@@ -32,8 +32,8 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        var first = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        var second = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
+        var first = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var second = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         (second.Watermark > first.Watermark).Should().BeTrue();
     }
@@ -43,8 +43,8 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
 
-        var a = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        var b = await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
+        var a = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var b = await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         (b.Watermark > a.Watermark).Should().BeTrue();
     }
@@ -55,8 +55,8 @@ public abstract class RawStoreContractTests
         var store = CreateStore();
         var id = DocumentId.New();
 
-        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        var again = await store.AppendAsync(Qc, id, Body("""{"n":999}"""), TestContext.Current.CancellationToken);
+        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var again = await store.AppendAsync(Qc, id, Body("""{"n":999}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         again.Id.Should().Be(first.Id);
         again.Watermark.Should().Be(first.Watermark);
@@ -74,8 +74,8 @@ public abstract class RawStoreContractTests
         var store = CreateStore();
         var id = DocumentId.New();
 
-        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        var again = await store.AppendAsync(Work, id, Body("""{"other":"x"}"""), TestContext.Current.CancellationToken);
+        var first = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var again = await store.AppendAsync(Work, id, Body("""{"other":"x"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         again.Type.Should().Be(Qc);
         again.Watermark.Should().Be(first.Watermark);
@@ -87,13 +87,13 @@ public abstract class RawStoreContractTests
     {
         var store = CreateStore();
         var id = DocumentId.New();
-        await store.AppendAsync(Qc, id, Body("""{"lot":"L-1"}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Qc, id, Body("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var fetched = await store.GetAsync(id, TestContext.Current.CancellationToken);
 
         fetched.Should().NotBeNull();
         fetched!.Id.Should().Be(id);
-        fetched.Body.Root.GetProperty("lot").GetString().Should().Be("L-1");
+        fetched.Body!.Root.GetProperty("lot").GetString().Should().Be("L-1");
     }
 
     [Fact]
@@ -108,9 +108,9 @@ public abstract class RawStoreContractTests
     public async Task Stream_returns_a_form_types_documents_in_append_order_after_a_watermark()
     {
         var store = CreateStore();
-        var d1 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        var d2 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
-        var d3 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":3}"""), TestContext.Current.CancellationToken);
+        var d1 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var d2 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var d3 = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":3}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var after1 = new List<StoredDocument>();
         await foreach (var d in store.StreamAsync(Qc, d1.Watermark, TestContext.Current.CancellationToken))
@@ -125,8 +125,8 @@ public abstract class RawStoreContractTests
     public async Task Stream_from_zero_returns_all_documents_of_the_type()
     {
         var store = CreateStore();
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var all = new List<StoredDocument>();
         await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
@@ -141,8 +141,8 @@ public abstract class RawStoreContractTests
     public async Task Stream_isolates_by_form_type()
     {
         var store = CreateStore();
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":2}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var qcDocs = new List<StoredDocument>();
         await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
@@ -194,11 +194,98 @@ public abstract class RawStoreContractTests
     public async Task Head_returns_the_latest_watermark_of_the_type()
     {
         var store = CreateStore();
-        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), TestContext.Current.CancellationToken);
-        var last = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var last = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":2}"""), cancellationToken: TestContext.Current.CancellationToken);
         // A later append under a different type must not move Qc's head.
-        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":3}"""), TestContext.Current.CancellationToken);
+        await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":3}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(last.Watermark);
+    }
+
+    private static readonly RecordKey KeyA = RecordKey.Create("notes/가.md");
+
+    [Fact]
+    public async Task A_record_key_round_trips_through_append_get_and_stream()
+    {
+        var store = CreateStore();
+        var id = DocumentId.New();
+
+        var appended = await store.AppendAsync(Qc, id, Body("""{"n":1}"""), KeyA, TestContext.Current.CancellationToken);
+        var fetched = await store.GetAsync(id, TestContext.Current.CancellationToken);
+        var streamed = new List<StoredDocument>();
+        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
+        {
+            streamed.Add(d);
+        }
+
+        appended.Key.Should().Be(KeyA);
+        fetched!.Key.Should().Be(KeyA, "the key is stored as given — not trimmed, not case-folded, non-ASCII intact");
+        streamed.Single().Key.Should().Be(KeyA);
+    }
+
+    [Fact]
+    public async Task A_document_appended_without_a_key_reads_back_without_one()
+    {
+        var store = CreateStore();
+        var id = DocumentId.New();
+        await store.AppendAsync(Qc, id, Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+
+        var fetched = await store.GetAsync(id, TestContext.Current.CancellationToken);
+
+        fetched!.Key.Should().BeNull();
+        fetched.IsRetirement.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_retirement_is_an_append_with_no_body_under_its_key()
+    {
+        var store = CreateStore();
+        var first = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), KeyA, TestContext.Current.CancellationToken);
+        var retirementId = DocumentId.New();
+
+        var retirement = await store.RetireAsync(Qc, retirementId, KeyA, TestContext.Current.CancellationToken);
+        var fetched = await store.GetAsync(retirementId, TestContext.Current.CancellationToken);
+        var streamed = new List<StoredDocument>();
+        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
+        {
+            streamed.Add(d);
+        }
+
+        (retirement.Watermark > first.Watermark).Should().BeTrue("a retirement takes the next position like any append");
+        fetched!.IsRetirement.Should().BeTrue();
+        fetched.Body.Should().BeNull();
+        fetched.Key.Should().Be(KeyA);
+        streamed.Select(d => d.Id).Should().Equal([first.Id, retirementId], "the raw history keeps the retired record's documents");
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(retirement.Watermark);
+    }
+
+    [Fact]
+    public async Task A_retirement_is_idempotent_by_id()
+    {
+        var store = CreateStore();
+        var id = DocumentId.New();
+
+        var first = await store.RetireAsync(Qc, id, KeyA, TestContext.Current.CancellationToken);
+        var again = await store.RetireAsync(Qc, id, KeyA, TestContext.Current.CancellationToken);
+
+        again.Watermark.Should().Be(first.Watermark);
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(first.Watermark);
+    }
+
+    /// <summary>
+    /// A JSON <c>null</c> is a legal document body. A store that represented retirement by a null body
+    /// value would turn such a document into a retirement on the way back.
+    /// </summary>
+    [Fact]
+    public async Task A_document_whose_body_is_json_null_is_not_a_retirement()
+    {
+        var store = CreateStore();
+        var id = DocumentId.New();
+        await store.AppendAsync(Qc, id, Body("null"), KeyA, TestContext.Current.CancellationToken);
+
+        var fetched = await store.GetAsync(id, TestContext.Current.CancellationToken);
+
+        fetched!.IsRetirement.Should().BeFalse();
+        fetched.Body!.Root.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
     }
 }

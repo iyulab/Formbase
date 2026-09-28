@@ -42,8 +42,8 @@ public class IntakeServiceTests
         var intake = new IntakeService(store);
         var key = DocumentId.New();
 
-        var first = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
-        var retry = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
+        var first = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: TestContext.Current.CancellationToken);
+        var retry = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: TestContext.Current.CancellationToken);
 
         retry.Should().Be(first);
         (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(new Watermark(1), "retry must not create a second document");
@@ -57,8 +57,8 @@ public class IntakeServiceTests
         var key = DocumentId.New();
         var other = FormTypeRef.Create("work-order");
 
-        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
-        var reuse = () => intake.AcceptAsync(other, Body("""{"other":"x"}"""), key, TestContext.Current.CancellationToken);
+        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: TestContext.Current.CancellationToken);
+        var reuse = () => intake.AcceptAsync(other, Body("""{"other":"x"}"""), key, cancellationToken: TestContext.Current.CancellationToken);
 
         var refused = (await reuse.Should().ThrowAsync<IdempotencyKeyReusedException>()).Which;
         refused.DocumentId.Should().Be(key);
@@ -75,15 +75,15 @@ public class IntakeServiceTests
         var intake = new IntakeService(store);
         var key = DocumentId.New();
 
-        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, TestContext.Current.CancellationToken);
-        var reuse = () => intake.AcceptAsync(Qc, Body("""{"n":2}"""), key, TestContext.Current.CancellationToken);
+        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: TestContext.Current.CancellationToken);
+        var reuse = () => intake.AcceptAsync(Qc, Body("""{"n":2}"""), key, cancellationToken: TestContext.Current.CancellationToken);
 
         var refused = (await reuse.Should().ThrowAsync<IdempotencyKeyReusedException>()).Which;
         refused.RequestedType.Should().Be(Qc);
         refused.StoredType.Should().Be(Qc, "the same form type with another body is still another request");
-        refused.Message.Should().Contain("different body");
+        refused.Message.Should().Contain("differs from this request");
         var held = await store.GetAsync(key, TestContext.Current.CancellationToken);
-        held!.Body.Root.GetProperty("n").GetInt32().Should().Be(1, "the document first stored under the key is unchanged");
+        held!.Body!.Root.GetProperty("n").GetInt32().Should().Be(1, "the document first stored under the key is unchanged");
         (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(new Watermark(1));
     }
 
@@ -100,8 +100,8 @@ public class IntakeServiceTests
         var intake = new IntakeService(store);
         var key = DocumentId.New();
 
-        var original = await intake.AcceptAsync(Qc, Body(first), key, TestContext.Current.CancellationToken);
-        var again = await intake.AcceptAsync(Qc, Body(retry), key, TestContext.Current.CancellationToken);
+        var original = await intake.AcceptAsync(Qc, Body(first), key, cancellationToken: TestContext.Current.CancellationToken);
+        var again = await intake.AcceptAsync(Qc, Body(retry), key, cancellationToken: TestContext.Current.CancellationToken);
 
         again.Should().Be(original);
         (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(new Watermark(1));
@@ -119,7 +119,10 @@ public class IntakeServiceTests
 
     private sealed class ThrowingRawStore : IRawStore
     {
-        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default)
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("backing store down");
+
+        public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("backing store down");
 
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)

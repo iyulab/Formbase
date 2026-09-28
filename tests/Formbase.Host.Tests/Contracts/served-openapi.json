@@ -16,7 +16,7 @@
           "DocumentEndpoints"
         ],
         "summary": "Accepts a document into the raw store",
-        "description": "The document is stored verbatim; no declaration is required and none is consulted. An object naming a property twice is refused with 400. Send an Idempotency-Key header to make re-submission safe: the same key with the same request returns the same document without appending a second copy. A key already used for another request (another form type, or a different body) is refused with 422.",
+        "description": "The document is stored verbatim; no declaration is required and none is consulted. An object naming a property twice is refused with 400. Send an Idempotency-Key header to make re-submission safe: the same key with the same request returns the same document without appending a second copy. A key already used for another request (another form type, record key, or body) is refused with 422. Name a \u0060recordKey\u0060 to make the document a correction of that record: the projection shows only the record\u0027s latest document. Without one, the document is a record of its own.",
         "operationId": "AcceptDocument",
         "parameters": [
           {
@@ -30,6 +30,13 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recordKey",
+            "in": "query",
             "schema": {
               "type": "string"
             }
@@ -417,6 +424,78 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "RecordEndpoints"
+        ],
+        "summary": "Retires a record",
+        "description": "Appends a retirement of the record named by \u0060recordKey\u0060: the projection stops showing it, and its documents stay in the raw stream, where the retirement appears as a document with \u0060retired: true\u0060 and no body. Appending under the key again brings the record back. Nothing checks that the key was ever used. An Idempotency-Key header works as it does for intake.",
+        "operationId": "RetireRecord",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recordKey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptedDocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/formtypes/{type}/declaration": {
@@ -646,6 +725,12 @@
           },
           "formType": {
             "type": "string"
+          },
+          "recordKey": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -1257,7 +1342,9 @@
           "formType",
           "watermark",
           "appendedAt",
-          "body"
+          "body",
+          "recordKey",
+          "retired"
         ],
         "type": "object",
         "properties": {
@@ -1281,7 +1368,23 @@
             "format": "date-time"
           },
           "body": {
-            "$ref": "#/components/schemas/JsonElement"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "recordKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "retired": {
+            "type": "boolean"
           }
         }
       }

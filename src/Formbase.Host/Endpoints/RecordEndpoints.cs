@@ -2,11 +2,13 @@ using Formbase.Core;
 using Formbase.Core.Primitives;
 using Formbase.Core.Query;
 using Formbase.Host.Contracts;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Formbase.Host.Endpoints;
 
 /// <summary>
-/// The system's question: reading a form type's projected records.
+/// The system's question: reading a form type's projected records — and retiring one, which the
+/// projection stops showing while its documents stay in the raw stream.
 /// <para>
 /// Unlike a document read, this depends on a projection existing. A form type that has never been
 /// projected answers with a refusal rather than an empty page — "nothing matched" and "nothing has
@@ -33,7 +35,43 @@ internal static class RecordEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
+        routes.MapDelete("/formtypes/{type}/records", RetireAsync)
+            .WithName("RetireRecord")
+            .WithSummary("Retires a record")
+            .WithDescription(
+                "Appends a retirement of the record named by `recordKey`: the projection stops showing it, " +
+                "and its documents stay in the raw stream, where the retirement appears as a document with " +
+                "`retired: true` and no body. Appending under the key again brings the record back. Nothing " +
+                "checks that the key was ever used. An Idempotency-Key header works as it does for intake.")
+            .Produces<AcceptedDocumentResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
+
         return routes;
+    }
+
+    private static async Task<IResult> RetireAsync(
+        string type,
+        [FromHeader(Name = DocumentEndpoints.IdempotencyKeyHeader)] string? idempotencyKey,
+        string? recordKey,
+        FormbaseEngine engine,
+        CancellationToken cancellationToken)
+    {
+        if (!DocumentEndpoints.TryReadIdempotencyKey(idempotencyKey, out var idempotencyId, out var problem))
+        {
+            return problem;
+        }
+
+        if (string.IsNullOrWhiteSpace(recordKey))
+        {
+            return Problem("recordKey names the record to retire and is required.");
+        }
+
+        var key = RecordKey.Create(recordKey);
+        var id = await engine.RetireAsync(FormTypeRef.Create(type), key, idempotencyId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(new AcceptedDocumentResponse(id.Value, type, key.Value));
     }
 
     private static async Task<IResult> QueryAsync(

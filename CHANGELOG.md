@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+A correction is a new append — and now it can say which record it corrects. Breaking for code that
+implements `IRawStore` or reads `StoredDocument.Body`, and for callers that passed a cancellation token
+positionally to `AcceptAsync`/`AppendAsync`.
+
+### Added
+
+- **Record identity.** A document may name the record it belongs to with a `RecordKey` (an opaque
+  string, compared exactly, scoped to the form type): `FormbaseEngine.AcceptAsync(type, body,
+  recordKey: key)`, over HTTP `POST /formtypes/{type}/documents?recordKey=…`. The projection shows each
+  record once — the document with the latest watermark — so a corrected record is one row and a count
+  counts it once. Documents without a key are records of their own, exactly as before.
+- **Retiring a record.** `FormbaseEngine.RetireAsync(type, key)`, over HTTP
+  `DELETE /formtypes/{type}/records?recordKey=…`, appends a retirement: a document with no body that
+  takes the record out of the projection while its earlier documents stay in the raw stream. Appending
+  under the key again brings the record back. Idempotency keys work for retirements as for intake.
+- `RecordFold.Latest` — the fold the projector applies (latest per key, retired keys dropped), public so
+  any reader of the raw stream can get records rather than appends.
+- Raw reads carry `recordKey` and `retired` (`StoredDocument.Key`, `StoredDocument.IsRetirement`). A
+  retirement reads back with a null body; read `retired` rather than testing the body, since a document
+  whose content is the JSON value `null` has a null body too.
+- Projected tables gain the `fb_record_key` bookkeeping column. Record reads still return the declared
+  fields only.
+
+### Changed
+
+- **Breaking:** `IRawStore.AppendAsync(type, id, body, key = null, cancellationToken)` takes the record key
+  before the cancellation token, and `IRawStore.RetireAsync` is new — a raw-store adapter implements both.
+  `IIntakeService.AcceptAsync` likewise takes `recordKey` before the token, and `IIntakeService.RetireAsync`
+  is new. A call that passed the token positionally names it (`cancellationToken: ct`).
+- **Breaking:** `StoredDocument.Body` is nullable — null for a retirement. `StoredDocumentResponse.Body`
+  is nullable over HTTP for the same reason, next to the new `recordKey` and `retired`.
+- An idempotency key reused under another record key, or for a retirement where it named a document (or
+  the reverse), is refused like a key reused with a different body.
+- Schema intelligence skips retirements when sampling a form type's documents.
+- **SQLite and PostgreSQL files and schemas from 0.13.x are upgraded in place** on first use: the raw
+  table gains its record-key column (and, on SQLite, a retirement column), and every document it holds
+  reads back as a record of its own. On PostgreSQL the check runs before any change, so an up-to-date
+  schema takes no table lock at startup. An existing projected table gains `fb_record_key` the next time
+  it is rebuilt; until then nothing in it is keyed, because nothing appended before the upgrade was.
+
 ### Dependencies
 
 - `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI` 10.10.1 (was 10.10.0), a patch.

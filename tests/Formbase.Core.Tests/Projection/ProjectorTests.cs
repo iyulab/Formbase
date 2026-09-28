@@ -354,8 +354,10 @@ public class ProjectorTests
         public Task<Watermark> HeadAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult(capturedHead);
 
-        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default)
-            => inner.AppendAsync(type, id, body, cancellationToken);
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
+            => inner.AppendAsync(type, id, body, key, cancellationToken: cancellationToken);
+        public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
+            => inner.RetireAsync(type, id, key, cancellationToken);
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)
             => inner.GetAsync(id, cancellationToken);
     }

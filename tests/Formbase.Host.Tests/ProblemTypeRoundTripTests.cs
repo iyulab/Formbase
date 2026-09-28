@@ -334,7 +334,10 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         private static InvalidOperationException Unreachable() =>
             new("The raw store is not reachable.");
 
-        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default) =>
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default) =>
+            throw Unreachable();
+
+        public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default) =>
             throw Unreachable();
 
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default) =>

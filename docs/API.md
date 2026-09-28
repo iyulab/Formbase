@@ -26,6 +26,7 @@ POST   /formtypes/{type}/projection    # Rebuild the projected table
 GET    /formtypes/{type}/projection    # Read projection state
 GET    /formtypes/{type}/projection/skips  # Read what the last run could not map
 GET    /formtypes/{type}/records       # Query projected records
+DELETE /formtypes/{type}/records       # Retire a record (?recordKey=)
 GET    /settings                       # What this instance was composed as
 GET    /openapi/v1.json                # The generated OpenAPI document
 ```
@@ -129,7 +130,7 @@ Content-Type: application/json
 ```
 
 ```json
-{ "documentId": "0f0e9a2c-3d4b-4c11-9a1e-6b8d5f2a7c33", "formType": "orders" }
+{ "documentId": "0f0e9a2c-3d4b-4c11-9a1e-6b8d5f2a7c33", "formType": "orders", "recordKey": null }
 ```
 
 The document is stored **verbatim**. Nothing interprets it at intake — not a declaration, not a
@@ -144,7 +145,7 @@ stream, and answers exactly as the first call did — a reply that revealed whic
 teach callers to tell them apart, which is the opposite of what the key is for.
 
 **A key belongs to one request.** Sent again with another form type, or with the same form type and
-a different body, it is refused with `422` `/problems/idempotency-key-reused` — that is a second
+a different body or record key, it is refused with `422` `/problems/idempotency-key-reused` — that is a second
 request wearing the first one's key, not a retry of it, and answering it as a retry would report a
 document that was never stored while dropping the one that was sent. The document already held under
 the key is unchanged. Bodies are compared as JSON values: property order and whitespace do not make a
@@ -156,6 +157,57 @@ value that cannot be an identity is refused rather than ignored, since ignoring 
 deduplicating without saying so.
 
 Without the key, each submission is a separate document.
+
+---
+
+## Correcting and retiring a record
+
+A document is never changed once stored — **a correction is a new append**. To say which record it
+corrects, name the record with `recordKey`:
+
+```http
+POST /formtypes/orders/documents?recordKey=order-1041
+Content-Type: application/json
+
+{ "customer": "ada", "total": 45 }
+```
+
+```json
+{ "documentId": "7c2e4b1a-9d3f-4e5a-8b6c-1d2e3f4a5b6c", "formType": "orders", "recordKey": "order-1041" }
+```
+
+Every document sent under the same key is a version of one record. **The projection shows each record
+once — its latest document** (the highest watermark), so a corrected record is one row with the
+corrected values and a count counts it once. The earlier documents stay in the raw stream: the history
+is kept, the projection shows the present.
+
+To take a record out, retire it:
+
+```http
+DELETE /formtypes/orders/records?recordKey=order-1041
+```
+
+```json
+{ "documentId": "3a4b5c6d-7e8f-4a1b-9c2d-e3f4a5b6c7d8", "formType": "orders", "recordKey": "order-1041" }
+```
+
+A retirement is an append too — a document with no body — so the record's history stays readable
+and the projection stops showing it. Sending a document under the key again brings the record back.
+Nothing checks that the key was ever used; retiring an unknown key appends a retirement and changes
+no row. `Idempotency-Key` works here as it does for intake.
+
+- **The key is yours and opaque.** It is compared exactly as sent — not trimmed, not case-folded —
+  and any string works, including a path or non-ASCII text; percent-encode it in the query. It is
+  scoped to the form type: the same key under two form types names two records.
+- **It travels in the query**, not a header (a key is often not ASCII, which headers do not carry
+  well) and not the body (which is stored verbatim).
+- A blank `recordKey` is refused with `400` rather than read as absent — a caller that meant to name a
+  record and sent nothing would otherwise add a second one.
+- **A document without a key is a record of its own**, as every document was before keys existed.
+  Keyed and unkeyed documents can share a form type.
+- Record reads return the declared fields only, as they always have — the key is not one of them. The
+  projected table keeps it in the `fb_record_key` bookkeeping column (null for unkeyed documents) for
+  whoever reads the table directly.
 
 ---
 
@@ -171,13 +223,18 @@ GET /documents/0f0e9a2c-3d4b-4c11-9a1e-6b8d5f2a7c33
   "formType": "orders",
   "watermark": 12,
   "appendedAt": "2026-08-04T09:30:00+00:00",
-  "body": { "customer": "ada", "total": 42 }
+  "body": { "customer": "ada", "total": 42 },
+  "recordKey": null,
+  "retired": false
 }
 ```
 
 **This always works.** It reads the raw store, so it answers whether or not the form type has ever
 been projected — the body comes back as it was sent, and `watermark` is the document's position in
 that form type's append-only stream.
+
+A retirement reads back with `"retired": true`, its `recordKey`, and `"body": null`. Read `retired`
+rather than testing the body: a document whose content is the JSON value `null` has a null body too.
 
 ---
 
@@ -195,7 +252,9 @@ GET /formtypes/orders/documents?after=12&limit=100
       "formType": "orders",
       "watermark": 13,
       "appendedAt": "2026-08-04T09:31:00+00:00",
-      "body": { "customer": "ada", "total": 42, "note": "rush" }
+      "body": { "customer": "ada", "total": 42, "note": "rush" },
+      "recordKey": null,
+      "retired": false
     }
   ],
   "rawHead": 13
@@ -208,7 +267,9 @@ declared projection answers only for its declared columns, and a single read nee
 handed at intake, so this is the one place a caller that did not send the documents can see what
 nothing has declared yet.
 
-Each document has the shape a single read returns. They come oldest first.
+Each document has the shape a single read returns. They come oldest first — every append, corrections
+and retirements included, because the stream is the history. A reader that wants the current records
+keeps, per `recordKey`, only the latest document and drops a key whose latest is a retirement.
 
 **Page by watermark.** `after` is the last watermark you received (omit it, or send `0`, to start
 from the beginning); the next page begins after it. `rawHead` is the form type's latest watermark,

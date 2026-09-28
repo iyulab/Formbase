@@ -37,9 +37,18 @@ public sealed class FormbaseEngine
         _proposer = proposer;
     }
 
-    /// <summary>Accepts a document into the raw store. Never requires a declaration.</summary>
-    public Task<DocumentId> AcceptAsync(FormTypeRef type, DocumentBody body, DocumentId? idempotencyId = null, CancellationToken cancellationToken = default)
-        => _intake.AcceptAsync(type, body, idempotencyId, cancellationToken);
+    /// <summary>
+    /// Accepts a document into the raw store. Never requires a declaration. A <paramref name="recordKey"/>
+    /// makes the document a correction of the record it names — the projection shows that key's latest.
+    /// </summary>
+    public Task<DocumentId> AcceptAsync(FormTypeRef type, DocumentBody body, DocumentId? idempotencyId = null, RecordKey? recordKey = null, CancellationToken cancellationToken = default)
+        => _intake.AcceptAsync(type, body, idempotencyId, recordKey, cancellationToken);
+
+    /// <summary>
+    /// Retires a record: the projection stops showing it, and its documents stay in the raw history.
+    /// </summary>
+    public Task<DocumentId> RetireAsync(FormTypeRef type, RecordKey recordKey, DocumentId? idempotencyId = null, CancellationToken cancellationToken = default)
+        => _intake.RetireAsync(type, recordKey, idempotencyId, cancellationToken);
 
     /// <summary>Reads a single document by id — the human's question. Always available.</summary>
     public Task<StoredDocument?> GetDocumentAsync(DocumentId id, CancellationToken cancellationToken = default)

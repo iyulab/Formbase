@@ -48,7 +48,15 @@ public sealed class LlmSchemaProposer : ISchemaProposer
 
         await foreach (var document in _rawStore.StreamAsync(type, Watermark.Zero, cancellationToken).ConfigureAwait(false))
         {
-            var root = document.Body.Root;
+            // A retirement carries no fields to observe. A superseded document still does: this samples
+            // the shapes the form type has held, not only its current records, so it reads the stream as
+            // it comes rather than folding it (which would need the whole stream before the first sample).
+            if (document.Body is not { } body)
+            {
+                continue;
+            }
+
+            var root = body.Root;
             samples.Add(root);
             if (root.ValueKind == JsonValueKind.Object)
             {

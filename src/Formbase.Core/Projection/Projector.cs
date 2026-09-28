@@ -9,6 +9,8 @@ namespace Formbase.Core.Projection;
 /// store is the source of truth, a shape change needs no ALTER diffing — the table is rebuilt from raw.
 /// The run is bounded to the raw head captured at its start, so the recorded projected watermark
 /// exactly matches the rows projected (documents appended mid-run are left for the next projection).
+/// Documents sharing a record key are folded first (<see cref="RecordFold"/>): each record is one row,
+/// its latest document, and a retired record is no row.
 /// </summary>
 public sealed class Projector : IProjector
 {
@@ -86,6 +88,9 @@ public sealed class Projector : IProjector
                 .Select(c => c.Name)
                 .ToArray();
 
+            // Fold before mapping: a record's superseded documents neither become rows nor count as
+            // skips — only the document that stands for the record is the projection's business.
+            var documents = new List<StoredDocument>();
             await foreach (var document in _rawStore.StreamAsync(type, Watermark.Zero, cancellationToken).ConfigureAwait(false))
             {
                 if (document.Watermark > rawHead)
@@ -94,6 +99,11 @@ public sealed class Projector : IProjector
                     continue;
                 }
 
+                documents.Add(document);
+            }
+
+            foreach (var document in RecordFold.Latest(documents))
+            {
                 if (DocumentMapper.TryMap(document, schema.Columns, out var row, out var absentFields, out var reason))
                 {
                     rows.Add(row);

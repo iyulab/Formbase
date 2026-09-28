@@ -19,20 +19,29 @@ public sealed class InMemoryRawStore : IRawStore
 
     public InMemoryRawStore(TimeProvider? clock = null) => _clock = clock ?? TimeProvider.System;
 
-    public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default)
+    public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        return Task.FromResult(Append(type, id, body, key));
+    }
+
+    public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
+        => Task.FromResult(Append(type, id, body: null, key));
+
+    private StoredDocument Append(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key)
     {
         lock (_gate)
         {
             // Idempotent by id: re-appending a known id returns the original, first-written document.
             if (_byId.TryGetValue(id, out var existing))
             {
-                return Task.FromResult(existing);
+                return existing;
             }
 
-            var stored = new StoredDocument(id, type, body, new Watermark(++_sequence), _clock.GetUtcNow());
+            var stored = new StoredDocument(id, type, body, new Watermark(++_sequence), _clock.GetUtcNow(), key);
             _log.Add(stored);
             _byId[id] = stored;
-            return Task.FromResult(stored);
+            return stored;
         }
     }
 

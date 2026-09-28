@@ -177,8 +177,8 @@ Nine ports define the engine; everything else composes them.
 
 | Port | Responsibility |
 |------|----------------|
-| `IRawStore` | Append-only source of truth. Owned by Formbase. |
-| `IIntakeService` | Accept documents (raw-first, no declaration required). |
+| `IRawStore` | Append-only source of truth. Owned by Formbase. A correction is a new append naming its record; a retirement is an append too. |
+| `IIntakeService` | Accept documents (raw-first, no declaration required), optionally as a version of a keyed record, and retire records. |
 | `IFieldHintSource` | Supply the declared structure for a form type — the input to schema proposal. |
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
 | `IProjector` | Drop-and-rebuild the projected table from raw. |
@@ -344,6 +344,7 @@ what is still there after a restart.
 Implemented:
 
 - Raw-first intake, append-only raw store, idempotent re-submission
+- **Record identity** — a document may name its record with a `RecordKey`; the projection shows each record once, its latest document, and a retirement takes it out while the raw stream keeps every version (`RecordFold` is the same fold for any reader of the stream)
 - **Durable Postgres raw store** — Formbase-owned source of truth over Npgsql, contract-verified against a real PostgreSQL (including concurrent appends); the in-memory raw store remains the reference implementation
 - **Durable Postgres projection state and field hints** — `PostgresProjectionState` and `PostgresFieldHintSource` survive a restart alongside the raw store, closing the gap where a restarted process forgot a projection that both databases still held
 - Hint-driven projection (drop-and-rebuild), deterministic value mapping, skip recording, staleness detection

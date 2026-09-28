@@ -28,8 +28,8 @@ public class RawStreamReadTests
         var first = await engine.ReadDocumentsAsync(Orders, Watermark.Zero, 3, TestContext.Current.CancellationToken);
         var second = await engine.ReadDocumentsAsync(Orders, first.Documents[^1].Watermark, 3, TestContext.Current.CancellationToken);
 
-        first.Documents.Select(d => d.Body.Root.GetProperty("n").GetInt32()).Should().Equal(1, 2, 3);
-        second.Documents.Select(d => d.Body.Root.GetProperty("n").GetInt32()).Should().Equal(4);
+        first.Documents.Select(d => d.Body!.Root.GetProperty("n").GetInt32()).Should().Equal(1, 2, 3);
+        second.Documents.Select(d => d.Body!.Root.GetProperty("n").GetInt32()).Should().Equal(4);
         second.RawHead.Should().Be(second.Documents[^1].Watermark);
     }
 
@@ -53,7 +53,7 @@ public class RawStreamReadTests
 
         var next = await engine.ReadDocumentsAsync(Orders, page.RawHead, 10, TestContext.Current.CancellationToken);
         next.Documents.Should().ContainSingle("the late document is not lost, only deferred")
-            .Which.Body.Root.GetProperty("n").GetInt32().Should().Be(99);
+            .Which.Body!.Root.GetProperty("n").GetInt32().Should().Be(99);
     }
 
     [Fact]
@@ -102,8 +102,11 @@ public class RawStreamReadTests
         private bool _headRead;
         private bool _appended;
 
-        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, CancellationToken cancellationToken = default)
-            => inner.AppendAsync(type, id, body, cancellationToken);
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
+            => inner.AppendAsync(type, id, body, key, cancellationToken: cancellationToken);
+
+        public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
+            => inner.RetireAsync(type, id, key, cancellationToken);
 
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)
             => inner.GetAsync(id, cancellationToken);
@@ -119,7 +122,7 @@ public class RawStreamReadTests
             if (_headRead && !_appended)
             {
                 _appended = true;
-                await inner.AppendAsync(type, DocumentId.New(), DocumentBody.Parse("""{"n":99}"""), cancellationToken);
+                await inner.AppendAsync(type, DocumentId.New(), DocumentBody.Parse("""{"n":99}"""), cancellationToken: cancellationToken);
             }
 
             await foreach (var document in inner.StreamAsync(type, after, cancellationToken))

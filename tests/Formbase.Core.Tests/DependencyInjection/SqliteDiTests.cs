@@ -83,7 +83,7 @@ public sealed class SqliteDiTests : IDisposable
         open.Rows.Should().ContainSingle().Which["title"].Should().Be("Typo");
 
         var appended = await second.GetRequiredService<IRawStore>().AppendAsync(
-            reports, DocumentId.New(), DocumentBody.Parse("""{"title":"Save slow"}"""), TestContext.Current.CancellationToken);
+            reports, DocumentId.New(), DocumentBody.Parse("""{"title":"Save slow"}"""), cancellationToken: TestContext.Current.CancellationToken);
         appended.Watermark.Should().BeGreaterThan(firstHead, "raw positions continue across the restart instead of starting over");
 
         (await restarted.QueryAsync(reports, QuerySpec.All, TestContext.Current.CancellationToken)).Stale.Should().BeTrue();

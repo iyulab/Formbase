@@ -36,7 +36,9 @@ internal static class DocumentEndpoints
                 "An object naming a property twice is refused with 400. " +
                 "Send an Idempotency-Key header to make re-submission safe: the same key with the same " +
                 "request returns the same document without appending a second copy. A key already used " +
-                "for another request (another form type, or a different body) is refused with 422.")
+                "for another request (another form type, record key, or body) is refused with 422. " +
+                "Name a `recordKey` to make the document a correction of that record: the projection shows " +
+                "only the record's latest document. Without one, the document is a record of its own.")
             .Produces<AcceptedDocumentResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
@@ -69,23 +71,30 @@ internal static class DocumentEndpoints
     private static async Task<IResult> AcceptAsync(
         string type,
         [FromHeader(Name = IdempotencyKeyHeader)] string? idempotencyKey,
+        string? recordKey,
         HttpRequest request,
         FormbaseEngine engine,
         CancellationToken cancellationToken)
     {
         // A blank form type is refused by FormTypeRef.Create below and translated by the problem
         // handler, so it is not guarded here — one answer, not two that can drift.
-        DocumentId? idempotencyId = null;
-        if (!string.IsNullOrEmpty(idempotencyKey))
+        if (!TryReadIdempotencyKey(idempotencyKey, out var idempotencyId, out var problem))
         {
-            if (!Guid.TryParse(idempotencyKey, out var key))
+            return problem;
+        }
+
+        // The record key travels in the query, not a header (a key is the caller's own string, often not
+        // ASCII) and not the body (stored verbatim). Present but blank is refused rather than read as
+        // absent: the caller meant to name a record, and treating it as none would add a second record.
+        RecordKey? key = null;
+        if (recordKey is not null)
+        {
+            if (string.IsNullOrWhiteSpace(recordKey))
             {
-                return Problem(
-                    $"The {IdempotencyKeyHeader} header must be a UUID. It becomes the document's " +
-                    "identity, so a value that cannot be one would silently stop deduplicating.");
+                return Problem("recordKey must not be blank; omit it to make the document a record of its own.");
             }
 
-            idempotencyId = DocumentId.From(key);
+            key = RecordKey.Create(recordKey);
         }
 
         DocumentBody body;
@@ -100,12 +109,37 @@ internal static class DocumentEndpoints
             return Problem($"The request body is not valid JSON: {ex.Message}");
         }
 
-        var id = await engine.AcceptAsync(FormTypeRef.Create(type), body, idempotencyId, cancellationToken)
+        var id = await engine.AcceptAsync(FormTypeRef.Create(type), body, idempotencyId, key, cancellationToken)
             .ConfigureAwait(false);
 
         // A repeat of an accepted key answers exactly as the first call did — that identity is the
         // whole point of the key, so the reply must not encode which attempt this was.
-        return Results.Created($"/documents/{id.Value}", new AcceptedDocumentResponse(id.Value, type));
+        return Results.Created($"/documents/{id.Value}", new AcceptedDocumentResponse(id.Value, type, key?.Value));
+    }
+
+    /// <summary>
+    /// Reads the <see cref="IdempotencyKeyHeader"/> header: absent is no key, and anything but a UUID is
+    /// refused with the problem to return.
+    /// </summary>
+    internal static bool TryReadIdempotencyKey(string? header, out DocumentId? idempotencyId, out IResult problem)
+    {
+        idempotencyId = null;
+        problem = Results.Empty;
+        if (string.IsNullOrEmpty(header))
+        {
+            return true;
+        }
+
+        if (!Guid.TryParse(header, out var key))
+        {
+            problem = Problem(
+                $"The {IdempotencyKeyHeader} header must be a UUID. It becomes the document's " +
+                "identity, so a value that cannot be one would silently stop deduplicating.");
+            return false;
+        }
+
+        idempotencyId = DocumentId.From(key);
+        return true;
     }
 
     private static async Task<IResult> ListAsync(
@@ -156,7 +190,14 @@ internal static class DocumentEndpoints
     }
 
     private static StoredDocumentResponse ToResponse(StoredDocument stored) =>
-        new(stored.Id.Value, stored.Type.Value, stored.Watermark.Value, stored.AppendedAt, stored.Body.Root);
+        new(
+            stored.Id.Value,
+            stored.Type.Value,
+            stored.Watermark.Value,
+            stored.AppendedAt,
+            stored.Body?.Root,
+            stored.Key?.Value,
+            stored.IsRetirement);
 
     private static IResult Problem(string detail) =>
         Results.Problem(
