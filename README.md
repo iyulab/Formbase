@@ -61,14 +61,15 @@ dotnet add package Formbase.DependencyInjection  # AddFormbaseCore / AddFormbase
 dotnet add package Formbase.MorphDb              # IProjectionStore over MorphDB
 dotnet add package Formbase.Postgres             # durable raw store, projection state, field hints
 dotnet add package Formbase.SchemaIntelligence   # optional: LLM-backed ISchemaProposer
+dotnet add package Formbase.Sqlite               # projection store, state and hints in one file — no database server
 dotnet add package Microsoft.Extensions.DependencyInjection  # the container the quick start builds; skip it if your host already has one
 ```
 
 `Formbase.Core` has zero external package dependencies, and the in-memory profile below needs
 no service running — only a DI container to compose it in (`Formbase.DependencyInjection` depends
 on the container abstractions, not on an implementation, so a console app adds one; an ASP.NET Core
-or generic host already has it). The adapters are what bring in Npgsql, the MorphDB client, and
-`Microsoft.Extensions.AI`.
+or generic host already has it). The adapters are what bring in Npgsql, the MorphDB client,
+`Microsoft.Data.Sqlite` and `Microsoft.Extensions.AI`.
 
 **Or run it as a service.** `Formbase.Host` serves the engine over HTTP so a consumer does not have
 to be a .NET process in the same container — see [docs/API.md](docs/API.md). The host is a packaging
@@ -191,6 +192,7 @@ Nine ports define the engine; everything else composes them.
 - `Formbase.Core` — primitives, the ports above, the projector/intake/query services, and in-memory implementations. **Zero external package dependencies.**
 - `Formbase.MorphDb` — `IProjectionStore` implemented over `MorphDB.Client`, plus `AddMorphDbProjectionStore`. A thin translation layer; all projection policy stays in the core.
 - `Formbase.Postgres` — the durable, append-only `IRawStore` over PostgreSQL (direct Npgsql, never through MorphDB), plus the durable `IProjectionState` and `IFieldHintSource` adapters. Registration helpers: `AddPostgresRawStore`, `AddPostgresProjectionState`, `AddPostgresFieldHints`. Appends are serialized so watermark assignment order equals commit order.
+- `Formbase.Sqlite` — `IProjectionStore`, `IProjectionState` and `IFieldHintSource` in one SQLite file, plus `AddSqliteProjection`, for a process with no database server. Decimals, instants and case-insensitive text compare as they do on every other store (the shared contract tests run against it). Declared relations are not materialized. Pair it with a raw store whose watermarks survive the same restarts as the file.
 - `Formbase.DependencyInjection` — `AddFormbaseCore` / `AddFormbaseInMemory` wiring. Each adapter package ships its own registration helper, so this package stays free of adapter dependencies.
 
 **Design decisions worth knowing**

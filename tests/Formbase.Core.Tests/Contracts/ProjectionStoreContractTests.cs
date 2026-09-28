@@ -247,4 +247,78 @@ public abstract class ProjectionStoreContractTests
 
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
+
+    private TableSchema TypedSchema() =>
+        new(TableName,
+        [
+            new ColumnDef("k", ColumnType.Text),
+            new ColumnDef("amount", ColumnType.Decimal),
+            new ColumnDef("at", ColumnType.Timestamp),
+        ]);
+
+    private static IReadOnlyDictionary<string, object?> TypedRow(string k, decimal amount, string at) =>
+        new Dictionary<string, object?>
+        {
+            ["k"] = k,
+            ["amount"] = amount,
+            ["at"] = DateTimeOffset.Parse(at, CultureInfo.InvariantCulture),
+        };
+
+    private static string[] Keys(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows) =>
+        rows.Select(r => (string)r["k"]!).Order(StringComparer.Ordinal).ToArray();
+
+    [Fact]
+    public async Task Decimal_ranges_compare_numerically_and_equality_ignores_trailing_zeros()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(TypedSchema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName,
+        [
+            TypedRow("a", 9.5m, "2026-01-01T00:00:00Z"),
+            TypedRow("b", 10.25m, "2026-01-01T00:00:00Z"),
+            TypedRow("c", 100m, "2026-01-01T00:00:00Z"),
+        ], TestContext.Current.CancellationToken);
+
+        var above = await store.QueryAsync(TableName, new QuerySpec(Filters: [new FieldFilter("amount", FilterOperator.GreaterThan, 10m)]), TestContext.Current.CancellationToken);
+        Keys(above).Should().Equal("b", "c");
+
+        var exact = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.Equal("amount", 10.250m)]), TestContext.Current.CancellationToken);
+        Keys(exact).Should().Equal("b");
+
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Timestamp_ranges_compare_instants_whatever_their_offset()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(TypedSchema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName,
+        [
+            TypedRow("early", 1m, "2026-09-01T08:00:00+09:00"),
+            TypedRow("mid", 1m, "2026-09-14T00:00:00Z"),
+            TypedRow("late", 1m, "2026-09-20T12:00:00-05:00"),
+        ], TestContext.Current.CancellationToken);
+
+        var rows = await store.QueryAsync(TableName, new QuerySpec(Filters:
+        [
+            new FieldFilter("at", FilterOperator.GreaterThanOrEqual, DateTimeOffset.Parse("2026-09-14T09:00:00+09:00", CultureInfo.InvariantCulture)),
+        ]), TestContext.Current.CancellationToken);
+
+        Keys(rows).Should().Equal("late", "mid");
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Text_matching_ignores_case_beyond_ascii()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("Ärger im Büro", 1), Row("ärger", 2), Row("Ordnung", 3)], TestContext.Current.CancellationToken);
+
+        var rows = await store.QueryAsync(TableName, new QuerySpec(Filters: [new FieldFilter("k", FilterOperator.StartsWith, "äRG")]), TestContext.Current.CancellationToken);
+
+        Values(rows).Should().Equal(1L, 2L);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
 }
