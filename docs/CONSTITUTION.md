@@ -212,7 +212,7 @@ MorphDB는 **virtual-schema 레이어**다 — React의 virtual DOM처럼 논리
 
 아래일수록 먼저 포기한다. 적용 사례:
 append advisory lock은 성능을 포기하고 정합성을 샀다(`PostgresRawStore.cs` — 없으면 silent data loss).
-`QuerySpec`은 편의를 포기하고 단순함을 지켰다(`QuerySpec.cs` — "richer querying is deferred… (YAGNI)").
+질의 필터는 편의를 포기하고 정합성을 지켰다(`RecordQuery.cs` `Applies` — 텍스트 범위 비교는 백엔드마다 정렬 규칙이 달라 같은 질의가 저장소에 따라 다른 행을 돌려주므로 두지 않았고, 연산자는 백엔드가 기본으로 답하는 것과 1:1 로만 둔다).
 
 ### 설계 원칙
 

@@ -91,7 +91,7 @@ public abstract class ProjectionStoreContractTests
         await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("a", 3)], TestContext.Current.CancellationToken);
 
         var rows = await store.QueryAsync(TableName, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["k"] = "a" }), TestContext.Current.CancellationToken);
+            Filters: [FieldFilter.Equal("k", "a")]), TestContext.Current.CancellationToken);
 
         rows.Should().HaveCount(2);
         rows.Should().OnlyContain(r => Equals(r["k"], "a"));
@@ -139,6 +139,112 @@ public abstract class ProjectionStoreContractTests
         var page = await store.QueryAsync(TableName, new QuerySpec(Limit: 2, Offset: 1, OrderBy: [new OrderKey("v")]), TestContext.Current.CancellationToken);
 
         page.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Should().ContainInOrder(2L, 3L);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    private static IReadOnlyDictionary<string, object?> RowWithNull(string k) =>
+        new Dictionary<string, object?> { ["k"] = k, ["v"] = null };
+
+    private static long[] Values(IReadOnlyList<IReadOnlyDictionary<string, object?>> rows) =>
+        rows.Select(r => Convert.ToInt64(r["v"], CultureInfo.InvariantCulture)).Order().ToArray();
+
+    [Theory]
+    [InlineData(FilterOperator.GreaterThan, 2L, new[] { 3L, 4L })]
+    [InlineData(FilterOperator.GreaterThanOrEqual, 2L, new[] { 2L, 3L, 4L })]
+    [InlineData(FilterOperator.LessThan, 3L, new[] { 1L, 2L })]
+    [InlineData(FilterOperator.LessThanOrEqual, 3L, new[] { 1L, 2L, 3L })]
+    public async Task Query_applies_range_filters_and_a_null_column_matches_none(FilterOperator op, long bound, long[] expected)
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("c", 3), Row("d", 4), RowWithNull("e")], TestContext.Current.CancellationToken);
+
+        var rows = await store.QueryAsync(TableName, new QuerySpec(Filters: [new FieldFilter("v", op, bound)]), TestContext.Current.CancellationToken);
+
+        Values(rows).Should().Equal(expected);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Query_combines_filters_as_and()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("c", 3), Row("d", 4)], TestContext.Current.CancellationToken);
+
+        var rows = await store.QueryAsync(TableName, new QuerySpec(Filters:
+        [
+            new FieldFilter("v", FilterOperator.GreaterThanOrEqual, 2L),
+            new FieldFilter("v", FilterOperator.LessThan, 4L),
+        ]), TestContext.Current.CancellationToken);
+
+        Values(rows).Should().Equal(2L, 3L);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Query_matches_text_by_contains_and_prefix_ignoring_case()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("Pump-Alpha", 1), Row("pump-beta", 2), Row("Valve-PUMP", 3), Row("Motor", 4)], TestContext.Current.CancellationToken);
+
+        var containing = await store.QueryAsync(TableName, new QuerySpec(Filters: [new FieldFilter("k", FilterOperator.Contains, "pump")]), TestContext.Current.CancellationToken);
+        Values(containing).Should().Equal(1L, 2L, 3L);
+
+        var prefixed = await store.QueryAsync(TableName, new QuerySpec(Filters: [new FieldFilter("k", FilterOperator.StartsWith, "PUMP")]), TestContext.Current.CancellationToken);
+        Values(prefixed).Should().Equal(1L, 2L);
+
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Aggregate_counts_one_group_per_distinct_key_null_included()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("a", 3), RowWithNull("c"), RowWithNull("d")], TestContext.Current.CancellationToken);
+
+        var byK = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"]), TestContext.Current.CancellationToken);
+        byK.ToDictionary(g => (string)g.Key["k"]!, g => g.Count)
+            .Should().BeEquivalentTo(new Dictionary<string, long> { ["a"] = 2, ["b"] = 1, ["c"] = 1, ["d"] = 1 });
+
+        var byV = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["v"]), TestContext.Current.CancellationToken);
+        byV.Should().HaveCount(4, "1, 2, 3 and one group for the rows whose v is null");
+        byV.Single(g => g.Key["v"] is null).Count.Should().Be(2);
+
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Aggregate_counts_only_the_rows_its_filters_keep()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2), Row("a", 3), Row("a", 4)], TestContext.Current.CancellationToken);
+
+        var groups = await store.AggregateAsync(TableName, new AggregateSpec(
+            GroupBy: ["k"],
+            Filters: [new FieldFilter("v", FilterOperator.GreaterThanOrEqual, 2L)]), TestContext.Current.CancellationToken);
+
+        groups.ToDictionary(g => (string)g.Key["k"]!, g => g.Count)
+            .Should().BeEquivalentTo(new Dictionary<string, long> { ["a"] = 2, ["b"] = 1 });
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Ungrouped_aggregate_is_one_count_even_when_nothing_is_kept()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), Row("b", 2)], TestContext.Current.CancellationToken);
+
+        var all = await store.AggregateAsync(TableName, AggregateSpec.CountAll, TestContext.Current.CancellationToken);
+        all.Should().ContainSingle().Which.Count.Should().Be(2);
+
+        var none = await store.AggregateAsync(TableName, new AggregateSpec(Filters: [FieldFilter.Equal("k", "zzz")]), TestContext.Current.CancellationToken);
+        none.Should().ContainSingle().Which.Count.Should().Be(0);
+
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 }

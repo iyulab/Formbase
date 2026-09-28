@@ -367,6 +367,9 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
 
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The projection store is not reachable.");
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("The projection store is not reachable.");
     }
 
     /// <summary>A schema proposer that fails exactly one way, every time — the failure under test.</summary>

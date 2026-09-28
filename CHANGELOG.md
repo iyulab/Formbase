@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Added
+
+- Record queries filter with ranges and text matching, not only equality. A `FieldFilter` names a
+  column, an operator and a value: `Equal` on any column; `GreaterThan`, `GreaterThanOrEqual`,
+  `LessThan` and `LessThanOrEqual` on integer, decimal and timestamp columns; `Contains` and
+  `StartsWith`, ignoring case, on text columns. Filters all apply, and values are coerced to the
+  column's declared type as equality values already were, so a date range can be written as text. An
+  operator the column's type does not answer, or a comparison against null, is refused with
+  `InvalidQueryException` (its new `InapplicableFilters` names them) rather than answered with no rows.
+  Text ranges are left out on purpose: backends order text differently, and the same query must return
+  the same rows whichever store answers it.
+- `FormbaseEngine.AggregateAsync` counts projected records, optionally per group (`AggregateSpec`:
+  `GroupBy` columns and the same filters). Groups come back ordered by their keys, nulls first, with key
+  values as the declared column type, and the answer carries `Stale` and refuses exactly as a query
+  does. Ungrouped, it is one count — zero when nothing matches.
+
+### Changed
+
+- **Breaking**: `QuerySpec.Filters` is a list of `FieldFilter` instead of a column-to-value dictionary;
+  `FieldFilter.Equal(column, value)` is the old entry. `IProjectionStore` gains `AggregateAsync`, which
+  an adapter implements by counting rows per group; the in-memory and MorphDB stores do, and both pass
+  the same contract tests. The HTTP record endpoint still takes equality filters only.
+
 ### Fixed
 
 - The compose bundle's PostgreSQL health check asks over TCP. Asked over the Unix socket, it reported

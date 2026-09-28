@@ -261,5 +261,8 @@ public class DeclarationVocabularyTests
             => _inner.BulkInsertAsync(tableName, rows, cancellationToken);
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
             => _inner.QueryAsync(tableName, spec, cancellationToken);
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+            => _inner.AggregateAsync(tableName, spec, cancellationToken);
     }
 }

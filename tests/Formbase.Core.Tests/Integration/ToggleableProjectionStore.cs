@@ -53,4 +53,10 @@ internal sealed class ToggleableProjectionStore : IProjectionStore
         GuardAvailable();
         return _inner.QueryAsync(tableName, spec, cancellationToken);
     }
+
+    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+    {
+        GuardAvailable();
+        return _inner.AggregateAsync(tableName, spec, cancellationToken);
+    }
 }

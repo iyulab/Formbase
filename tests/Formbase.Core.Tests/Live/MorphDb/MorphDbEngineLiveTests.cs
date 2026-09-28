@@ -74,7 +74,7 @@ public sealed class MorphDbEngineLiveTests
 
         // 5) An equality filter (int coerced to the bigint column) round-trips through MorphDB.
         var filtered = await engine.QueryAsync(qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["qty"] = 3 }), TestContext.Current.CancellationToken);
+            Filters: [FieldFilter.Equal("qty", 3)]), TestContext.Current.CancellationToken);
         filtered.Rows.Should().ContainSingle();
         filtered.Rows[0]["lot"].Should().Be("L-3");
 

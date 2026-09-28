@@ -387,5 +387,8 @@ public class ProjectorTests
             => throw new InvalidOperationException("bulk insert failed");
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>([]);
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AggregateGroup>>([]);
     }
 }

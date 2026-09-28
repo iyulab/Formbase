@@ -35,6 +35,69 @@ public sealed class RecordQuery : IRecordQuery
 
     public async Task<QueryResult> QueryAsync(FormTypeRef type, QuerySpec spec, CancellationToken cancellationToken = default)
     {
+        var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
+
+        RefuseUnanswerable(type, spec.Filters, (spec.OrderBy ?? []).Select(k => k.Column), schema);
+        var coerced = WithDeterministicOrder(spec with { Filters = Coerce(spec.Filters, schema) });
+
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
+        try
+        {
+            rows = await _projectionStore.QueryAsync(schema.TableName, coerced, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
+        {
+            // State says projected, but the backing store cannot serve it right now.
+            throw new ProjectionUnavailableException(type, ex);
+        }
+
+        return new QueryResult(Shape(rows, schema), stale);
+    }
+
+    public async Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
+    {
+        var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
+
+        var groupBy = spec.GroupBy ?? [];
+        RefuseUnanswerable(type, spec.Filters, groupBy, schema);
+        var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema) };
+
+        IReadOnlyList<AggregateGroup> groups;
+        try
+        {
+            groups = await _projectionStore.AggregateAsync(schema.TableName, coerced, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
+        {
+            throw new ProjectionUnavailableException(type, ex);
+        }
+
+        return new AggregateResult(Ordered(Typed(groups, schema), groupBy), stale);
+    }
+
+    /// <summary>
+    /// Group keys as the declared column types, whatever the store's wire gave back — a timestamp read
+    /// over JSON arrives as text. Grouping is what a caller filters by next, so a key must be a value
+    /// the same column's filter accepts as itself.
+    /// </summary>
+    private static List<AggregateGroup> Typed(IReadOnlyList<AggregateGroup> groups, TableSchema schema) =>
+        groups
+            .Select(group => group with
+            {
+                Key = group.Key.ToDictionary(
+                    pair => pair.Key,
+                    pair => schema.Columns.FirstOrDefault(c => c.Name == pair.Key)?.Type is { } type ? CoerceValue(pair.Value, type) : pair.Value,
+                    StringComparer.Ordinal),
+            })
+            .ToList();
+
+    /// <summary>
+    /// The projection a read may be answered from, or the reason it may not. Shared by every read so
+    /// that a query and an aggregate over the same form type can never disagree about whether there is
+    /// anything to read.
+    /// </summary>
+    private async Task<(TableSchema Schema, bool Stale)> ResolveProjectionAsync(FormTypeRef type, CancellationToken cancellationToken)
+    {
         var stamp = await _projectionState.GetAsync(type, cancellationToken).ConfigureAwait(false);
         var schema = await _proposer.ProposeAsync(type, cancellationToken).ConfigureAwait(false);
 
@@ -60,21 +123,32 @@ public sealed class RecordQuery : IRecordQuery
             // a possibly half-built table as if it were fresh.
             throw new ProjectionUnverifiedException(type);
         }
-        RefuseUndeclaredColumns(type, spec, schema);
-        var coerced = WithDeterministicOrder(Coerce(spec, schema));
 
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
-        try
-        {
-            rows = await _projectionStore.QueryAsync(schema.TableName, coerced, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
-        {
-            // State says projected, but the backing store cannot serve it right now.
-            throw new ProjectionUnavailableException(type, ex);
-        }
+        return (schema, status.State == ProjectionState.Stale);
+    }
 
-        return new QueryResult(Shape(rows, schema), status.State == ProjectionState.Stale);
+    /// <summary>
+    /// Groups in the order their keys sort, column by column in grouping order, nulls first. The order
+    /// is the core's to decide rather than each store's: backends disagree about where nulls sort, and
+    /// a list whose order depends on the store behind it is not one answer.
+    /// </summary>
+    private static List<AggregateGroup> Ordered(IReadOnlyList<AggregateGroup> groups, IReadOnlyList<string> groupBy)
+    {
+        var ordered = groups.ToList();
+        ordered.Sort((x, y) =>
+        {
+            foreach (var column in groupBy)
+            {
+                var compared = ValueOrder.Compare(x.Key.GetValueOrDefault(column), y.Key.GetValueOrDefault(column));
+                if (compared != 0)
+                {
+                    return compared;
+                }
+            }
+
+            return 0;
+        });
+        return ordered;
     }
 
     /// <summary>
@@ -113,24 +187,50 @@ public sealed class RecordQuery : IRecordQuery
     /// depending on a name they can never read back — which is how bookkeeping becomes a contract.
     /// </para>
     /// </summary>
-    private static void RefuseUndeclaredColumns(FormTypeRef type, QuerySpec spec, TableSchema schema)
+    private static void RefuseUnanswerable(
+        FormTypeRef type, IReadOnlyList<FieldFilter>? filters, IEnumerable<string> otherColumns, TableSchema schema)
     {
-        var declared = schema.Columns.Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
+        var declared = schema.Columns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
 
         List<string>? unknown = null;
-        foreach (var name in (spec.Filters?.Keys ?? []).Concat((spec.OrderBy ?? []).Select(k => k.Column)))
+        foreach (var name in (filters ?? []).Select(f => f.Column).Concat(otherColumns))
         {
-            if (!declared.Contains(name))
+            if (!declared.ContainsKey(name))
             {
                 (unknown ??= []).Add(name);
             }
         }
 
-        if (unknown is not null)
+        List<FieldFilter>? inapplicable = null;
+        foreach (var filter in filters ?? [])
         {
-            throw new InvalidQueryException(type, unknown);
+            if (declared.TryGetValue(filter.Column, out var columnType) && !Applies(filter, columnType))
+            {
+                (inapplicable ??= []).Add(filter);
+            }
+        }
+
+        if (unknown is not null || inapplicable is not null)
+        {
+            throw new InvalidQueryException(type, unknown ?? [], inapplicable ?? []);
         }
     }
+
+    /// <summary>
+    /// Whether a filter is a question the column can answer. Ranges compare numbers and instants;
+    /// text ranges are left out on purpose: where "b" sorts relative to "B" is a collation choice the
+    /// backends make differently, so the same query would return different rows depending on the store.
+    /// Every comparing operator needs a value to compare against.
+    /// </summary>
+    private static bool Applies(FieldFilter filter, ColumnType columnType) => filter.Operator switch
+    {
+        FilterOperator.Equal => true,
+        FilterOperator.GreaterThan or FilterOperator.GreaterThanOrEqual or FilterOperator.LessThan or FilterOperator.LessThanOrEqual
+            => filter.Value is not null && columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
+        FilterOperator.Contains or FilterOperator.StartsWith
+            => filter.Value is not null && columnType is ColumnType.Text,
+        _ => false,
+    };
 
     private static QuerySpec WithDeterministicOrder(QuerySpec spec)
     {
@@ -143,21 +243,20 @@ public sealed class RecordQuery : IRecordQuery
         return spec with { OrderBy = keys };
     }
 
-    private static QuerySpec Coerce(QuerySpec spec, TableSchema schema)
+    private static IReadOnlyList<FieldFilter>? Coerce(IReadOnlyList<FieldFilter>? filters, TableSchema schema)
     {
-        if (spec.Filters is not { Count: > 0 } filters)
+        if (filters is not { Count: > 0 })
         {
-            return spec;
+            return filters;
         }
 
-        var coerced = new Dictionary<string, object?>(filters.Count, StringComparer.Ordinal);
-        foreach (var (column, value) in filters)
-        {
-            var columnType = schema.Columns.FirstOrDefault(c => c.Name == column)?.Type;
-            coerced[column] = columnType is { } type ? CoerceValue(value, type) : value;
-        }
-
-        return spec with { Filters = coerced };
+        return filters
+            .Select(filter =>
+            {
+                var columnType = schema.Columns.FirstOrDefault(c => c.Name == filter.Column)?.Type;
+                return columnType is { } type ? filter with { Value = CoerceValue(filter.Value, type) } : filter;
+            })
+            .ToList();
     }
 
     private static object? CoerceValue(object? value, ColumnType type)

@@ -44,7 +44,7 @@ A document's life:
 2. **Projection** — when a form type has declared field hints, `ProjectAsync(formType)` drops any existing table, recreates it from the proposed schema, streams the raw documents through deterministic value mapping (recording — never discarding — any that can't be mapped, and counting per column how many documents never carried the field at all, as opposed to answering `null`), and records the watermark it reached. Because raw is the source of truth, a schema change needs no `ALTER` diffing: the table is simply rebuilt. When to re-project is a pluggable policy (`IProjectionTrigger`): the built-in trigger fires immediately on a shape change and at a configurable document-lag threshold for new data; drive `ProjectionSupervisor.RunOnceAsync` from whatever cadence your host owns.
 3. **Reading** — there are two questions with two paths:
    - *"Show me this document"* → the raw store, always available.
-   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic.
+   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`); `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees.
 
 ## Install
 
@@ -160,8 +160,14 @@ await engine.ProjectAsync(qc);
 
 // 3) Now the records are queryable.
 var result = await engine.QueryAsync(qc, new QuerySpec(
-    Filters: new Dictionary<string, object?> { ["qty"] = 20 }));
+    Filters: [FieldFilter.Equal("qty", 20)]));
 // result.Rows -> the L-2 record
+
+// 4) Or count them — here, lots with qty of at least 10, per lot.
+var counts = await engine.AggregateAsync(qc, new AggregateSpec(
+    GroupBy: ["lot"],
+    Filters: [new FieldFilter("qty", FilterOperator.GreaterThanOrEqual, 10)]));
+// counts.Groups -> one group per lot, each with its Count
 ```
 
 ## Architecture
@@ -360,7 +366,7 @@ Planned (later stages, each its own effort):
 
 - **Ontology layer** — proposals that read structure a form already declares, growing from the `ISchemaProposer` seam
 - Input adapters (M3L and others) that produce `FormType` + `Document` — the `Formbase.M3L` spike now fills the vocabulary axes it once measured as gaps; productizing it is a separate decision
-- Richer querying (non-equality filters) and non-blocking re-projection
+- Non-blocking re-projection
 
 ## License
 

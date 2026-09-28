@@ -21,6 +21,17 @@ public interface IProjectionStore
     /// <summary>Inserts rows into an existing table; returns the number inserted.</summary>
     Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default);
 
-    /// <summary>Queries rows from a projected table. Rows carry both system and domain columns.</summary>
+    /// <summary>
+    /// Queries rows from a projected table. Rows carry both system and domain columns. Every
+    /// <see cref="FieldFilter"/> applies; the caller has already checked that each operator applies to
+    /// its column's type and coerced each value to it.
+    /// </summary>
     Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts the rows the spec's filters keep, one group per distinct combination of the grouping
+    /// columns (one group, possibly counting zero, when there are none). Group order is unspecified —
+    /// the caller orders them. Filters arrive checked and coerced, as for <see cref="QueryAsync"/>.
+    /// </summary>
+    Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default);
 }

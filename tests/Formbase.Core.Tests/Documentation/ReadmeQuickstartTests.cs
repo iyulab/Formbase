@@ -48,12 +48,20 @@ public sealed class ReadmeQuickstartTests
 
         // 3) Now the records are queryable.
         var result = await engine.QueryAsync(qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["qty"] = 20 }), TestContext.Current.CancellationToken);
+            Filters: [FieldFilter.Equal("qty", 20)]), TestContext.Current.CancellationToken);
 
         // The sample's closing comment: "result.Rows -> the L-2 record". A quickstart that runs but
         // returns something other than what it promises is still a false document.
         result.Rows.Should().ContainSingle("the filter selects exactly the second document")
             .Which["lot"].Should().Be("L-2");
+
+        // 4) Or count them — here, lots with qty of at least 10, per lot.
+        var counts = await engine.AggregateAsync(qc, new AggregateSpec(
+            GroupBy: ["lot"],
+            Filters: [new FieldFilter("qty", FilterOperator.GreaterThanOrEqual, 10)]), TestContext.Current.CancellationToken);
+
+        // "counts.Groups -> one group per lot, each with its Count".
+        counts.Groups.Select(g => (g.Key["lot"], g.Count)).Should().Equal(("L-1", 1L), ("L-2", 1L));
     }
 
     [Fact]

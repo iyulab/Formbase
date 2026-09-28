@@ -11,4 +11,10 @@ namespace Formbase.Core.Ports;
 public interface IRecordQuery
 {
     Task<QueryResult> QueryAsync(FormTypeRef type, QuerySpec spec, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts projected records, optionally per group. Refuses, projects-or-flags and reports outages
+    /// exactly as <see cref="QueryAsync"/> does.
+    /// </summary>
+    Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default);
 }

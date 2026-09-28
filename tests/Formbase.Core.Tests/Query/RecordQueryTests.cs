@@ -37,6 +37,13 @@ public class RecordQueryTests
             new FieldHint("qty", ColumnType.Integer, Nullable: true),
         ]));
 
+        public void DeclareHintsWithInstant() => Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer, Nullable: true),
+            new FieldHint("at", ColumnType.Timestamp, Nullable: true),
+        ]));
+
         public Task Accept(string json) => Intake.AcceptAsync(Qc, DocumentBody.Parse(json));
     }
 
@@ -77,7 +84,7 @@ public class RecordQueryTests
         await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         var result = await h.Query.QueryAsync(Qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["lot"] = "does-not-exist" }), TestContext.Current.CancellationToken);
+            Filters: [FieldFilter.Equal("lot", "does-not-exist")]), TestContext.Current.CancellationToken);
 
         result.Rows.Should().BeEmpty();
         result.Stale.Should().BeFalse();
@@ -194,7 +201,7 @@ public class RecordQueryTests
 
         // Filter value is a C# int; the stored value is a long. Coercion must bridge them.
         var result = await h.Query.QueryAsync(Qc, new QuerySpec(
-            Filters: new Dictionary<string, object?> { ["qty"] = 20 }), TestContext.Current.CancellationToken);
+            Filters: [FieldFilter.Equal("qty", 20)]), TestContext.Current.CancellationToken);
 
         result.Rows.Should().ContainSingle();
         result.Rows[0]["lot"].Should().Be("L-2");
@@ -251,6 +258,134 @@ public class RecordQueryTests
     }
 
     /// <summary>Records the spec the read path actually hands to the projection store.</summary>
+    [Theory]
+    [InlineData("qty", FilterOperator.Contains, "1")]
+    [InlineData("lot", FilterOperator.GreaterThan, "L-1")]
+    [InlineData("qty", FilterOperator.GreaterThan, null)]
+    [InlineData("lot", FilterOperator.StartsWith, null)]
+    public async Task A_filter_whose_operator_the_column_cannot_answer_is_refused(string column, FilterOperator op, string? value)
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":10}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var act = () => h.Query.QueryAsync(Qc, new QuerySpec(Filters: [new FieldFilter(column, op, value)]));
+
+        (await act.Should().ThrowAsync<InvalidQueryException>())
+            .Which.InapplicableFilters.Should().ContainSingle().Which.Column.Should().Be(column);
+    }
+
+    [Fact]
+    public async Task A_range_filter_value_is_coerced_to_the_column_type()
+    {
+        var h = new Harness();
+        h.DeclareHintsWithInstant();
+        await h.Accept("""{"lot":"L-1","qty":10,"at":"2026-09-01T00:00:00Z"}""");
+        await h.Accept("""{"lot":"L-2","qty":20,"at":"2026-09-20T00:00:00Z"}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var result = await h.Query.QueryAsync(Qc, new QuerySpec(Filters:
+        [
+            new FieldFilter("at", FilterOperator.GreaterThanOrEqual, "2026-09-14T00:00:00Z"),
+            new FieldFilter("qty", FilterOperator.LessThan, 100),
+        ]), TestContext.Current.CancellationToken);
+
+        result.Rows.Should().ContainSingle().Which["lot"].Should().Be("L-2");
+    }
+
+    [Fact]
+    public async Task Aggregating_an_unprojected_form_type_throws_NotProjected()
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":1}""");
+
+        var act = () => h.Query.AggregateAsync(Qc, AggregateSpec.CountAll);
+
+        await act.Should().ThrowAsync<NotProjectedException>();
+    }
+
+    [Fact]
+    public async Task Aggregate_groups_come_back_in_key_order_nulls_first_and_flag_staleness()
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"B","qty":1}""");
+        await h.Accept("""{"lot":"A","qty":2}""");
+        await h.Accept("""{"lot":"B"}""");
+        await h.Accept("""{"lot":"A","qty":2}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        await h.Accept("""{"lot":"C","qty":3}""");
+
+        var result = await h.Query.AggregateAsync(Qc, new AggregateSpec(GroupBy: ["lot", "qty"]), TestContext.Current.CancellationToken);
+
+        result.Stale.Should().BeTrue("a document arrived after the projection");
+        result.Groups.Select(g => (g.Key["lot"], g.Key["qty"], g.Count)).Should().Equal(
+            ("A", (object?)2L, 2L),
+            ("B", null, 1L),
+            ("B", 1L, 1L));
+    }
+
+    [Fact]
+    public async Task Aggregate_keys_come_back_as_the_declared_column_type()
+    {
+        var store = new StubAggregateStore([new AggregateGroup(new Dictionary<string, object?> { ["at"] = "2026-09-01T00:00:00Z" }, 3)]);
+        var h = new Harness(store);
+        h.DeclareHintsWithInstant();
+        await h.Accept("""{"lot":"L-1","qty":1,"at":"2026-09-01T00:00:00Z"}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var result = await h.Query.AggregateAsync(Qc, new AggregateSpec(GroupBy: ["at"]), TestContext.Current.CancellationToken);
+
+        result.Groups.Should().ContainSingle().Which.Key["at"].Should().Be(DateTimeOffset.Parse("2026-09-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            "a wire that carries instants as text must not make a group key unequal to the same column's filter value");
+    }
+
+    [Fact]
+    public async Task Grouping_by_an_undeclared_column_is_refused()
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":1}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var act = () => h.Query.AggregateAsync(Qc, new AggregateSpec(GroupBy: ["fb_watermark"]));
+
+        (await act.Should().ThrowAsync<InvalidQueryException>()).Which.UnknownColumns.Should().Equal("fb_watermark");
+    }
+
+    [Fact]
+    public async Task An_aggregate_backing_store_failure_surfaces_as_ProjectionUnavailable()
+    {
+        var h = new Harness(new ThrowingQueryStore());
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":1}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var act = () => h.Query.AggregateAsync(Qc, AggregateSpec.CountAll);
+
+        await act.Should().ThrowAsync<ProjectionUnavailableException>();
+    }
+
+    private sealed class StubAggregateStore(IReadOnlyList<AggregateGroup> groups) : IProjectionStore
+    {
+        public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+        public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+            => Task.FromResult(rows.Count);
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>([]);
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+            => Task.FromResult(groups);
+    }
+
     private sealed class SpecCapturingQueryStore : IProjectionStore
     {
         public QuerySpec? Captured { get; private set; }
@@ -265,6 +400,14 @@ public class RecordQueryTests
             Captured = spec;
             return Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>([]);
         }
+
+        public AggregateSpec? CapturedAggregate { get; private set; }
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+        {
+            CapturedAggregate = spec;
+            return Task.FromResult<IReadOnlyList<AggregateGroup>>([]);
+        }
     }
 
     private sealed class ThrowingQueryStore : IProjectionStore
@@ -274,6 +417,9 @@ public class RecordQueryTests
         public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) => Task.FromResult(rows.Count);
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
+            => throw new TimeoutException("backing store unreachable");
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
             => throw new TimeoutException("backing store unreachable");
     }
 }

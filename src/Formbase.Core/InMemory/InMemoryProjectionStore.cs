@@ -68,7 +68,7 @@ public sealed class InMemoryProjectionStore : IProjectionStore
 
             if (spec.Filters is { Count: > 0 } filters)
             {
-                query = query.Where(row => filters.All(f => Matches(row, f.Key, f.Value)));
+                query = query.Where(row => filters.All(f => Matches(row, f)));
             }
 
             if (spec.OrderBy is { Count: > 0 } orderBy)
@@ -94,6 +94,36 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         }
     }
 
+    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var table = Require(tableName);
+            var groupBy = spec.GroupBy ?? [];
+            var kept = spec.Filters is { Count: > 0 } filters
+                ? table.Rows.Where(row => filters.All(f => Matches(row, f))).ToList()
+                : table.Rows;
+
+            if (groupBy.Count == 0)
+            {
+                // Ungrouped counts are one answer even when nothing is kept — COUNT(*) over no rows is 0,
+                // not an absent row.
+                IReadOnlyList<AggregateGroup> total = [new AggregateGroup(new Dictionary<string, object?>(StringComparer.Ordinal), kept.Count)];
+                return Task.FromResult(total);
+            }
+
+            IReadOnlyList<AggregateGroup> groups = kept
+                .GroupBy(row => new GroupKey(groupBy.Select(column => row.GetValueOrDefault(column)).ToArray()))
+                .Select(group => new AggregateGroup(
+                    groupBy.Select((column, i) => (column, value: group.Key.Values[i]))
+                        .ToDictionary(pair => pair.column, pair => pair.value, StringComparer.Ordinal),
+                    group.LongCount()))
+                .ToList();
+
+            return Task.FromResult(groups);
+        }
+    }
+
     private static IEnumerable<Dictionary<string, object?>> ApplyOrder(
         IEnumerable<Dictionary<string, object?>> query, IReadOnlyList<OrderKey> orderBy)
     {
@@ -104,26 +134,70 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             object? Selector(Dictionary<string, object?> row) => row.GetValueOrDefault(column);
 
             ordered = ordered is null
-                ? (key.Descending ? query.OrderByDescending(Selector, ValueComparer) : query.OrderBy(Selector, ValueComparer))
-                : (key.Descending ? ordered.ThenByDescending(Selector, ValueComparer) : ordered.ThenBy(Selector, ValueComparer));
+                ? (key.Descending ? query.OrderByDescending(Selector, ValueOrder.Comparer) : query.OrderBy(Selector, ValueOrder.Comparer))
+                : (key.Descending ? ordered.ThenByDescending(Selector, ValueOrder.Comparer) : ordered.ThenBy(Selector, ValueOrder.Comparer));
         }
 
         return ordered ?? query;
     }
 
-    private static bool Matches(Dictionary<string, object?> row, string column, object? expected)
-        => row.TryGetValue(column, out var actual) && Equals(actual, expected);
-
-    /// <summary>Orders nulls first, then compares same-typed values via their natural order.</summary>
-    private static readonly IComparer<object?> ValueComparer = Comparer<object?>.Create(static (a, b) =>
+    /// <summary>
+    /// SQL's reading of a filter, which is the one a real store gives: a null column matches only an
+    /// equality with null, text matching ignores case, and a value of another type than the column's
+    /// matches nothing (the caller has coerced values to the declared type already).
+    /// </summary>
+    private static bool Matches(Dictionary<string, object?> row, FieldFilter filter)
     {
-        if (a is null)
+        row.TryGetValue(filter.Column, out var actual);
+
+        if (filter.Operator == FilterOperator.Equal)
         {
-            return b is null ? 0 : -1;
+            return Equals(actual, filter.Value);
         }
 
-        return b is null ? 1 : Comparer<object>.Default.Compare(a, b);
-    });
+        if (actual is null || filter.Value is null)
+        {
+            return false;
+        }
+
+        return filter.Operator switch
+        {
+            FilterOperator.Contains => actual is string text && filter.Value is string part
+                && text.Contains(part, StringComparison.OrdinalIgnoreCase),
+            FilterOperator.StartsWith => actual is string text && filter.Value is string prefix
+                && text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase),
+            _ => actual.GetType() == filter.Value.GetType() && filter.Operator switch
+            {
+                FilterOperator.GreaterThan => ValueOrder.Compare(actual, filter.Value) > 0,
+                FilterOperator.GreaterThanOrEqual => ValueOrder.Compare(actual, filter.Value) >= 0,
+                FilterOperator.LessThan => ValueOrder.Compare(actual, filter.Value) < 0,
+                FilterOperator.LessThanOrEqual => ValueOrder.Compare(actual, filter.Value) <= 0,
+                _ => false,
+            },
+        };
+    }
+
+    /// <summary>A group's key values, compared element by element so equal combinations form one group.</summary>
+    private sealed class GroupKey(object?[] values) : IEquatable<GroupKey>
+    {
+        public object?[] Values { get; } = values;
+
+        public bool Equals(GroupKey? other) =>
+            other is not null && Values.Length == other.Values.Length && Values.Zip(other.Values).All(pair => Equals(pair.First, pair.Second));
+
+        public override bool Equals(object? obj) => Equals(obj as GroupKey);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            foreach (var value in Values)
+            {
+                hash.Add(value);
+            }
+
+            return hash.ToHashCode();
+        }
+    }
 
     private Table Require(string tableName)
         => _tables.TryGetValue(tableName, out var table)

@@ -50,7 +50,7 @@ internal static class RecordEndpoints
             return Problem("limit and offset cannot be negative.");
         }
 
-        var filters = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var filters = new List<FieldFilter>();
         foreach (var expression in request.Query["filter"])
         {
             if (string.IsNullOrEmpty(expression))
@@ -66,7 +66,7 @@ internal static class RecordEndpoints
                     "not be read would otherwise widen the result rather than narrow it.");
             }
 
-            filters[expression[..separator]] = expression[(separator + 1)..];
+            filters.Add(FieldFilter.Equal(expression[..separator], expression[(separator + 1)..]));
         }
 
         var order = new List<OrderKey>();

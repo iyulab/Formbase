@@ -83,6 +83,10 @@ public sealed class FormbaseEngine
     public Task<QueryResult> QueryAsync(FormTypeRef type, QuerySpec spec, CancellationToken cancellationToken = default)
         => _recordQuery.QueryAsync(type, spec, cancellationToken);
 
+    /// <summary>Counts projected records, optionally per group — the system's question, aggregated.</summary>
+    public Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
+        => _recordQuery.AggregateAsync(type, spec, cancellationToken);
+
     /// <summary>Reports whether a form type is projected, and if so whether the projection is current.</summary>
     public async Task<ProjectionStatus> GetProjectionStatusAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {

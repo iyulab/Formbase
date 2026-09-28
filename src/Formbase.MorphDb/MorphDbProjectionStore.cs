@@ -1,8 +1,11 @@
 using Formbase.Core.Ports;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
+using System.Globalization;
 using MorphDB.Client;
 using MorphDB.Client.Models;
+using FormbaseOperator = Formbase.Core.Query.FilterOperator;
+using MorphOperator = MorphDB.Client.Models.FilterOperator;
 
 namespace Formbase.MorphDb;
 
@@ -175,9 +178,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var skip = offset % pageSize;
         var needed = skip + limit;
 
-        var filters = spec.Filters is { Count: > 0 } specFilters
-            ? specFilters.Select(f => new Filter(f.Key, FilterOperator.Equal, f.Value)).ToList()
-            : [];
+        var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f.Operator), f.Value)).ToList();
 
         // Server-side ordering — the only way paging is deterministic (a client-side sort would order
         // an already-arbitrary page). Descending maps to ascending: false.
@@ -212,4 +213,42 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
         return window.Skip(skip).Take(limit).ToList();
     }
+
+    public async Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+    {
+        var groupBy = spec.GroupBy ?? [];
+        var request = new AggregationRequest
+        {
+            Aggregations = [AggregationColumn.Count(CountAlias)],
+            GroupBy = groupBy,
+            Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f.Operator), f.Value)).ToList(),
+        };
+
+        var response = await _client.Data.AggregateAsync(tableName, request, cancellationToken).ConfigureAwait(false);
+
+        return response.Data
+            .Select(row => new AggregateGroup(
+                groupBy.ToDictionary(column => column, column => row.TryGetValue(column, out var value) ? value : null, StringComparer.Ordinal),
+                Convert.ToInt64(row[CountAlias], CultureInfo.InvariantCulture)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The alias the count comes back under. The projection's bookkeeping prefix keeps it clear of every
+    /// declared column, which a grouping column in the same row could otherwise share a name with.
+    /// </summary>
+    private const string CountAlias = "fb_count";
+
+    /// <summary>Each formbase operator is one MorphDB answers natively — a translation, not a policy.</summary>
+    private static MorphOperator ToMorph(FormbaseOperator op) => op switch
+    {
+        FormbaseOperator.Equal => MorphOperator.Equal,
+        FormbaseOperator.GreaterThan => MorphOperator.GreaterThan,
+        FormbaseOperator.GreaterThanOrEqual => MorphOperator.GreaterThanOrEqual,
+        FormbaseOperator.LessThan => MorphOperator.LessThan,
+        FormbaseOperator.LessThanOrEqual => MorphOperator.LessThanOrEqual,
+        FormbaseOperator.Contains => MorphOperator.Contains,
+        FormbaseOperator.StartsWith => MorphOperator.StartsWith,
+        _ => throw new ArgumentOutOfRangeException(nameof(op), op, "No MorphDB operator for this filter."),
+    };
 }
