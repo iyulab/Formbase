@@ -7,10 +7,10 @@
     <!-- Composition / adapters -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
     <!-- The host's optional schema-intelligence extension, and the LLM live suite. Any
          OpenAI-compatible endpoint. -->
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
     <PackageVersion Include="M3L.Native" Version="0.17.0" />
     <PackageVersion Include="MorphDB.Client" Version="0.13.1" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />

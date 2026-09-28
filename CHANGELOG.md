@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI` 10.10.1 (was 10.10.0), a patch.
+
 ## 0.13.0
 
 Pairs with MorphDB `0.13.x`, `0.13.1` or later. Record queries grow from equality to ranges, text
