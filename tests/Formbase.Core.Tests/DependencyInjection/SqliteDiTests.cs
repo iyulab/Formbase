@@ -52,6 +52,63 @@ public sealed class SqliteDiTests : IDisposable
         bySeverity.Groups.Select(g => (g.Key["severity"], g.Count)).Should().Equal(("high", 1L), ("low", 1L));
     }
 
+    [Fact]
+    public async Task A_restarted_single_file_engine_keeps_its_documents_projection_and_watermarks()
+    {
+        var reports = FormTypeRef.Create("bug-report");
+        Watermark firstHead;
+
+        await using (var first = BuildSingleFileEngine())
+        {
+            var engine = first.GetRequiredService<FormbaseEngine>();
+            await first.GetRequiredService<SqliteFieldHintSource>().DeclareAsync(new FormTypeHints(reports, "bug_reports",
+            [
+                new FieldHint("title", ColumnType.Text, Nullable: false),
+                new FieldHint("closed", ColumnType.Timestamp),
+            ]), TestContext.Current.CancellationToken);
+            await engine.AcceptAsync(reports, DocumentBody.Parse("""{"title":"Crash on save","closed":"2026-09-10T00:00:00Z"}"""), cancellationToken: TestContext.Current.CancellationToken);
+            await engine.AcceptAsync(reports, DocumentBody.Parse("""{"title":"Typo"}"""), cancellationToken: TestContext.Current.CancellationToken);
+            await engine.ProjectAsync(reports, TestContext.Current.CancellationToken);
+            firstHead = await first.GetRequiredService<IRawStore>().HeadAsync(reports, TestContext.Current.CancellationToken);
+        }
+
+        SqliteConnection.ClearAllPools();
+
+        await using var second = BuildSingleFileEngine();
+        var restarted = second.GetRequiredService<FormbaseEngine>();
+
+        // No re-append, no re-projection: the file already holds both, and the stamp still names raw's head.
+        var open = await restarted.QueryAsync(reports, new QuerySpec(Filters: [FieldFilter.IsNull("closed")]), TestContext.Current.CancellationToken);
+        open.Stale.Should().BeFalse();
+        open.Rows.Should().ContainSingle().Which["title"].Should().Be("Typo");
+
+        var appended = await second.GetRequiredService<IRawStore>().AppendAsync(
+            reports, DocumentId.New(), DocumentBody.Parse("""{"title":"Save slow"}"""), TestContext.Current.CancellationToken);
+        appended.Watermark.Should().BeGreaterThan(firstHead, "raw positions continue across the restart instead of starting over");
+
+        (await restarted.QueryAsync(reports, QuerySpec.All, TestContext.Current.CancellationToken)).Stale.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Raw_store_and_projection_over_different_files_are_refused()
+    {
+        var services = new ServiceCollection();
+        services.AddSqliteRawStore($"Data Source={_path}");
+
+        var act = () => services.AddSqliteProjection($"Data Source={_path}.other");
+
+        act.Should().Throw<ArgumentException>().WithMessage("*one file*");
+    }
+
+    private ServiceProvider BuildSingleFileEngine()
+    {
+        var services = new ServiceCollection();
+        services.AddFormbaseCore();
+        services.AddSqliteRawStore($"Data Source={_path}");
+        services.AddSqliteProjection($"Data Source={_path}");
+        return services.BuildServiceProvider();
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();

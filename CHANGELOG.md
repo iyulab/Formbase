@@ -15,12 +15,13 @@
   `InvalidQueryException` (its new `InapplicableFilters` names them) rather than answered with no rows.
   Text ranges are left out on purpose: backends order text differently, and the same query must return
   the same rows whichever store answers it.
-- `Formbase.Sqlite`: the projection store, projection state and field hints in one SQLite file
-  (`AddSqliteProjection`), for a process with no database server. It passes the same contract tests as
+- `Formbase.Sqlite`: the raw store, projection store, projection state and field hints in one SQLite
+  file (`AddSqliteRawStore` and `AddSqliteProjection` over one connection string — two different files
+  are refused), for a process with no database server. Raw watermarks are never reused, so a restarted
+  process finds its documents and its projections current. It passes the same contract tests as
   the in-memory and MorphDB stores: decimals compare numerically (kept as exact text under a numeric
   collation), instants compare as instants whatever their offset, and text matching ignores case beyond
-  ASCII. Declared relations are not materialized. Pair it with a raw store whose watermarks survive the
-  same restarts as the file — a projection stamp names raw positions.
+  ASCII. Declared relations are not materialized.
 - `FormbaseEngine.AggregateAsync` counts projected records, optionally per group (`AggregateSpec`:
   `GroupBy` columns and the same filters). Groups come back ordered by their keys, nulls first, with key
   values as the declared column type, and the answer carries `Stale` and refuses exactly as a query

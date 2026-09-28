@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 namespace Formbase.Sqlite;
 
 /// <summary>
-/// One SQLite file shared by the projection store, the projection state and the field hints. Owns what
+/// One SQLite file shared by the raw store, the projection store, the projection state and the field hints. Owns what
 /// every connection to it needs: the functions and collation that give the store the same answers as
 /// the in-memory reference, and the one-time bootstrap of each component's tables.
 /// </summary>
@@ -28,6 +28,9 @@ public sealed class SqliteDatabase : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         _connectionString = connectionString;
     }
+
+    /// <summary>The connection string this database opens — what two registrations are compared by.</summary>
+    internal string ConnectionString => _connectionString;
 
     internal async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {

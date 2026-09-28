@@ -37,6 +37,16 @@ internal sealed class TemporarySqliteFile : IDisposable
     }
 }
 
+/// <summary>Runs the raw-store contract against the SQLite adapter.</summary>
+public sealed class SqliteRawStoreContractTests : RawStoreContractTests, IDisposable
+{
+    private readonly TemporarySqliteFile _file = new();
+
+    protected override IRawStore CreateStore() => new SqliteRawStore(_file.Database);
+
+    public void Dispose() => _file.Dispose();
+}
+
 /// <summary>Runs the projection-store contract against the SQLite adapter.</summary>
 public sealed class SqliteProjectionStoreContractTests : ProjectionStoreContractTests, IDisposable
 {

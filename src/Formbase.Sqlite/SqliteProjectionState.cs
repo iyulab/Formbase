@@ -11,8 +11,8 @@ namespace Formbase.Sqlite;
 /// </summary>
 /// <remarks>
 /// The stamp's watermark is the raw store's. Pair this with a raw store whose watermarks survive the
-/// same restart: a stamp recorded against a raw store that starts over would name positions the new
-/// one reuses for different documents.
+/// same restart — <see cref="SqliteRawStore"/> in the same file is one: a stamp recorded against a raw
+/// store that starts over would name positions the new one reuses for different documents.
 /// </remarks>
 public sealed class SqliteProjectionState : IProjectionState
 {
