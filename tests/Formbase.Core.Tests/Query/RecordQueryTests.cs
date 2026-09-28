@@ -263,6 +263,8 @@ public class RecordQueryTests
     [InlineData("lot", FilterOperator.GreaterThan, "L-1")]
     [InlineData("qty", FilterOperator.GreaterThan, null)]
     [InlineData("lot", FilterOperator.StartsWith, null)]
+    [InlineData("qty", FilterOperator.IsNull, "10")]
+    [InlineData("lot", FilterOperator.IsNotNull, "L-1")]
     public async Task A_filter_whose_operator_the_column_cannot_answer_is_refused(string column, FilterOperator op, string? value)
     {
         var h = new Harness();

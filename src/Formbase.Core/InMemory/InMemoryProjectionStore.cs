@@ -150,9 +150,14 @@ public sealed class InMemoryProjectionStore : IProjectionStore
     {
         row.TryGetValue(filter.Column, out var actual);
 
-        if (filter.Operator == FilterOperator.Equal)
+        switch (filter.Operator)
         {
-            return Equals(actual, filter.Value);
+            case FilterOperator.Equal:
+                return Equals(actual, filter.Value);
+            case FilterOperator.IsNull:
+                return actual is null;
+            case FilterOperator.IsNotNull:
+                return actual is not null;
         }
 
         if (actual is null || filter.Value is null)

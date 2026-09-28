@@ -44,13 +44,13 @@ A document's life:
 2. **Projection** — when a form type has declared field hints, `ProjectAsync(formType)` drops any existing table, recreates it from the proposed schema, streams the raw documents through deterministic value mapping (recording — never discarding — any that can't be mapped, and counting per column how many documents never carried the field at all, as opposed to answering `null`), and records the watermark it reached. Because raw is the source of truth, a schema change needs no `ALTER` diffing: the table is simply rebuilt. When to re-project is a pluggable policy (`IProjectionTrigger`): the built-in trigger fires immediately on a shape change and at a configurable document-lag threshold for new data; drive `ProjectionSupervisor.RunOnceAsync` from whatever cadence your host owns.
 3. **Reading** — there are two questions with two paths:
    - *"Show me this document"* → the raw store, always available.
-   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`); `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees.
+   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees.
 
 ## Install
 
 Current release: **0.12.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.12.0` pairs with MorphDB `0.12.x`**. Pin the MorphDB server image to
-that line (`ghcr.io/iyulab/morphdb:0.12.3`); the compatible pair is stated with every release in
+together — **`Formbase.* 0.12.0` pairs with MorphDB `0.13.x`**. Pin the MorphDB server image to
+that line (`ghcr.io/iyulab/morphdb:0.13.1`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
 Start with the core and the DI helpers, then add only the adapters you actually run:

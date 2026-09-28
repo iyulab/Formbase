@@ -27,4 +27,10 @@ public enum FilterOperator
 
     /// <summary>The column starts with the value, ignoring case. Text columns.</summary>
     StartsWith,
+
+    /// <summary>The column has no value. Takes no value; applies to every column type.</summary>
+    IsNull,
+
+    /// <summary>The column has a value. Takes no value; applies to every column type.</summary>
+    IsNotNull,
 }

@@ -166,6 +166,42 @@ public abstract class ProjectionStoreContractTests
     }
 
     [Fact]
+    public async Task Query_selects_empty_columns_by_isnull_and_by_equality_with_null()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), RowWithNull("b"), Row("c", 3), RowWithNull("d")], TestContext.Current.CancellationToken);
+
+        var empty = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.IsNull("v")]), TestContext.Current.CancellationToken);
+        empty.Select(r => (string)r["k"]!).Should().BeEquivalentTo(["b", "d"]);
+
+        var equalNull = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.Equal("v", null)]), TestContext.Current.CancellationToken);
+        equalNull.Select(r => (string)r["k"]!).Should().BeEquivalentTo(["b", "d"], "equality with null is the same question");
+
+        var filled = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.IsNotNull("v")]), TestContext.Current.CancellationToken);
+        Values(filled).Should().Equal(1L, 3L);
+
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Isnull_combines_with_other_filters_and_counts_in_aggregates()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, [Row("a", 1), RowWithNull("a"), RowWithNull("b"), Row("b", 2)], TestContext.Current.CancellationToken);
+
+        var rows = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.IsNull("v"), FieldFilter.Equal("k", "a")]), TestContext.Current.CancellationToken);
+        rows.Should().ContainSingle().Which["k"].Should().Be("a");
+
+        var groups = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], Filters: [FieldFilter.IsNotNull("v")]), TestContext.Current.CancellationToken);
+        groups.ToDictionary(g => (string)g.Key["k"]!, g => g.Count)
+            .Should().BeEquivalentTo(new Dictionary<string, long> { ["a"] = 1, ["b"] = 1 });
+
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Query_combines_filters_as_and()
     {
         var store = CreateStore();

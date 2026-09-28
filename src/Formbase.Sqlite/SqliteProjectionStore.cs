@@ -225,9 +225,15 @@ public sealed class SqliteProjectionStore : IProjectionStore
             var type = types.GetValueOrDefault(filter.Column, ColumnType.Text);
             var parameter = $"$f{i}";
 
-            if (filter.Operator == FilterOperator.Equal && filter.Value is null)
+            if (filter.Operator is FilterOperator.IsNull || (filter.Operator == FilterOperator.Equal && filter.Value is null))
             {
                 conditions.Add($"{column} IS NULL");
+                continue;
+            }
+
+            if (filter.Operator is FilterOperator.IsNotNull)
+            {
+                conditions.Add($"{column} IS NOT NULL");
                 continue;
             }
 

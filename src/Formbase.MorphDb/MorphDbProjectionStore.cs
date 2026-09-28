@@ -178,7 +178,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var skip = offset % pageSize;
         var needed = skip + limit;
 
-        var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f.Operator), f.Value)).ToList();
+        var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f), f.Value)).ToList();
 
         // Server-side ordering — the only way paging is deterministic (a client-side sort would order
         // an already-arbitrary page). Descending maps to ascending: false.
@@ -221,7 +221,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         {
             Aggregations = [AggregationColumn.Count(CountAlias)],
             GroupBy = groupBy,
-            Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f.Operator), f.Value)).ToList(),
+            Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f), f.Value)).ToList(),
         };
 
         var response = await _client.Data.AggregateAsync(tableName, request, cancellationToken).ConfigureAwait(false);
@@ -240,9 +240,22 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     private const string CountAlias = "fb_count";
 
     /// <summary>Each formbase operator is one MorphDB answers natively — a translation, not a policy.</summary>
+    /// <summary>
+    /// MorphDB's operator for a filter. Equality with null asks whether the column is empty, so it goes as
+    /// <c>isnull</c>: sent as <c>eq</c>, the missing value would reach the server as an empty string and
+    /// compare against that instead.
+    /// </summary>
+    private static MorphOperator ToMorph(FieldFilter filter) => filter switch
+    {
+        { Operator: FormbaseOperator.Equal, Value: null } => MorphOperator.IsNull,
+        _ => ToMorph(filter.Operator),
+    };
+
     private static MorphOperator ToMorph(FormbaseOperator op) => op switch
     {
         FormbaseOperator.Equal => MorphOperator.Equal,
+        FormbaseOperator.IsNull => MorphOperator.IsNull,
+        FormbaseOperator.IsNotNull => MorphOperator.IsNotNull,
         FormbaseOperator.GreaterThan => MorphOperator.GreaterThan,
         FormbaseOperator.GreaterThanOrEqual => MorphOperator.GreaterThanOrEqual,
         FormbaseOperator.LessThan => MorphOperator.LessThan,

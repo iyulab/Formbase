@@ -7,9 +7,11 @@
 - Record queries filter with ranges and text matching, not only equality. A `FieldFilter` names a
   column, an operator and a value: `Equal` on any column; `GreaterThan`, `GreaterThanOrEqual`,
   `LessThan` and `LessThanOrEqual` on integer, decimal and timestamp columns; `Contains` and
-  `StartsWith`, ignoring case, on text columns. Filters all apply, and values are coerced to the
+  `StartsWith`, ignoring case, on text columns; `IsNull` and `IsNotNull` (`FieldFilter.IsNull(column)`),
+  which take no value, on any column — "the records whose judgement is still blank". Filters all apply, and values are coerced to the
   column's declared type as equality values already were, so a date range can be written as text. An
-  operator the column's type does not answer, or a comparison against null, is refused with
+  operator the column's type does not answer, a range or text match against null, or a value given to
+  `IsNull`/`IsNotNull`, is refused with
   `InvalidQueryException` (its new `InapplicableFilters` names them) rather than answered with no rows.
   Text ranges are left out on purpose: backends order text differently, and the same query must return
   the same rows whichever store answers it.
@@ -33,14 +35,13 @@
 
 ### Fixed
 
+- On the MorphDB store, an equality filter with a null value — "the records whose column is empty" —
+  was sent as a comparison with an empty string and missed the empty records. It is now sent as
+  MorphDB's `isnull`, which needs MorphDB `0.13.1` or later; the in-memory store always answered it.
 - The compose bundle's PostgreSQL health check asks over TCP. Asked over the Unix socket, it reported
   the database healthy while the image was still running its init scripts on a socket-only server
   that restarts afterwards, so on a first `docker compose up` MorphDB could start against a server
   that was about to go away.
-- `.env.example` and the namespace section of the API reference say that two instances sharing a
-  MorphDB need project ids that differ in their first eight hex digits — MorphDB names a project's
-  schemas from them — rather than only different ids. Editing just the tail of the example id made the
-  second project impossible to create.
 
 ## 0.12.0
 

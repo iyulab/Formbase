@@ -92,8 +92,7 @@ The namespace's contents are the triple the host was composed with — the Postg
 schema holding the raw stream, and the MorphDB project holding the projected tables. **The name does
 not choose them.** The `404` above checks which host a request reached, not where that host's data
 lives, so several namespaces sharing one PostgreSQL and one MorphDB need a different
-`Formbase__Schema` and `Formbase__MorphDb__ProjectId` each (MorphDB names a project's schemas from the
-first eight hex digits of its id, so the ids must differ there); `GET /settings` reports both as `storage`,
+`Formbase__Schema` and `Formbase__MorphDb__ProjectId` each; `GET /settings` reports both as `storage`,
 so two hosts can be compared.
 
 **The schema remembers the namespace it holds.** The first durable host to use a schema records its
