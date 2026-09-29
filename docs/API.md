@@ -327,6 +327,11 @@ This is the shape the next projection run will build. A form type with no declar
   resolved by the engine today:** a run names it among `unresolvedReferences` and leaves it empty
   rather than filling it with the document's own fixed-then copy, which would be a different answer
   wearing the same column name.
+- **`target`** on a bound field — `formType` is where the value comes from, and `keyField` is the
+  field on that form type whose value this field carries: the column a `snapshot` was copied from, or
+  the one a `reference` reads (`customers.name` above). Despite its name, `keyField` is not a lookup
+  key — the declaration does not say which `customers` record the value belongs to, nor which field of
+  the order carries that record's key.
 - **`kind`** on a relation — `child` (an owned entity whose key field points back here) or
   `reference` (a link out).
 

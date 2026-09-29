@@ -41,8 +41,12 @@ public sealed record DeclaredFieldResponse(
     DeclaredBinding Binding,
     DeclaredTargetResponse? Target);
 
-/// <param name="FormType">The form type the field or relation points at.</param>
-/// <param name="KeyField">The field on that form type.</param>
+/// <param name="FormType">The form type the bound field's value comes from.</param>
+/// <param name="KeyField">
+/// The field on that form type whose value the bound field carries — the column a snapshot was copied
+/// from, or the column a reference reads. Not a lookup key: it does not say which record the value
+/// belongs to.
+/// </param>
 public sealed record DeclaredTargetResponse(string FormType, string KeyField);
 
 /// <param name="Name">The relation's declared name.</param>

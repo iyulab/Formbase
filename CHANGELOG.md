@@ -51,6 +51,9 @@ positionally to `AcceptAsync`/`AppendAsync`.
   **The upgrade is one-way.** Once a record has been retired, 0.13.x can no longer read the form type's
   raw stream (it answers `500`), and a projection it runs leaves the table empty. Back up the database
   before upgrading if you may need to go back.
+- A bound field's `target.keyField` (`EntityRef.KeyField`) is documented for what it is: the field on
+  the target form type whose value the bound field carries, not a key for finding the target record.
+  The API reference had shown it one way and nothing said which; nothing about its behaviour changes.
 
 ### Dependencies
 
