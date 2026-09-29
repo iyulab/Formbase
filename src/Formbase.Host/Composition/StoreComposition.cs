@@ -114,6 +114,10 @@ internal static class StoreComposition
         // at startup when the database answers, ahead of the first request when it did not.
         services.AddSingleton<NamespaceBinding>();
         services.AddHostedService<NamespaceBindingStartupCheck>();
+
+        // A mistyped project id otherwise starts a host that reports ready and fails its first
+        // projection with an error from MorphDB the caller cannot act on.
+        services.AddHostedService<MorphDbProjectStartupCheck>();
         return services;
     }
 

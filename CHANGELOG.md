@@ -30,6 +30,10 @@ positionally to `AcceptAsync`/`AppendAsync`.
 
 ### Changed
 
+- A durable host refuses to start — exit code `78`, naming the setting — when MorphDB answers that the
+  configured `Formbase:MorphDb:ProjectId` does not exist. It used to report ready and fail its first
+  projection with an unhandled error. A MorphDB that cannot be reached at startup does not stop the
+  start, as before.
 - **Breaking:** `IRawStore.AppendAsync(type, id, body, key = null, cancellationToken)` takes the record key
   before the cancellation token, and `IRawStore.RetireAsync` is new — a raw-store adapter implements both.
   `IIntakeService.AcceptAsync` likewise takes `recordKey` before the token, and `IIntakeService.RetireAsync`

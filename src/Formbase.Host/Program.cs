@@ -40,9 +40,10 @@ try
 {
     await app.RunAsync();
 }
-catch (NamespaceBindingConflictException) when (OwnsProcess())
+catch (HostConfigurationException) when (OwnsProcess())
 {
-    // Already written: the binding logs the conflict, and the host logs the start it abandoned.
+    // A refusal found as the host starts — a schema holding another namespace, a MorphDB project that
+    // does not exist. Already written: the check logs it, and the host logs the start it abandoned.
     return HostConfigurationException.ExitCode;
 }
 

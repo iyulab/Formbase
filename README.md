@@ -108,7 +108,9 @@ reference, *Upgrading a deployment where two namespaces already share a schema*.
 (`EX_CONFIG`) and says which setting, as it does for every configuration it refuses. Falling back to
 the in-process stores would leave the host running, answering, and losing every document on restart
 — a failure the operator would meet as missing data long after the configuration that caused it.
-Provisioning the MorphDB project stays theirs: the engine never administers MorphDB.
+Provisioning the MorphDB project stays theirs: the engine never administers MorphDB. It does read the
+project as it starts, and a project MorphDB says it does not have — never created, or deleted — is
+refused the same way; a MorphDB it cannot reach is an outage it starts through.
 
 **Schema intelligence is an extension.** Supply a model endpoint, key and name and the engine infers
 structure for fields nobody declared; supply none and every other capability is unchanged — the host
