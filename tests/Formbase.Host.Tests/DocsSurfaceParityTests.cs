@@ -74,6 +74,15 @@ public sealed partial class DocsSurfaceParityTests : IClassFixture<WebApplicatio
             .ToHashSet(StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// The route block's lines as written — method and path with its parameter names — for
+    /// <see cref="DocumentedRoutesAnswerTests"/>, which fills the parameters in and calls them.
+    /// </summary>
+    internal static IReadOnlyList<(string Method, string Path)> DocumentedRouteLines() =>
+        RouteLine().Matches(RouteBlock().Match(RepoFile.Read("docs/API.md")).Groups["routes"].Value)
+            .Select(m => (m.Groups["method"].Value, m.Groups["path"].Value.Trim()))
+            .ToList();
+
     private async Task<HashSet<string>> ServedRoutesAsync()
     {
         var document = JsonDocument.Parse(await _client.GetStringAsync("/openapi/v1.json"));
