@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.14.0
 
-A correction is a new append — and now it can say which record it corrects. Breaking for code that
+Pairs with MorphDB `0.14.x`. A correction is a new append — and now it can say which record it corrects. Breaking for code that
 implements `IRawStore` or reads `StoredDocument.Body`, and for callers that passed a cancellation token
 positionally to `AcceptAsync`/`AppendAsync`.
 
@@ -58,6 +58,8 @@ positionally to `AcceptAsync`/`AppendAsync`.
 ### Dependencies
 
 - `Microsoft.Extensions.AI.Abstractions` and `Microsoft.Extensions.AI.OpenAI` 10.10.1 (was 10.10.0), a patch.
+- `Formbase.MorphDb` depends on `MorphDB.Client` 0.14.0 (was 0.13.1), and the live tests and the compose file
+  run the `ghcr.io/iyulab/morphdb:0.14.0` image.
 
 ## 0.13.0
 
