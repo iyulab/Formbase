@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- A document skipped because an array arrived for a Text column is told both ways out: declare the column
+  as Jsonb to keep the array as one value, or, when its items are rows of their own (a repeated section),
+  append each item as a document of its own form type — projection does not split an array into rows.
+  The skip used to name Jsonb only, which for a repeated section keeps every row in one column.
+
 ## 0.14.0
 
 Pairs with MorphDB `0.14.x`. A correction is a new append — and now it can say which record it corrects. Breaking for code that

@@ -97,10 +97,18 @@ internal static class DocumentMapper
                 // A scalar has a text form; an array or an object does not. Writing the structure's
                 // JSON into a text column produced a plausible value ('["ITA"]') where every other
                 // column type records a skip for the same input -- a wrong value is never found, an
-                // empty one can be filled. A caller who wants the structure kept declares Jsonb.
-                if (field.ValueKind is JsonValueKind.Array or JsonValueKind.Object)
+                // empty one can be filled. A caller who wants the structure kept declares Jsonb. An
+                // array may instead be a repeated section — rows of their own — which projection does
+                // not split: the input adapter appends each row as a document of its own form type.
+                if (field.ValueKind == JsonValueKind.Array)
                 {
-                    reason = $"field '{column.Name}' is a JSON {(field.ValueKind == JsonValueKind.Array ? "array" : "object")}, not a scalar, and cannot be projected as Text; declare the column as Jsonb to keep the structure";
+                    reason = $"field '{column.Name}' is a JSON array, not a scalar, and cannot be projected as Text; declare the column as Jsonb to keep the array as one value, or, if its items are rows of their own (a repeated section), append each item as a document of its own form type — projection does not split an array into rows";
+                    return false;
+                }
+
+                if (field.ValueKind == JsonValueKind.Object)
+                {
+                    reason = $"field '{column.Name}' is a JSON object, not a scalar, and cannot be projected as Text; declare the column as Jsonb to keep the structure";
                     return false;
                 }
 

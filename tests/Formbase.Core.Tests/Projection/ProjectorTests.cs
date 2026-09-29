@@ -169,6 +169,25 @@ public class ProjectorTests
     }
 
     [Fact]
+    public async Task An_array_skip_names_both_ways_out_and_an_object_skip_only_Jsonb()
+    {
+        // An array in a text column may be one value (a list of codes) or rows of their own (a
+        // repeated section). Pointing only at Jsonb steers the second kind the wrong way: into one
+        // column holding every row. Projection does not split an array, so the other way out is
+        // the input adapter's — one document per row, of the form type the rows belong to.
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":[{"item":"pressure","value":12.3}],"qty":1}""");
+        await h.Accept("""{"lot":{"id":"L-3"},"qty":2}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Skipped.Should().HaveCount(2);
+        result.Skipped[0].Reason.Should().Contain("Jsonb").And.Contain("its own form type");
+        result.Skipped[1].Reason.Should().Contain("Jsonb").And.NotContain("form type");
+    }
+
+    [Fact]
     public async Task A_scalar_that_is_not_a_string_still_projects_into_a_text_column()
     {
         // The structural rule is about arrays and objects only. A number or a boolean has one text
