@@ -81,7 +81,7 @@ public sealed class SqliteRawStoreUpgradeTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        TemporarySqliteFile.ClearPool($"Data Source={_path}");
         foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
         {
             try

@@ -18,13 +18,23 @@ internal sealed class TemporarySqliteFile : IDisposable
 
     public SqliteDatabase Database { get; }
 
+    /// <summary>
+    /// Closes the pooled connections to one file — the pool keeps them, and so the file, open until
+    /// cleared. Only that file's: <see cref="SqliteConnection.ClearAllPools"/> reaches every test running in
+    /// parallel, and a connection another test was opening at that moment is disposed under it.
+    /// </summary>
+    public static void ClearPool(string connectionString)
+    {
+        using var connection = new SqliteConnection(connectionString);
+        SqliteConnection.ClearPool(connection);
+    }
+
     public string ConnectionString => $"Data Source={_path}";
 
     public void Dispose()
     {
         Database.Dispose();
-        // The pool keeps connections — and so the file — open until cleared.
-        SqliteConnection.ClearAllPools();
+        ClearPool(ConnectionString);
         foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
         {
             try

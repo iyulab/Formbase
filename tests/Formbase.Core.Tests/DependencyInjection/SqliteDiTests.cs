@@ -4,6 +4,7 @@ using Formbase.Core.Projection;
 using Formbase.Core.Primitives;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
+using Formbase.Core.Tests.Contracts.Sqlite;
 using Formbase.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -114,7 +115,7 @@ public sealed class SqliteDiTests : IDisposable
             firstHead = await first.GetRequiredService<IRawStore>().HeadAsync(reports, TestContext.Current.CancellationToken);
         }
 
-        SqliteConnection.ClearAllPools();
+        TemporarySqliteFile.ClearPool($"Data Source={_path}");
 
         await using var second = BuildSingleFileEngine();
         var restarted = second.GetRequiredService<FormbaseEngine>();
@@ -153,7 +154,7 @@ public sealed class SqliteDiTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        TemporarySqliteFile.ClearPool($"Data Source={_path}");
         foreach (var path in new[] { _path, _path + "-wal", _path + "-shm" })
         {
             try
