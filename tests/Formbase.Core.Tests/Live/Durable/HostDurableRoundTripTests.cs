@@ -321,6 +321,77 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         records.GetProperty("rows")[0].GetProperty("result").GetString().Should().Be("ok");
     }
 
+    /// <summary>
+    /// The rest of the declaration vocabulary over the real stores — a renamed field (<c>sourceKey</c>),
+    /// a <c>reference</c> field the engine leaves empty and names, and a <c>child</c> relation
+    /// MorphDB materializes. The durable declaration store used to drop relations, so the relation never
+    /// reached MorphDB through this host; nothing had driven any of these through it.
+    /// </summary>
+    [Fact]
+    public async Task Renamed_fields_reference_fields_and_child_relations_work_through_the_real_stores()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var suffix = Guid.NewGuid().ToString("N")[..10];
+        var notice = $"no{suffix}";
+        var lot = $"lo{suffix}";
+
+        (await _client.PutAsJsonAsync($"/formtypes/{lot}/declaration", new
+        {
+            tableName = lot,
+            declarationVersion = 1,
+            fields = new[] { new { name = "noticeId", type = "text" }, new { name = "amount", type = "integer" } },
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var declared = await _client.PutAsJsonAsync($"/formtypes/{notice}/declaration", new
+        {
+            tableName = notice,
+            declarationVersion = 1,
+            fields = new object[]
+            {
+                new { name = "noticeId", type = "text", sourceKey = (string?)null, binding = "stored", target = (object?)null },
+                new { name = "publishedAt", type = "timestamp", sourceKey = "published_at", binding = "stored", target = (object?)null },
+                new { name = "buyerName", type = "text", sourceKey = (string?)null, binding = "reference", target = new { formType = lot, keyField = "noticeId" } },
+            },
+            relations = new[] { new { name = "lots", kind = "child", target = lot, keyField = "noticeId" } },
+        }, ct);
+        declared.StatusCode.Should().Be(HttpStatusCode.Created, await declared.Content.ReadAsStringAsync(ct));
+
+        await AcceptAsync(lot, """{"noticeId":"N-1","amount":5}""");
+        await AcceptAsync(notice, """{"noticeId":"N-1","published_at":"2026-09-30T00:00:00Z","buyerName":"a copy"}""");
+
+        (await ReadAsync(await _client.PostAsync($"/formtypes/{lot}/projection", null, ct)))
+            .GetProperty("projected").GetBoolean().Should().BeTrue();
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{notice}/projection", null, ct));
+        run.GetProperty("projected").GetBoolean().Should().BeTrue(await _client.GetStringAsync($"/formtypes/{notice}/projection", ct));
+        run.GetProperty("unresolvedReferences").EnumerateArray().Select(e => e.GetString())
+            .Should().Contain("buyerName", "a reference column is left empty and named, not filled with the document's copy");
+
+        var row = (await ReadAsync(await _client.GetAsync($"/formtypes/{notice}/records", ct))).GetProperty("rows")[0];
+        row.GetProperty("noticeId").GetString().Should().Be("N-1");
+        row.GetProperty("publishedAt").ValueKind.Should().NotBe(JsonValueKind.Null, "the renamed field reads its original document key");
+        row.TryGetProperty("buyerName", out var buyer).Should().BeTrue();
+        buyer.ValueKind.Should().Be(JsonValueKind.Null);
+
+        (await QueryRelationNamesAsync(notice, ct)).Should().Contain("lots",
+            "the declared child relation reaches MorphDB only if the declaration store kept it");
+    }
+
+    /// <summary>MorphDB's REST schema client reads no relations; GraphQL's <c>table(name).relations</c> does.</summary>
+    private async Task<IReadOnlyList<string>> QueryRelationNamesAsync(string tableName, CancellationToken ct)
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(_fixture.MorphDbUrl) };
+        http.DefaultRequestHeaders.Add("X-Project-Id", _fixture.MorphDbProjectId.ToString());
+        var response = await http.PostAsJsonAsync("/graphql", new
+        {
+            query = $$"""query { table(name: "{{tableName}}") { relations { name } } }""",
+        }, ct);
+        response.EnsureSuccessStatusCode();
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var relations = body.RootElement.GetProperty("data").GetProperty("table").GetProperty("relations");
+        return relations.ValueKind == JsonValueKind.Array
+            ? [.. relations.EnumerateArray().Select(r => r.GetProperty("name").GetString()!)]
+            : [];
+    }
+
     private async Task<JsonElement> AcceptAsync(string type, string body, Guid? key = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents")

@@ -27,7 +27,8 @@
 - The durable declaration stores (`SqliteFieldHintSource`, `PostgresFieldHintSource`) kept only a
   declaration's table and fields: every declaration read back as version 1 with no relations. On the
   durable host the second replacement of a form type was therefore refused as a version conflict, and
-  declared relations were gone after a restart. Both stores now keep `DeclarationVersion` and
+  declared relations were gone after a restart — so a `child` relation declared through that host never
+  reached MorphDB as a relation. Both stores now keep `DeclarationVersion` and
   `Relations`; a table written by an earlier version is upgraded in place on first use, and the
   declarations in it read back as version 1 with no relations — what they were stored as.
   Versions and relations declared before this release were never stored, so an upgraded store reads
