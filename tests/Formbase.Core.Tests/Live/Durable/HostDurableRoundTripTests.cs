@@ -276,6 +276,51 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         readBack.GetProperty("relations")[0].GetProperty("target").GetString().Should().Be($"{type}-line");
     }
 
+    /// <summary>
+    /// A bound field over the real stores: the declaration names the form type the value comes from,
+    /// and the durable declaration store used to read that form type back empty — so this projection
+    /// failed before it reached MorphDB, and nothing had ever driven a bound column through the host.
+    /// </summary>
+    [Fact]
+    public async Task A_form_type_with_a_bound_field_projects_through_the_real_stores()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var suffix = Guid.NewGuid().ToString("N")[..10];
+        var equipment = $"eq{suffix}";
+        var inspection = $"in{suffix}";
+
+        (await _client.PutAsJsonAsync($"/formtypes/{equipment}/declaration", new
+        {
+            tableName = equipment,
+            declarationVersion = 1,
+            fields = new[] { new { name = "code", type = "text" }, new { name = "name", type = "text" } },
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var declared = await _client.PutAsJsonAsync($"/formtypes/{inspection}/declaration", new
+        {
+            tableName = inspection,
+            declarationVersion = 1,
+            fields = new object[]
+            {
+                new { name = "equipment", type = "text", binding = "snapshot", target = new { formType = equipment, keyField = "code" } },
+                new { name = "result", type = "text", binding = "stored", target = (object?)null },
+            },
+        }, ct);
+        declared.StatusCode.Should().Be(HttpStatusCode.Created, await declared.Content.ReadAsStringAsync(ct));
+
+        await AcceptAsync(equipment, """{"code":"EQ-1","name":"Pump"}""");
+        await AcceptAsync(inspection, """{"equipment":"EQ-1","result":"ok"}""");
+
+        var readBack = await ReadAsync(await _client.GetAsync($"/formtypes/{inspection}/declaration", ct));
+        readBack.GetProperty("fields")[0].GetProperty("target").GetProperty("formType").GetString().Should().Be(equipment);
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{inspection}/projection", null, ct));
+        run.GetProperty("projected").GetBoolean().Should().BeTrue(await _client.GetStringAsync($"/formtypes/{inspection}/projection", ct));
+
+        var records = await ReadAsync(await _client.GetAsync($"/formtypes/{inspection}/records", ct));
+        records.GetProperty("rows")[0].GetProperty("equipment").GetString().Should().Be("EQ-1");
+        records.GetProperty("rows")[0].GetProperty("result").GetString().Should().Be("ok");
+    }
+
     private async Task<JsonElement> AcceptAsync(string type, string body, Guid? key = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents")
