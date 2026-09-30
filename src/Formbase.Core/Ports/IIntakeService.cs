@@ -48,6 +48,10 @@ public interface IIntakeService
     /// retry, and a key holding another request refuses the whole batch with
     /// <see cref="Errors.IdempotencyKeyReusedException"/>. Returns the id each element was stored under,
     /// in the order given.
+    /// <para>
+    /// A durable store holds its write lock until the batch commits, and every other append waits for it,
+    /// so a large import goes in several batches — a few thousand documents each — rather than one.
+    /// </para>
     /// </summary>
     Task<IReadOnlyList<DocumentId>> AcceptManyAsync(
         FormTypeRef type,
