@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
 
-Breaking for code that implements `IRawStore` or `IIntakeService`.
+Pairs with MorphDB `0.14.x`. A batch of documents is accepted in one durable write. Breaking for code
+that implements `IRawStore` or `IIntakeService`.
 
 ### Added
 
