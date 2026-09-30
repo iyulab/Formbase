@@ -106,6 +106,29 @@ public class ProjectorTests
             "an explicit null is an answer; a field the document never had is a different fact");
     }
 
+    [Theory]
+    [InlineData("2026-01-15", "2026-01-15T00:00:00+00:00")]
+    [InlineData("2026-01-15T09:30:00", "2026-01-15T09:30:00+00:00")]
+    [InlineData("2026-01-15T09:30:00Z", "2026-01-15T09:30:00+00:00")]
+    [InlineData("2026-01-15T09:30:00+09:00", "2026-01-15T00:30:00+00:00")]
+    public async Task A_timestamp_without_an_offset_is_read_as_UTC_whatever_the_host_zone(string written, string expected)
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("at", ColumnType.Timestamp, Nullable: true),
+        ]));
+        await h.Accept($$"""{"lot":"L-1","at":"{{written}}"}""");
+
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var rows = await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken);
+        rows.Should().ContainSingle().Which["at"].Should().BeOfType<DateTimeOffset>()
+            .Which.UtcDateTime.Should().Be(DateTimeOffset.Parse(expected, System.Globalization.CultureInfo.InvariantCulture).UtcDateTime,
+                "a calendar date is not an instant in the projecting machine's zone — the same document must project to the same value everywhere");
+    }
+
     [Fact]
     public async Task Absence_counts_cover_only_rows_that_landed()
     {

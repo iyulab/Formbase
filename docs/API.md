@@ -320,6 +320,8 @@ This is the shape the next projection run will build. A form type with no declar
 `/problems/no-declaration` — a state to read, not a failure to recover from.
 
 - **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`.
+  A `timestamp` value without an offset — a date alone, or a date and time with no zone — is read as
+  UTC, in documents and in query filters alike; a value with an offset keeps it.
 - **`sourceKey`** — the document key the field reads when it differs from the column name. A rename
   that keeps already-stored documents readable.
 - **`binding`** — `stored` (the document's own value), `snapshot` (copied and fixed at write time),

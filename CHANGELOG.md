@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A timestamp written without an offset is read as UTC, not in the host's zone.** A date alone
+  (`"2026-01-15"`) or a date and time with no zone projected to a different instant on every machine
+  that ran the projection — a date alone became the previous day east of Greenwich. Such a value is now
+  that moment in UTC, so a date alone is its UTC midnight and reads back as the date written. Query
+  filter values follow the same rule, so a filter written like the documents matches them. A value with
+  an offset keeps it, as before.
+
 ## 0.15.0
 
 Pairs with MorphDB `0.14.x`. A batch of documents is accepted in one durable write. Breaking for code

@@ -297,6 +297,25 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task A_date_only_filter_value_matches_the_same_date_only_document_value()
+    {
+        var h = new Harness();
+        h.DeclareHintsWithInstant();
+        await h.Accept("""{"lot":"L-1","at":"2026-01-14"}""");
+        await h.Accept("""{"lot":"L-2","at":"2026-01-15"}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var equal = await h.Query.QueryAsync(Qc, new QuerySpec(Filters:
+            [new FieldFilter("at", FilterOperator.Equal, "2026-01-15")]), TestContext.Current.CancellationToken);
+        var fromUtcMidnight = await h.Query.QueryAsync(Qc, new QuerySpec(Filters:
+            [new FieldFilter("at", FilterOperator.GreaterThanOrEqual, "2026-01-15T00:00:00Z")]), TestContext.Current.CancellationToken);
+
+        equal.Rows.Should().ContainSingle().Which["lot"].Should().Be("L-2");
+        fromUtcMidnight.Rows.Should().ContainSingle().Which["lot"].Should().Be("L-2",
+            "a date written without an offset is that date's UTC midnight, on the document side and the filter side alike");
+    }
+
+    [Fact]
     public async Task Aggregating_an_unprojected_form_type_throws_NotProjected()
     {
         var h = new Harness();

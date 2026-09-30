@@ -279,7 +279,7 @@ public sealed class RecordQuery : IRecordQuery
                 ColumnType.Uuid => value is Guid ? value : Guid.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),
                 ColumnType.Timestamp => value is DateTimeOffset
                     ? value
-                    : DateTimeOffset.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                    : TimestampText.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),
                 _ => value,
             };
         }

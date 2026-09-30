@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
@@ -141,7 +140,7 @@ internal static class DocumentMapper
 
             case ColumnType.Timestamp:
                 if (field.ValueKind == JsonValueKind.String
-                    && DateTimeOffset.TryParse(field.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var ts))
+                    && TimestampText.TryParse(field.GetString(), out var ts))
                 {
                     value = ts;
                     return true;
