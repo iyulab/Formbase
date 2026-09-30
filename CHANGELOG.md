@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.14.1
+
+Pairs with MorphDB `0.14.x`. Fixes for durable declarations: a declaration can no longer destroy the raw
+documents of a single SQLite file, and the durable stores keep what a declaration says.
 
 ### Added
 
