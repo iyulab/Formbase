@@ -36,7 +36,8 @@
 - A form type stored as JSON — the target of a bound field inside a durable declaration — read back as
   the empty default, because `FormTypeRef` could be written but not read. On the SQLite and PostgreSQL
   stores a form type with a bound field (`Snapshot` or `Reference` with a `Target`) therefore could not be
-  projected at all: resolving the target's table failed with "Value must be set". It now reads back as
+  projected at all: resolving the target's table failed with "Value must be set" — and on the durable
+  host, declaring one answered `500`. It now reads back as
   the form type it was, including from declarations already on disk, so those form types project
   without being declared again.
 
