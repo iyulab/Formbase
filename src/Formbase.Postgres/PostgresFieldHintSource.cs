@@ -56,6 +56,11 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
                 fields      jsonb NOT NULL,
                 declared_at timestamptz NOT NULL
             );
+            -- A table created before relations and versions were kept: its declarations read back as
+            -- version 1 with no relations, which is what they were stored as.
+            ALTER TABLE "{_bootstrap.Schema}".field_hints
+                ADD COLUMN IF NOT EXISTS relations jsonb NULL,
+                ADD COLUMN IF NOT EXISTS declaration_version integer NOT NULL DEFAULT 1;
             """;
     }
 
@@ -119,11 +124,13 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 
         await using var command = new NpgsqlCommand(
             $"""
-            INSERT INTO "{_bootstrap.Schema}".field_hints (form_type, table_name, fields, declared_at)
-            VALUES (@type, @table, @fields, @at)
+            INSERT INTO "{_bootstrap.Schema}".field_hints (form_type, table_name, fields, relations, declaration_version, declared_at)
+            VALUES (@type, @table, @fields, @relations, @version, @at)
             ON CONFLICT (form_type) DO UPDATE
                 SET table_name = EXCLUDED.table_name,
                     fields = EXCLUDED.fields,
+                    relations = EXCLUDED.relations,
+                    declaration_version = EXCLUDED.declaration_version,
                     declared_at = EXCLUDED.declared_at
             """,
             connection,
@@ -134,6 +141,11 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         {
             Value = JsonSerializer.Serialize(hints.Fields, FieldJson),
         });
+        command.Parameters.Add(new NpgsqlParameter("relations", NpgsqlDbType.Jsonb)
+        {
+            Value = hints.Relations is null ? DBNull.Value : JsonSerializer.Serialize(hints.Relations, FieldJson),
+        });
+        command.Parameters.AddWithValue("version", hints.DeclarationVersion);
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -146,7 +158,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
-            $"""SELECT table_name, fields FROM "{_bootstrap.Schema}".field_hints WHERE form_type = @type""",
+            $"""SELECT table_name, fields, relations, declaration_version FROM "{_bootstrap.Schema}".field_hints WHERE form_type = @type""",
             connection);
         command.Parameters.AddWithValue("type", type.Value);
 
@@ -158,7 +170,8 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 
         var tableName = reader.GetString(0);
         var fields = JsonSerializer.Deserialize<List<FieldHint>>(reader.GetString(1), FieldJson) ?? [];
-        return new FormTypeHints(type, tableName, fields);
+        var relations = reader.IsDBNull(2) ? null : JsonSerializer.Deserialize<List<RelationHint>>(reader.GetString(2), FieldJson);
+        return new FormTypeHints(type, tableName, fields, relations, reader.GetInt32(3));
     }
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)

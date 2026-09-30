@@ -61,4 +61,38 @@ public sealed class PostgresFieldHintStorageTests
         storedJson.Should().Contain("\"Text\"");
         storedJson.Should().Contain("\"Timestamp\"");
     }
+
+    /// <summary>
+    /// A table written by an earlier version: no relations or version columns, and form types inside
+    /// the fields JSON in the object form the serializer used to write. It is upgraded in place, and what
+    /// it held reads back as it was stored.
+    /// </summary>
+    [Fact]
+    public async Task A_table_from_an_earlier_version_is_upgraded_and_reads_back_its_bound_target()
+    {
+        var schema = "fb_" + Guid.NewGuid().ToString("N");
+        await using (var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken))
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                $$$"""
+                CREATE SCHEMA "{{{schema}}}";
+                CREATE TABLE "{{{schema}}}".field_hints (form_type text PRIMARY KEY, table_name text NOT NULL, fields jsonb NOT NULL, declared_at timestamptz NOT NULL);
+                INSERT INTO "{{{schema}}}".field_hints VALUES ('inspection', 'inspections',
+                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":{"Value":"equipment"},"KeyField":"code"}}]', now());
+                """;
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var source = new PostgresFieldHintSource(_fixture.DataSource, schema);
+        var read = await source.GetHintsAsync(FormTypeRef.Create("inspection"), TestContext.Current.CancellationToken);
+
+        read!.DeclarationVersion.Should().Be(1);
+        read.Relations.Should().BeNull();
+        read.Fields.Should().ContainSingle().Which.Target.Should().Be(new EntityRef(FormTypeRef.Create("equipment"), "code"));
+
+        await source.DeclareAsync(read with { DeclarationVersion = 2 }, TestContext.Current.CancellationToken);
+        (await source.GetHintsAsync(FormTypeRef.Create("inspection"), TestContext.Current.CancellationToken))!
+            .DeclarationVersion.Should().Be(2);
+    }
 }

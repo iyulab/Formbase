@@ -24,8 +24,20 @@
   form type into its own table is unaffected. Declarations already stored that share a table keep
   projecting as before, but neither can be redeclared into that table until the other moves.
 
+- The durable declaration stores (`SqliteFieldHintSource`, `PostgresFieldHintSource`) kept only a
+  declaration's table and fields: every declaration read back as version 1 with no relations. On the
+  durable host the second replacement of a form type was therefore refused as a version conflict, and
+  declared relations were gone after a restart. Both stores now keep `DeclarationVersion` and
+  `Relations`; a table written by an earlier version is upgraded in place on first use, and the
+  declarations in it read back as version 1 with no relations — what they were stored as.
+- A form type stored as JSON — the target of a bound field inside a durable declaration — read back as
+  the empty default, because `FormTypeRef` could be written but not read. It now reads back as the form
+  type it was, including from declarations already on disk.
+
 ### Changed
 
+- `FormTypeRef` serializes as its identifier string (`"work-order"`) rather than as an object
+  (`{"Value":"work-order"}`); both forms are read.
 - A document skipped because an array arrived for a Text column is told both ways out: declare the column
   as Jsonb to keep the array as one value, or, when its items are rows of their own (a repeated section),
   append each item as a document of its own form type — projection does not split an array into rows.

@@ -24,9 +24,11 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     private const string InitDdl =
         """
         CREATE TABLE IF NOT EXISTS fb_field_hints (
-            form_type  TEXT PRIMARY KEY,
-            table_name TEXT NOT NULL,
-            fields     TEXT NOT NULL
+            form_type           TEXT PRIMARY KEY,
+            table_name          TEXT NOT NULL,
+            fields              TEXT NOT NULL,
+            relations           TEXT NULL,
+            declaration_version INTEGER NOT NULL DEFAULT 1
         );
         """;
 
@@ -77,12 +79,19 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         command.Transaction = transaction;
         command.CommandText =
             """
-            INSERT INTO fb_field_hints (form_type, table_name, fields) VALUES ($type, $table, $fields)
-            ON CONFLICT (form_type) DO UPDATE SET table_name = excluded.table_name, fields = excluded.fields
+            INSERT INTO fb_field_hints (form_type, table_name, fields, relations, declaration_version)
+            VALUES ($type, $table, $fields, $relations, $version)
+            ON CONFLICT (form_type) DO UPDATE SET
+                table_name = excluded.table_name,
+                fields = excluded.fields,
+                relations = excluded.relations,
+                declaration_version = excluded.declaration_version
             """;
         command.Parameters.AddWithValue("$type", hints.Type.Value);
         command.Parameters.AddWithValue("$table", hints.TableName);
         command.Parameters.AddWithValue("$fields", JsonSerializer.Serialize(hints.Fields, FieldJson));
+        command.Parameters.AddWithValue("$relations", hints.Relations is null ? DBNull.Value : JsonSerializer.Serialize(hints.Relations, FieldJson));
+        command.Parameters.AddWithValue("$version", hints.DeclarationVersion);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -101,7 +110,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT table_name, fields FROM fb_field_hints WHERE form_type = $type";
+        command.CommandText = "SELECT table_name, fields, relations, declaration_version FROM fb_field_hints WHERE form_type = $type";
         command.Parameters.AddWithValue("$type", type.Value);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -111,12 +120,49 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         }
 
         var fields = JsonSerializer.Deserialize<List<FieldHint>>(reader.GetString(1), FieldJson) ?? [];
-        return new FormTypeHints(type, reader.GetString(0), fields);
+        var relations = reader.IsDBNull(2) ? null : JsonSerializer.Deserialize<List<RelationHint>>(reader.GetString(2), FieldJson);
+        return new FormTypeHints(type, reader.GetString(0), fields, relations, reader.GetInt32(3));
     }
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken)
     {
-        await _database.EnsureAsync(Component, InitDdl, cancellationToken).ConfigureAwait(false);
+        await _database.EnsureAsync(Component, InitDdl, UpgradeAsync, cancellationToken).ConfigureAwait(false);
         return await _database.OpenAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Brings a declarations table created before relations and versions were kept up to the current
+    /// shape. A declaration already in it reads back as version 1 with no relations — what it was stored as.
+    /// </summary>
+    private static async Task UpgradeAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var info = connection.CreateCommand())
+        {
+            info.Transaction = transaction;
+            info.CommandText = "SELECT name FROM pragma_table_info('fb_field_hints')";
+            await using var reader = await info.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                columns.Add(reader.GetString(0));
+            }
+        }
+
+        foreach (var (column, definition) in new[]
+        {
+            ("relations", "TEXT NULL"),
+            ("declaration_version", "INTEGER NOT NULL DEFAULT 1"),
+        })
+        {
+            if (columns.Contains(column))
+            {
+                continue;
+            }
+
+            await using var alter = connection.CreateCommand();
+            alter.Transaction = transaction;
+            alter.CommandText = $"ALTER TABLE fb_field_hints ADD COLUMN {column} {definition}";
+            await alter.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 }

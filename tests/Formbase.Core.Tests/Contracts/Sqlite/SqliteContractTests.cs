@@ -13,10 +13,12 @@ internal sealed class TemporarySqliteFile : IDisposable
     public TemporarySqliteFile()
     {
         _path = Path.Combine(Path.GetTempPath(), $"formbase-{Guid.NewGuid():N}.db");
-        Database = new SqliteDatabase($"Data Source={_path}");
+        Database = new SqliteDatabase(ConnectionString);
     }
 
     public SqliteDatabase Database { get; }
+
+    public string ConnectionString => $"Data Source={_path}";
 
     public void Dispose()
     {

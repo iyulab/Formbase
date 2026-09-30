@@ -248,6 +248,34 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
 
     private static string NewFormType() => $"hostdur{Guid.NewGuid():N}"[..18];
 
+    /// <summary>
+    /// The version check only protects anything if the durable store keeps the version it is handed.
+    /// It used to read every declaration back as version 1 and drop its relations, so the second
+    /// replacement of a form type was refused as a conflict and a declared relation was gone.
+    /// </summary>
+    [Fact]
+    public async Task Replacements_advance_the_stored_version_and_keep_declared_relations()
+    {
+        var type = $"ver{Guid.NewGuid():N}"[..16];
+        object Declaration(int version, int? expected) => new
+        {
+            tableName = type,
+            declarationVersion = version,
+            expectedDeclarationVersion = expected,
+            fields = new[] { new { name = "total", type = "integer" } },
+            relations = new[] { new { name = "lines", kind = "child", target = $"{type}-line", keyField = "parent" } },
+        };
+
+        (await _client.PutAsJsonAsync($"/formtypes/{type}/declaration", Declaration(1, null), TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await _client.PutAsJsonAsync($"/formtypes/{type}/declaration", Declaration(2, 1), TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var third = await _client.PutAsJsonAsync($"/formtypes/{type}/declaration", Declaration(3, 2), TestContext.Current.CancellationToken);
+
+        third.StatusCode.Should().Be(HttpStatusCode.OK, await third.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var readBack = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
+        readBack.GetProperty("declarationVersion").GetInt32().Should().Be(3);
+        readBack.GetProperty("relations")[0].GetProperty("target").GetString().Should().Be($"{type}-line");
+    }
+
     private async Task<JsonElement> AcceptAsync(string type, string body, Guid? key = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents")

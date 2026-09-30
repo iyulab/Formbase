@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Formbase.Core.Primitives;
 
 /// <summary>
@@ -5,6 +7,7 @@ namespace Formbase.Core.Primitives;
 /// FormType is a formbase-internal concept and is never leaked to MorphDB as a domain notion;
 /// it surfaces only as an opaque table-name component during projection.
 /// </summary>
+[JsonConverter(typeof(FormTypeRefJsonConverter))]
 public readonly record struct FormTypeRef
 {
     /// <summary>The normalized (trimmed) form-type identifier.</summary>
