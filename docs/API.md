@@ -371,9 +371,16 @@ without any document arriving — that is the shape axis of staleness, and the w
 show it. Run a projection when you want the table to match; a rebuild drops and refills the whole
 table, which is not a cost to spend on your behalf without being asked.
 
-A declaration is refused with `400` `/problems/invalid-declaration` when it names no table, carries
-no fields, or declares one field twice — each would otherwise land as a projected table nobody meant
-to declare.
+A declaration is refused with `400` `/problems/invalid-declaration` when it names no table, names a
+table starting with `fb_` (the engine's own namespace — its system columns, and on a single-file store
+its own tables, live there), carries no fields, or declares one field twice — each would otherwise land
+as a projected table nobody meant to declare, or replace one the engine keeps.
+
+A table belongs to one form type. Declaring a form type into a table another form type already
+projects into is refused with `409` `/problems/table-name-in-use`, and names are compared ignoring
+case: two form types in one table would each rebuild it from their own documents, so a query of
+either would read the other's rows. Move the other form type to another table first, or choose
+another name. Redeclaring a form type into the table it already has is not a conflict.
 
 ### Removing a declaration
 
@@ -588,7 +595,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
 | 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON (or named a property twice), the idempotency key was not a UUID, or a parameter did not bind |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
-| 400 | `/problems/invalid-declaration` | A declaration named no table, carried no fields, or declared one twice |
+| 400 | `/problems/invalid-declaration` | A declaration named no table or a reserved `fb_` table, carried no fields, or declared one twice |
 | 400 | `/problems/schema-proposal-invalid` | Schema intelligence is installed and the model responded, but the proposal was not valid JSON, not the requested shape, or named a property never observed in the sampled documents |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
@@ -596,6 +603,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
+| 409 | `/problems/table-name-in-use` | Another form type already projects into the table the declaration names |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |

@@ -9,9 +9,24 @@ namespace Formbase.Core.InMemory;
 public sealed class InMemoryFieldHintSource : IFieldHintSource
 {
     private readonly ConcurrentDictionary<FormTypeRef, FormTypeHints> _hints = new();
+    private readonly Lock _declaring = new();
 
-    /// <summary>Declares (or replaces) the field hints for a form type.</summary>
-    public void Declare(FormTypeHints hints) => _hints[hints.Type] = hints;
+    /// <summary>
+    /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
+    /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
+    /// type already projects into throws <see cref="Errors.TableNameInUseException"/>; neither stores anything.
+    /// </summary>
+    public void Declare(FormTypeHints hints)
+    {
+        DeclaredTableName.EnsureDeclarable(hints);
+
+        // The check and the write are one step: two declarations racing for one table must not both see it free.
+        lock (_declaring)
+        {
+            DeclaredTableName.EnsureUnclaimed(hints, _hints.Values.Select(h => (h.Type, h.TableName)));
+            _hints[hints.Type] = hints;
+        }
+    }
 
     /// <summary>
     /// Removes a form type's declaration, answering whether one was there. Returning the fact rather

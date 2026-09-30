@@ -170,6 +170,13 @@ internal static class DeclarationEndpoints
             return Invalid("The declaration must name the table its projection builds.");
         }
 
+        if (DeclaredTableName.IsReserved(request.TableName))
+        {
+            return Invalid(
+                $"The table name '{request.TableName}' starts with '{DeclaredTableName.ReservedPrefix}', which the " +
+                "engine reserves for its own tables and columns. Declare the projection under another name.");
+        }
+
         if (request.Fields is not { Count: > 0 })
         {
             return Invalid(

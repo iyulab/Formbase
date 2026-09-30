@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+
+- `DeclaredTableName` — the rules every declaration writer applies before storing (`IsReserved`, `Same`,
+  `EnsureDeclarable`, `EnsureUnclaimed`), and `TableNameInUseException`, raised when a declaration names a
+  table another form type already projects into. Over HTTP it answers `409` `/problems/table-name-in-use`.
+
+### Fixed
+
+- A declaration can no longer name a table in the engine's `fb_` namespace. On a single SQLite file, which
+  keeps the raw documents, projection state and declarations beside the projected tables, a form type
+  declared into `fb_raw_documents` replaced the raw table on its first projection — every document of
+  every form type in the file was lost — and `fb_field_hints` or `fb_projection_state` broke the file the
+  same way. `InMemoryFieldHintSource.Declare`, `SqliteFieldHintSource.DeclareAsync` and
+  `PostgresFieldHintSource.DeclareAsync` now throw `ArgumentException` for a blank or `fb_` table name, the
+  host answers `400` `/problems/invalid-declaration`, and the SQLite projection store refuses to build or
+  drop an `fb_` table, so a declaration stored before this check still cannot reach one.
+- Two form types can no longer be declared into one table. Each rebuilt the table from its own documents,
+  so a query of either read whichever projected last. The three declaration writers refuse the second
+  (names compared ignoring case) with `TableNameInUseException`, atomically with the write; redeclaring a
+  form type into its own table is unaffected. Declarations already stored that share a table keep
+  projecting as before, but neither can be redeclared into that table until the other moves.
+
 ### Changed
 
 - A document skipped because an array arrived for a Text column is told both ways out: declare the column

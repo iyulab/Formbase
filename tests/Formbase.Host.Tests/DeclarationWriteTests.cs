@@ -34,7 +34,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     {
         var type = NewFormType();
 
-        var response = await DeclareAsync(type, Declaration(version: 1));
+        var response = await DeclareAsync(type, Declaration(type, version: 1));
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var declaration = (await ReadAsync(response)).GetProperty("declaration");
@@ -49,9 +49,9 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     public async Task Replacing_a_declaration_needs_the_version_it_replaces()
     {
         var type = NewFormType();
-        await DeclareAsync(type, Declaration(version: 1));
+        await DeclareAsync(type, Declaration(type, version: 1));
 
-        var replaced = await DeclareAsync(type, Declaration(version: 2, expected: 1));
+        var replaced = await DeclareAsync(type, Declaration(type, version: 2, expected: 1));
 
         replaced.StatusCode.Should().Be(HttpStatusCode.OK, "a replacement is not a creation");
         (await ReadAsync(replaced)).GetProperty("declaration")
@@ -66,10 +66,10 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     public async Task A_second_writer_expecting_the_version_it_read_is_refused()
     {
         var type = NewFormType();
-        await DeclareAsync(type, Declaration(version: 1));
-        await DeclareAsync(type, Declaration(version: 2, expected: 1));
+        await DeclareAsync(type, Declaration(type, version: 1));
+        await DeclareAsync(type, Declaration(type, version: 2, expected: 1));
 
-        var stale = await DeclareAsync(type, Declaration(version: 99, expected: 1));
+        var stale = await DeclareAsync(type, Declaration(type, version: 99, expected: 1));
 
         stale.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var problem = await ReadAsync(stale);
@@ -82,9 +82,9 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     public async Task Replacing_without_naming_a_version_is_refused()
     {
         var type = NewFormType();
-        await DeclareAsync(type, Declaration(version: 1));
+        await DeclareAsync(type, Declaration(type, version: 1));
 
-        var blind = await DeclareAsync(type, Declaration(version: 2));
+        var blind = await DeclareAsync(type, Declaration(type, version: 2));
 
         blind.StatusCode.Should().Be(HttpStatusCode.Conflict,
             "a blind overwrite is how one consumer silently discards another's declaration");
@@ -93,7 +93,8 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     [Fact]
     public async Task Expecting_a_version_that_was_never_declared_is_refused()
     {
-        var response = await DeclareAsync(NewFormType(), Declaration(version: 2, expected: 1));
+        var type = NewFormType();
+        var response = await DeclareAsync(type, Declaration(type, version: 2, expected: 1));
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict,
             "the caller believes a declaration is in force; it is not, and creating one would " +
@@ -108,12 +109,12 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     public async Task Changing_a_shape_leaves_an_existing_projection_stale()
     {
         var type = NewFormType();
-        await DeclareAsync(type, Declaration(version: 1));
+        await DeclareAsync(type, Declaration(type, version: 1));
         await AcceptAsync(type, """{"total":1}""");
         (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)))
             .GetProperty("projected").GetBoolean().Should().BeTrue();
 
-        var response = await DeclareAsync(type, Declaration(version: 2, expected: 1, extraField: "amount"));
+        var response = await DeclareAsync(type, Declaration(type, version: 2, expected: 1, extraField: "amount"));
 
         var projection = (await ReadAsync(response)).GetProperty("projection");
         projection.GetProperty("state").GetString().Should().Be("stale",
@@ -122,6 +123,44 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
             .Be(projection.GetProperty("rawHead").GetInt64(),
                 "nothing was appended — the watermarks agree and the projection is still stale, " +
                 "which is the whole point of tracking the shape separately");
+    }
+
+    /// <summary>
+    /// Two form types projecting into one table would each rebuild it from their own documents, and a
+    /// query of either would read the other's rows. The second declaration is refused, the first stays.
+    /// </summary>
+    [Fact]
+    public async Task A_table_another_form_type_projects_into_is_refused()
+    {
+        var owner = NewFormType();
+        var other = NewFormType();
+        var table = $"shared_{owner}";
+        (await DeclareAsync(owner, Declaration(owner, version: 1, tableName: table))).Dispose();
+
+        var response = await DeclareAsync(other, Declaration(other, version: 1, tableName: table.ToUpperInvariant()));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict, "case does not make it another table on every store");
+        var problem = await ReadAsync(response);
+        problem.GetProperty("type").GetString().Should().Be("/problems/table-name-in-use");
+        problem.GetProperty("detail").GetString().Should().Contain(owner, "the caller has to be told who holds the table");
+
+        (await _client.GetAsync($"/formtypes/{other}/declaration", TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound, "nothing was stored for the refused form type");
+        (await ReadAsync(await _client.GetAsync($"/formtypes/{owner}/declaration", TestContext.Current.CancellationToken)))
+            .GetProperty("tableName").GetString().Should().Be(table);
+    }
+
+    [Fact]
+    public async Task A_table_name_in_the_engines_reserved_namespace_is_refused()
+    {
+        var type = NewFormType();
+
+        var response = await DeclareAsync(type, Declaration(type, version: 1, tableName: "FB_raw_documents"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await ReadAsync(response);
+        problem.GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+        problem.GetProperty("detail").GetString().Should().Contain("fb_");
     }
 
     [Fact]
@@ -165,7 +204,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     public async Task A_declaration_written_here_is_what_the_projection_builds()
     {
         var type = NewFormType();
-        await DeclareAsync(type, Declaration(version: 1));
+        await DeclareAsync(type, Declaration(type, version: 1));
         await AcceptAsync(type, """{"total":7}""");
 
         (await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)))
@@ -178,7 +217,11 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
 
     private static string NewFormType() => $"decw{Guid.NewGuid():N}"[..16];
 
-    private static object Declaration(int version, int? expected = null, string? extraField = null)
+    /// <summary>
+    /// A declaration into a table of the form type's own: a table belongs to one form type, so tests
+    /// that each declare a fresh type must not share one.
+    /// </summary>
+    private static object Declaration(string type, int version, int? expected = null, string? extraField = null, string? tableName = null)
     {
         var fields = new List<object> { new { name = "total", type = "integer", nullable = false } };
         if (extraField is not null)
@@ -188,7 +231,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
 
         return new
         {
-            tableName = "declared",
+            tableName = tableName ?? $"declared_{type}",
             declarationVersion = version,
             expectedDeclarationVersion = expected,
             fields,

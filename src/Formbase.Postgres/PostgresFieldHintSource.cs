@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
@@ -76,13 +77,46 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) > 0;
     }
 
-    /// <summary>Declares (or replaces) the field hints for a form type.</summary>
+    /// <summary>
+    /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
+    /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
+    /// type already projects into throws <see cref="TableNameInUseException"/>; neither stores anything.
+    /// </summary>
     public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hints);
+        DeclaredTableName.EnsureDeclarable(hints);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        // SHARE ROW EXCLUSIVE conflicts with itself and with writes, so declarations serialize here while
+        // reads of the table go on: two declarations racing for one table cannot both find it free.
+        // Names are compared in .NET, so the rule is the one every other store applies.
+        await using (var lockTable = new NpgsqlCommand(
+            $"""LOCK TABLE "{_bootstrap.Schema}".field_hints IN SHARE ROW EXCLUSIVE MODE""",
+            connection,
+            transaction))
+        {
+            await lockTable.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        var declared = new List<(FormTypeRef, string)>();
+        await using (var read = new NpgsqlCommand(
+            $"""SELECT form_type, table_name FROM "{_bootstrap.Schema}".field_hints""",
+            connection,
+            transaction))
+        await using (var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                declared.Add((FormTypeRef.Create(reader.GetString(0)), reader.GetString(1)));
+            }
+        }
+
+        DeclaredTableName.EnsureUnclaimed(hints, declared);
+
         await using var command = new NpgsqlCommand(
             $"""
             INSERT INTO "{_bootstrap.Schema}".field_hints (form_type, table_name, fields, declared_at)
@@ -92,7 +126,8 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
                     fields = EXCLUDED.fields,
                     declared_at = EXCLUDED.declared_at
             """,
-            connection);
+            connection,
+            transaction);
         command.Parameters.AddWithValue("type", hints.Type.Value);
         command.Parameters.AddWithValue("table", hints.TableName);
         command.Parameters.Add(new NpgsqlParameter("fields", NpgsqlDbType.Jsonb)
@@ -102,6 +137,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default)

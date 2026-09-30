@@ -53,6 +53,14 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 "The idempotency key already belongs to another request",
                 e.Message),
 
+            // 409: the request is fine on its own; it conflicts with another form type's declaration,
+            // and moving that one (or choosing another name) makes it acceptable.
+            TableNameInUseException e => Problem(
+                StatusCodes.Status409Conflict,
+                "table-name-in-use",
+                "Another form type already projects into this table",
+                e.Message),
+
             IntakeException e => Problem(
                 StatusCodes.Status503ServiceUnavailable,
                 "intake-failed",

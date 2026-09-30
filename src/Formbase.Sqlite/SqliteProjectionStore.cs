@@ -52,6 +52,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
 
     public async Task DropTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
+        EnsureProjectionTable(tableName);
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
@@ -65,6 +66,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
     public async Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(schema);
+        EnsureProjectionTable(schema.TableName);
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -296,5 +298,23 @@ public sealed class SqliteProjectionStore : IProjectionStore
         return columns.Count > 0
             ? columns
             : throw new InvalidOperationException($"Table '{tableName}' does not exist.");
+    }
+
+    /// <summary>
+    /// Refuses a table name in the engine's reserved namespace. This file also holds the raw documents,
+    /// the projection state and the declarations, and a rebuild drops the table it projects into — so a
+    /// declaration that got past its writer's check (one stored before the check existed) must still not
+    /// be able to replace one of them.
+    /// </summary>
+    private static void EnsureProjectionTable(string tableName)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        if (DeclaredTableName.IsReserved(tableName))
+        {
+            throw new InvalidOperationException(
+                $"'{tableName}' is in the engine's reserved '{DeclaredTableName.ReservedPrefix}' namespace; this file keeps " +
+                "Formbase's own tables under it, and a projection cannot be built or dropped there. Redeclare the " +
+                "form type under another table name.");
+        }
     }
 }

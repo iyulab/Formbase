@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
@@ -42,13 +43,38 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         _database = database;
     }
 
-    /// <summary>Declares (or replaces) the field hints for a form type.</summary>
+    /// <summary>
+    /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
+    /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
+    /// type already projects into throws <see cref="TableNameInUseException"/>; neither stores anything.
+    /// </summary>
     public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hints);
+        DeclaredTableName.EnsureDeclarable(hints);
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        // Immediate: the write lock is taken before the claim check reads, so two declarations racing for
+        // one table cannot both find it free. Names are compared in .NET rather than with NOCASE, which
+        // folds ASCII only — the rule has to be the same one every other store applies.
+        await using var transaction = connection.BeginTransaction(deferred: false);
+
+        var declared = new List<(FormTypeRef, string)>();
+        await using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = "SELECT form_type, table_name FROM fb_field_hints";
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                declared.Add((FormTypeRef.Create(reader.GetString(0)), reader.GetString(1)));
+            }
+        }
+
+        DeclaredTableName.EnsureUnclaimed(hints, declared);
+
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             INSERT INTO fb_field_hints (form_type, table_name, fields) VALUES ($type, $table, $fields)
@@ -58,6 +84,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         command.Parameters.AddWithValue("$table", hints.TableName);
         command.Parameters.AddWithValue("$fields", JsonSerializer.Serialize(hints.Fields, FieldJson));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Removes a form type's declaration, answering whether one was there.</summary>
