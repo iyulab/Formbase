@@ -26,6 +26,24 @@ public interface IRawStore
     /// </summary>
     Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Appends <paramref name="appends"/> under <paramref name="type"/> as one unit: when this returns,
+    /// every append is durable; when it throws, none of them was stored and no watermark was taken. The
+    /// new appends take consecutive watermarks in the order given, with no other append between them.
+    /// Returns one stored document per element of <paramref name="appends"/>, in the same order.
+    /// <para>
+    /// An id is still the idempotency key, but a batch is stricter than <see cref="AppendAsync"/>: an id
+    /// already held by the same request (<see cref="RawAppend.Repeats"/>) returns the document held, taking
+    /// no new watermark — so a retried batch stores nothing twice — while an id held by, or repeated
+    /// within the batch with, another request refuses the whole batch with
+    /// <see cref="Errors.IdempotencyKeyReusedException"/>. The check has to happen inside the store:
+    /// found after a commit, it would leave the rest of the batch stored under a call that failed.
+    /// <see cref="RawAppend.Distinct"/> and <see cref="RawAppend.EnsureRepeats"/> carry the rule for an
+    /// implementation. An empty batch stores nothing.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default);
+
     /// <summary>Fetches a single document by id — the "show me this document" path. Null if absent.</summary>
     Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default);
 

@@ -28,6 +28,36 @@ public sealed class InMemoryRawStore : IRawStore
     public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
         => Task.FromResult(Append(type, id, body: null, key));
 
+    public Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)
+    {
+        var distinct = RawAppend.Distinct(type, appends);
+        lock (_gate)
+        {
+            // Every check before the first write, so a refused batch leaves nothing behind.
+            foreach (var append in distinct)
+            {
+                if (_byId.TryGetValue(append.Id, out var held))
+                {
+                    append.EnsureRepeats(type, held);
+                }
+            }
+
+            var appendedAt = _clock.GetUtcNow();
+            foreach (var append in distinct)
+            {
+                if (!_byId.ContainsKey(append.Id))
+                {
+                    var stored = new StoredDocument(append.Id, type, append.Body, new Watermark(++_sequence), appendedAt, append.Key);
+                    _log.Add(stored);
+                    _byId[append.Id] = stored;
+                }
+            }
+
+            IReadOnlyList<StoredDocument> result = appends.Select(append => _byId[append.Id]).ToArray();
+            return Task.FromResult(result);
+        }
+    }
+
     private StoredDocument Append(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key)
     {
         lock (_gate)

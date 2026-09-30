@@ -19,7 +19,9 @@ namespace Formbase.Postgres;
 /// without it, a sequence assigns watermark N to a transaction that commits <i>after</i> N+1, and a
 /// projection running in that window would record a head that permanently skips the late-committing
 /// document (silent data loss). The cost is that appends do not run concurrently within one schema — an
-/// acceptable trade for an append-only log of record at this stage. Reads (get/stream/head) are lock-free.</para>
+/// acceptable trade for an append-only log of record at this stage. A batch (<see cref="AppendManyAsync"/>)
+/// holds the lock for all of its appends, which is what keeps its watermarks consecutive. Reads
+/// (get/stream/head) are lock-free.</para>
 /// <para>Schema/table creation is likewise serialized under the same lock, because <c>CREATE … IF NOT
 /// EXISTS</c> is not atomic against the catalog — two instances cold-starting against a fresh shared
 /// schema could otherwise both create it and one would fail.</para>
@@ -85,28 +87,20 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
     public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(body);
-        return AppendCoreAsync(type, id, body, key, cancellationToken);
+        return AppendCoreAsync(type, RawAppend.Document(id, body, key), cancellationToken);
     }
 
     public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
-        => AppendCoreAsync(type, id, body: null, key, cancellationToken);
+        => AppendCoreAsync(type, RawAppend.Retirement(id, key), cancellationToken);
 
-    private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key, CancellationToken cancellationToken)
+    private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await BeginSerializedAsync(connection, cancellationToken).ConfigureAwait(false);
 
-        // Serialize appends: hold a schema-scoped advisory lock through commit so watermark assignment
-        // order equals commit order. Also closes the check-then-insert race for a duplicate id.
-        await using (var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@k)", connection, transaction))
-        {
-            lockCommand.Parameters.AddWithValue("k", _bootstrap.AdvisoryLockKey);
-            await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        var existing = await ReadByIdAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
+        var existing = await ReadByIdAsync(connection, transaction, append.Id, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
             // Idempotent by id: no second row, no watermark consumed.
@@ -114,23 +108,115 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
             return existing;
         }
 
+        await using var insert = CreateInsert(connection, transaction);
+        var stored = await InsertAsync(insert, type, append, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return stored;
+    }
+
+    public async Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)
+    {
+        var distinct = RawAppend.Distinct(type, appends);
+        if (distinct.Count == 0)
+        {
+            return [];
+        }
+
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        // The lock is held for the whole batch, so the batch's watermarks are consecutive — and every
+        // other append on the schema waits for it, as it would for that many appends in a row.
+        await using var transaction = await BeginSerializedAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        // Every check before the first insert: a refused batch takes no watermark from the sequence,
+        // which does not roll back.
+        var stored = new Dictionary<DocumentId, StoredDocument>(distinct.Count);
+        await using (var select = new NpgsqlCommand(
+            $"""
+            SELECT id, form_type, body, watermark, appended_at, record_key
+            FROM "{_bootstrap.Schema}".raw_documents WHERE id = ANY(@ids)
+            """, connection, transaction))
+        {
+            select.Parameters.AddWithValue("ids", distinct.Select(append => append.Id.Value).ToArray());
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var held = ReadDocument(reader);
+                stored.Add(held.Id, held);
+            }
+        }
+
+        foreach (var append in distinct)
+        {
+            if (stored.TryGetValue(append.Id, out var held))
+            {
+                append.EnsureRepeats(type, held);
+            }
+        }
+
         var appendedAt = _clock.GetUtcNow();
-        await using var insert = new NpgsqlCommand(
+        await using var insert = CreateInsert(connection, transaction);
+        foreach (var append in distinct)
+        {
+            if (!stored.ContainsKey(append.Id))
+            {
+                stored.Add(append.Id, await InsertAsync(insert, type, append, appendedAt, cancellationToken).ConfigureAwait(false));
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return appends.Select(append => stored[append.Id]).ToArray();
+    }
+
+    /// <summary>
+    /// Opens a transaction holding the schema-scoped advisory lock through commit, so watermark assignment
+    /// order equals commit order. Also closes the check-then-insert race for a duplicate id.
+    /// </summary>
+    private async Task<NpgsqlTransaction> BeginSerializedAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var lockCommand = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@k)", connection, transaction);
+            lockCommand.Parameters.AddWithValue("k", _bootstrap.AdvisoryLockKey);
+            await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return transaction;
+        }
+        catch
+        {
+            await transaction.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private NpgsqlCommand CreateInsert(NpgsqlConnection connection, NpgsqlTransaction transaction)
+    {
+        var insert = new NpgsqlCommand(
             $"""
             INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key)
             VALUES (@id, @type, @body, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), @at, @key)
             RETURNING watermark
             """, connection, transaction);
-        insert.Parameters.AddWithValue("id", id.Value);
-        insert.Parameters.AddWithValue("type", type.Value);
-        insert.Parameters.Add(new NpgsqlParameter("body", NpgsqlDbType.Jsonb) { Value = (object?)body?.ToJsonString() ?? DBNull.Value });
-        insert.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = appendedAt });
-        insert.Parameters.Add(new NpgsqlParameter("key", NpgsqlDbType.Text) { Value = (object?)key?.Value ?? DBNull.Value });
+        insert.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid));
+        insert.Parameters.Add(new NpgsqlParameter("type", NpgsqlDbType.Text));
+        insert.Parameters.Add(new NpgsqlParameter("body", NpgsqlDbType.Jsonb));
+        insert.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz));
+        insert.Parameters.Add(new NpgsqlParameter("key", NpgsqlDbType.Text));
+        return insert;
+    }
+
+    private static async Task<StoredDocument> InsertAsync(
+        NpgsqlCommand insert, FormTypeRef type, RawAppend append, DateTimeOffset appendedAt, CancellationToken cancellationToken)
+    {
+        insert.Parameters["id"].Value = append.Id.Value;
+        insert.Parameters["type"].Value = type.Value;
+        insert.Parameters["body"].Value = (object?)append.Body?.ToJsonString() ?? DBNull.Value;
+        insert.Parameters["at"].Value = appendedAt;
+        insert.Parameters["key"].Value = (object?)append.Key?.Value ?? DBNull.Value;
 
         var watermark = (long)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return new StoredDocument(id, type, body, new Watermark(watermark), appendedAt, key);
+        return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), appendedAt, append.Key);
     }
 
     public async Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)

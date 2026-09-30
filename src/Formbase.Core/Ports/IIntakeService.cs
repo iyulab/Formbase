@@ -38,4 +38,19 @@ public interface IIntakeService
         RecordKey recordKey,
         DocumentId? idempotencyId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Accepts <paramref name="documents"/> — documents and retirements — of one form type as a single
+    /// unit, in one durable write: when this returns, all of them are durable; when it throws, none is.
+    /// Each element means what it would sent alone through <see cref="AcceptAsync"/> or
+    /// <see cref="RetireAsync"/>, and they are appended in the order given. Idempotency holds per element,
+    /// so a retried batch stores nothing twice: an idempotency key already holding the same request is a
+    /// retry, and a key holding another request refuses the whole batch with
+    /// <see cref="Errors.IdempotencyKeyReusedException"/>. Returns the id each element was stored under,
+    /// in the order given.
+    /// </summary>
+    Task<IReadOnlyList<DocumentId>> AcceptManyAsync(
+        FormTypeRef type,
+        IReadOnlyList<IntakeDocument> documents,
+        CancellationToken cancellationToken = default);
 }

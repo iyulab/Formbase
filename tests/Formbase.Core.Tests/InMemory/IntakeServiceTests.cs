@@ -117,12 +117,93 @@ public class IntakeServiceTests
         await act.Should().ThrowAsync<IntakeException>();
     }
 
+    [Fact]
+    public async Task AcceptMany_stores_documents_and_retirements_and_returns_their_ids_in_order()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store);
+        var ct = TestContext.Current.CancellationToken;
+        var key = RecordKey.Create("lot-1");
+        var supplied = DocumentId.New();
+
+        var ids = await intake.AcceptManyAsync(Qc,
+        [
+            IntakeDocument.Accept(Body("""{"n":1}"""), key),
+            IntakeDocument.Accept(Body("""{"n":2}"""), idempotencyId: supplied),
+            IntakeDocument.Retire(key),
+        ], ct);
+
+        ids.Should().HaveCount(3);
+        ids[1].Should().Be(supplied, "a supplied idempotency key is the id the document is stored under");
+        var stored = new List<StoredDocument>();
+        foreach (var id in ids)
+        {
+            stored.Add((await store.GetAsync(id, ct))!);
+        }
+
+        stored.Select(s => s.Watermark.Value).Should().Equal(1, 2, 3);
+        stored[0].Key.Should().Be(key);
+        stored[2].IsRetirement.Should().BeTrue();
+        stored[2].Key.Should().Be(key);
+    }
+
+    [Fact]
+    public async Task AcceptMany_retried_with_the_same_idempotency_ids_stores_nothing_twice()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store);
+        var ct = TestContext.Current.CancellationToken;
+        IntakeDocument[] batch =
+        [
+            IntakeDocument.Accept(Body("""{"n":1}"""), idempotencyId: DocumentId.New()),
+            IntakeDocument.Accept(Body("""{"n":2}"""), idempotencyId: DocumentId.New()),
+        ];
+
+        var first = await intake.AcceptManyAsync(Qc, batch, ct);
+        var retry = await intake.AcceptManyAsync(Qc, batch, ct);
+
+        retry.Should().Equal(first);
+        (await store.HeadAsync(Qc, ct)).Should().Be(new Watermark(2));
+    }
+
+    [Fact]
+    public async Task AcceptMany_refuses_a_batch_reusing_a_key_and_stores_none_of_it()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store);
+        var ct = TestContext.Current.CancellationToken;
+        var key = DocumentId.New();
+        await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: ct);
+
+        var act = () => intake.AcceptManyAsync(Qc,
+        [
+            IntakeDocument.Accept(Body("""{"n":2}""")),
+            IntakeDocument.Accept(Body("""{"n":3}"""), idempotencyId: key),
+        ], ct);
+
+        await act.Should().ThrowAsync<IdempotencyKeyReusedException>();
+        (await store.HeadAsync(Qc, ct)).Should().Be(new Watermark(1));
+    }
+
+    [Fact]
+    public async Task AcceptMany_wraps_a_low_level_store_failure_as_IntakeException()
+    {
+        var intake = new IntakeService(new ThrowingRawStore());
+
+        var act = () => intake.AcceptManyAsync(Qc, [IntakeDocument.Accept(Body("""{"n":1}"""))]);
+
+        await act.Should().ThrowAsync<IntakeException>();
+    }
+
     private sealed class ThrowingRawStore : IRawStore
     {
         public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("backing store down");
 
         public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("backing store down");
+
+        public Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("backing store down");
 
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)

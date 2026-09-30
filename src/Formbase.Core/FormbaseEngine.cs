@@ -50,6 +50,14 @@ public sealed class FormbaseEngine
     public Task<DocumentId> RetireAsync(FormTypeRef type, RecordKey recordKey, DocumentId? idempotencyId = null, CancellationToken cancellationToken = default)
         => _intake.RetireAsync(type, recordKey, idempotencyId, cancellationToken);
 
+    /// <summary>
+    /// Accepts a batch of one form type's documents and retirements in one durable write — all or none
+    /// (see <see cref="IIntakeService.AcceptManyAsync"/>). The way to fill a store: each accept on its own
+    /// waits for its own durable commit.
+    /// </summary>
+    public Task<IReadOnlyList<DocumentId>> AcceptManyAsync(FormTypeRef type, IReadOnlyList<IntakeDocument> documents, CancellationToken cancellationToken = default)
+        => _intake.AcceptManyAsync(type, documents, cancellationToken);
+
     /// <summary>Reads a single document by id — the human's question. Always available.</summary>
     public Task<StoredDocument?> GetDocumentAsync(DocumentId id, CancellationToken cancellationToken = default)
         => _rawStore.GetAsync(id, cancellationToken);

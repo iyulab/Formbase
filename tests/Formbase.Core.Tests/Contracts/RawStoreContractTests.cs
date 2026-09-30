@@ -1,3 +1,4 @@
+using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 
@@ -287,5 +288,193 @@ public abstract class RawStoreContractTests
 
         fetched!.IsRetirement.Should().BeFalse();
         fetched.Body!.Root.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+    }
+
+    // ---- AppendManyAsync: a batch is one unit — all of it durable, or none of it ----
+
+    private static RawAppend Doc(string json, RecordKey? key = null) =>
+        RawAppend.Document(DocumentId.New(), Body(json), key);
+
+    [Fact]
+    public async Task AppendMany_takes_consecutive_watermarks_in_the_order_given()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var before = await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":0}"""), cancellationToken: ct);
+        var batch = Enumerable.Range(1, 5).Select(i => Doc($$"""{"n":{{i}}}""")).ToArray();
+
+        var stored = await store.AppendManyAsync(Qc, batch, ct);
+
+        stored.Select(s => s.Id).Should().Equal(batch.Select(a => a.Id), "results come back in the order given");
+        stored.Select(s => s.Watermark.Value).Should().Equal(
+            Enumerable.Range(1, 5).Select(i => before.Watermark.Value + i),
+            "a batch's new appends are consecutive, after what came before");
+        stored.Should().OnlyContain(s => s.Type == Qc);
+
+        var streamed = new List<StoredDocument>();
+        await foreach (var d in store.StreamAsync(Qc, Watermark.Zero, ct))
+        {
+            streamed.Add(d);
+        }
+
+        streamed.Select(d => d.Id).Should().Equal(batch.Select(a => a.Id));
+        streamed.Select(d => d.Body!.Root.GetProperty("n").GetInt32()).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public async Task AppendMany_stores_record_keys_and_retirements()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var document = Doc("""{"v":1}""", KeyA);
+        var retirement = RawAppend.Retirement(DocumentId.New(), KeyA);
+
+        await store.AppendManyAsync(Qc, [document, retirement], ct);
+
+        var first = await store.GetAsync(document.Id, ct);
+        var second = await store.GetAsync(retirement.Id, ct);
+        first!.Key.Should().Be(KeyA);
+        first.IsRetirement.Should().BeFalse();
+        second!.Key.Should().Be(KeyA);
+        second.IsRetirement.Should().BeTrue();
+        (second.Watermark > first.Watermark).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AppendMany_of_an_empty_batch_stores_nothing()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+
+        var stored = await store.AppendManyAsync(Qc, [], ct);
+
+        stored.Should().BeEmpty();
+        (await store.HeadAsync(Qc, ct)).Should().Be(Watermark.Zero);
+    }
+
+    /// <summary>
+    /// A batch cut off part way and sent again: what was already stored comes back as it was, taking no new
+    /// watermark, and only the rest is appended. Bodies are compared as JSON values, so a store that gives
+    /// back its own normalized form still recognizes the retry.
+    /// </summary>
+    [Fact]
+    public async Task AppendMany_retried_returns_what_is_held_and_appends_only_the_rest()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var held = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"a":1,"b":2}"""), KeyA, ct);
+        var retry = RawAppend.Document(held.Id, Body("""{ "b": 2, "a": 1 }"""), KeyA);
+        var fresh = Doc("""{"n":2}""");
+
+        var stored = await store.AppendManyAsync(Qc, [retry, fresh], ct);
+
+        stored[0].Watermark.Should().Be(held.Watermark, "a retried append is the one held, not a second one");
+        stored[1].Watermark.Should().Be(new Watermark(held.Watermark.Value + 1), "the held one takes no new watermark");
+        (await store.HeadAsync(Qc, ct)).Should().Be(stored[1].Watermark);
+    }
+
+    [Fact]
+    public async Task AppendMany_with_an_id_repeated_by_the_same_request_stores_it_once()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var once = Doc("""{"n":1}""");
+        var again = RawAppend.Document(once.Id, Body("""{"n":1}"""));
+
+        var stored = await store.AppendManyAsync(Qc, [once, again], ct);
+
+        stored.Should().HaveCount(2);
+        stored[1].Should().Be(stored[0]);
+        (await store.HeadAsync(Qc, ct)).Should().Be(stored[0].Watermark);
+    }
+
+    /// <summary>
+    /// The one refusal a batch has — a key reused for another request — must leave nothing behind: found
+    /// only after a commit, it would report a failure for a batch that was mostly stored, and a caller that
+    /// retried without idempotency keys would store that part twice.
+    /// </summary>
+    [Fact]
+    public async Task AppendMany_refuses_the_whole_batch_when_a_held_id_carries_another_request()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var held = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: ct);
+        var before = Doc("""{"n":2}""");
+        var reused = RawAppend.Document(held.Id, Body("""{"n":999}"""));
+        var after = Doc("""{"n":3}""");
+
+        var act = () => store.AppendManyAsync(Qc, [before, reused, after], ct);
+
+        var refusal = (await act.Should().ThrowAsync<IdempotencyKeyReusedException>()).Which;
+        refusal.DocumentId.Should().Be(held.Id);
+        (await store.GetAsync(before.Id, ct)).Should().BeNull("a refused batch stores none of its documents");
+        (await store.GetAsync(after.Id, ct)).Should().BeNull();
+        (await store.HeadAsync(Qc, ct)).Should().Be(held.Watermark);
+
+        var next = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":4}"""), cancellationToken: ct);
+        next.Watermark.Should().Be(new Watermark(held.Watermark.Value + 1), "a refused batch takes no watermark");
+    }
+
+    [Fact]
+    public async Task AppendMany_refuses_the_whole_batch_when_a_held_id_is_of_another_form_type()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var held = await store.AppendAsync(Work, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: ct);
+        var fresh = Doc("""{"n":2}""");
+
+        var act = () => store.AppendManyAsync(Qc, [fresh, RawAppend.Document(held.Id, Body("""{"n":1}"""))], ct);
+
+        var refusal = (await act.Should().ThrowAsync<IdempotencyKeyReusedException>()).Which;
+        refusal.RequestedType.Should().Be(Qc);
+        refusal.StoredType.Should().Be(Work);
+        (await store.GetAsync(fresh.Id, ct)).Should().BeNull();
+        (await store.HeadAsync(Qc, ct)).Should().Be(Watermark.Zero);
+    }
+
+    [Fact]
+    public async Task AppendMany_refuses_the_whole_batch_when_an_id_is_repeated_with_another_request()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var fresh = Doc("""{"n":1}""");
+        var first = Doc("""{"n":2}""");
+        var retirement = RawAppend.Retirement(first.Id, KeyA);
+
+        var act = () => store.AppendManyAsync(Qc, [fresh, first, retirement], ct);
+
+        await act.Should().ThrowAsync<IdempotencyKeyReusedException>();
+        (await store.GetAsync(fresh.Id, ct)).Should().BeNull();
+        (await store.HeadAsync(Qc, ct)).Should().Be(Watermark.Zero);
+    }
+
+    /// <summary>
+    /// Concurrent batches do not interleave: each one's watermarks stay consecutive, whatever else is
+    /// appending at the same time.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_batches_each_keep_their_watermarks_consecutive()
+    {
+        var store = CreateStore();
+        const int batches = 6;
+        const int size = 10;
+
+        var batchRuns = Enumerable.Range(0, batches)
+            .Select(b => store.AppendManyAsync(Qc, Enumerable.Range(0, size).Select(i => Doc($$"""{"b":{{b}},"i":{{i}}}""")).ToArray()))
+            .ToArray();
+        var singleRuns = Enumerable.Range(0, batches)
+            .Select(i => store.AppendAsync(Qc, DocumentId.New(), Body($$"""{"single":{{i}}}""")))
+            .ToArray();
+        var results = await Task.WhenAll(batchRuns);
+        var singles = await Task.WhenAll(singleRuns);
+
+        foreach (var batch in results)
+        {
+            var watermarks = batch.Select(s => s.Watermark.Value).ToArray();
+            watermarks.Should().Equal(Enumerable.Range(0, size).Select(i => watermarks[0] + i), "no other append lands inside a batch");
+        }
+
+        results.SelectMany(r => r).Concat(singles).Select(s => s.Watermark).Should().OnlyHaveUniqueItems();
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Value.Should().Be(batches * size + batches);
     }
 }

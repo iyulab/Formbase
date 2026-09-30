@@ -19,7 +19,8 @@ namespace Formbase.Sqlite;
 /// Delete the file to start over — the projection state goes with it.</para>
 /// <para><b>Appends are serialized by the file.</b> Each append runs in an immediate transaction, which
 /// takes SQLite's write lock before reading, so watermark order is commit order across every connection
-/// and process using the file, and the check for an existing id cannot race the insert.</para>
+/// and process using the file, and the check for an existing id cannot race the insert. A batch
+/// (<see cref="AppendManyAsync"/>) runs in one such transaction, so it commits — and syncs to disk — once.</para>
 /// <para><b>A file from an earlier version is upgraded in place</b> on first use: the record-key and
 /// retirement columns are added, and every document already in it reads back as a record of its own.</para>
 /// </remarks>
@@ -63,13 +64,13 @@ public sealed class SqliteRawStore : IRawStore
     public Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(body);
-        return AppendCoreAsync(type, id, body, key, cancellationToken);
+        return AppendCoreAsync(type, RawAppend.Document(id, body, key), cancellationToken);
     }
 
     public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
-        => AppendCoreAsync(type, id, body: null, key, cancellationToken);
+        => AppendCoreAsync(type, RawAppend.Retirement(id, key), cancellationToken);
 
-    private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key, CancellationToken cancellationToken)
+    private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         // Immediate, not deferred: the write lock is taken before the id check reads, so a concurrent append
@@ -77,15 +78,64 @@ public sealed class SqliteRawStore : IRawStore
         // underneath; the async overload has no way to ask for an immediate transaction.)
         await using var transaction = connection.BeginTransaction(deferred: false);
 
-        var existing = await ReadByIdAsync(connection, transaction, id, cancellationToken).ConfigureAwait(false);
+        await using var select = CreateSelectById(connection, transaction);
+        var existing = await ReadByIdAsync(select, append.Id, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
         {
             // Idempotent by id: no second row, no watermark consumed.
             return existing;
         }
 
+        await using var insert = CreateInsert(connection, transaction);
+        var stored = await InsertAsync(insert, type, append, _clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return stored;
+    }
+
+    public async Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)
+    {
+        var distinct = RawAppend.Distinct(type, appends);
+        if (distinct.Count == 0)
+        {
+            return [];
+        }
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        // One immediate transaction for the batch: one write lock, one commit — and so one sync to disk,
+        // which is what an append on its own pays for every document.
+        await using var transaction = connection.BeginTransaction(deferred: false);
+
+        // Every check before the first write; a refusal disposes the transaction, which rolls it back.
+        var stored = new Dictionary<DocumentId, StoredDocument>(distinct.Count);
+        await using var select = CreateSelectById(connection, transaction);
+        foreach (var append in distinct)
+        {
+            if (await ReadByIdAsync(select, append.Id, cancellationToken).ConfigureAwait(false) is { } held)
+            {
+                append.EnsureRepeats(type, held);
+                stored.Add(append.Id, held);
+            }
+        }
+
         var appendedAt = _clock.GetUtcNow();
-        await using var insert = connection.CreateCommand();
+        await using var insert = CreateInsert(connection, transaction);
+        foreach (var append in distinct)
+        {
+            if (!stored.ContainsKey(append.Id))
+            {
+                stored.Add(append.Id, await InsertAsync(insert, type, append, appendedAt, cancellationToken).ConfigureAwait(false));
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return appends.Select(append => stored[append.Id]).ToArray();
+    }
+
+    // One statement per document, reused: a multi-row INSERT would run into SQLite's bound-parameter
+    // limit on a large batch, and the statement count is not what a batch saves.
+    private static SqliteCommand CreateInsert(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        var insert = connection.CreateCommand();
         insert.Transaction = transaction;
         insert.CommandText =
             """
@@ -93,23 +143,33 @@ public sealed class SqliteRawStore : IRawStore
             VALUES ($id, $type, $body, $at, $key, $retired)
             RETURNING watermark
             """;
-        insert.Parameters.AddWithValue("$id", id.Value.ToString("D"));
-        insert.Parameters.AddWithValue("$type", type.Value);
-        insert.Parameters.AddWithValue("$body", body?.ToJsonString() ?? RetiredBodyPlaceholder);
-        insert.Parameters.AddWithValue("$at", Format(appendedAt));
-        insert.Parameters.AddWithValue("$key", (object?)key?.Value ?? DBNull.Value);
-        insert.Parameters.AddWithValue("$retired", body is null ? 1 : 0);
+        foreach (var name in new[] { "$id", "$type", "$body", "$at", "$key", "$retired" })
+        {
+            insert.Parameters.Add(new SqliteParameter { ParameterName = name });
+        }
+
+        return insert;
+    }
+
+    private static async Task<StoredDocument> InsertAsync(
+        SqliteCommand insert, FormTypeRef type, RawAppend append, DateTimeOffset appendedAt, CancellationToken cancellationToken)
+    {
+        insert.Parameters["$id"].Value = append.Id.Value.ToString("D");
+        insert.Parameters["$type"].Value = type.Value;
+        insert.Parameters["$body"].Value = append.Body?.ToJsonString() ?? RetiredBodyPlaceholder;
+        insert.Parameters["$at"].Value = Format(appendedAt);
+        insert.Parameters["$key"].Value = (object?)append.Key?.Value ?? DBNull.Value;
+        insert.Parameters["$retired"].Value = append.IsRetirement ? 1 : 0;
 
         var watermark = (long)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-        return new StoredDocument(id, type, body, new Watermark(watermark), ReadInstant(Format(appendedAt)), key);
+        return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), ReadInstant(Format(appendedAt)), append.Key);
     }
 
     public async Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
-        return await ReadByIdAsync(connection, transaction: null, id, cancellationToken).ConfigureAwait(false);
+        await using var select = CreateSelectById(connection, transaction: null);
+        return await ReadByIdAsync(select, id, cancellationToken).ConfigureAwait(false);
     }
 
     public async IAsyncEnumerable<StoredDocument> StreamAsync(FormTypeRef type, Watermark after, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -138,15 +198,19 @@ public sealed class SqliteRawStore : IRawStore
         return new Watermark(head);
     }
 
-    private static async Task<StoredDocument?> ReadByIdAsync(
-        SqliteConnection connection, SqliteTransaction? transaction, DocumentId id, CancellationToken cancellationToken)
+    private static SqliteCommand CreateSelectById(SqliteConnection connection, SqliteTransaction? transaction)
     {
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = $"{SelectColumns} WHERE id = $id";
-        command.Parameters.AddWithValue("$id", id.Value.ToString("D"));
+        var select = connection.CreateCommand();
+        select.Transaction = transaction;
+        select.CommandText = $"{SelectColumns} WHERE id = $id";
+        select.Parameters.Add(new SqliteParameter { ParameterName = "$id" });
+        return select;
+    }
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+    private static async Task<StoredDocument?> ReadByIdAsync(SqliteCommand select, DocumentId id, CancellationToken cancellationToken)
+    {
+        select.Parameters["$id"].Value = id.Value.ToString("D");
+        await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? ReadDocument(reader) : null;
     }
 

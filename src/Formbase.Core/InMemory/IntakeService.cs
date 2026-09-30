@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -26,9 +25,7 @@ public sealed class IntakeService : IIntakeService
         ArgumentNullException.ThrowIfNull(body);
         return AppendAsync(
             type,
-            body,
-            recordKey,
-            idempotencyId ?? DocumentId.New(),
+            RawAppend.Document(idempotencyId ?? DocumentId.New(), body, recordKey),
             id => _rawStore.AppendAsync(type, id, body, recordKey, cancellationToken),
             $"Failed to accept document for form type '{type}'.");
     }
@@ -40,24 +37,52 @@ public sealed class IntakeService : IIntakeService
         CancellationToken cancellationToken = default)
         => AppendAsync(
             type,
-            body: null,
-            recordKey,
-            idempotencyId ?? DocumentId.New(),
+            RawAppend.Retirement(idempotencyId ?? DocumentId.New(), recordKey),
             id => _rawStore.RetireAsync(type, id, recordKey, cancellationToken),
             $"Failed to retire record '{recordKey}' of form type '{type}'.");
 
+    public async Task<IReadOnlyList<DocumentId>> AcceptManyAsync(
+        FormTypeRef type,
+        IReadOnlyList<IntakeDocument> documents,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+
+        var appends = new RawAppend[documents.Count];
+        for (var i = 0; i < documents.Count; i++)
+        {
+            var document = documents[i];
+            ArgumentNullException.ThrowIfNull(document, nameof(documents));
+            var id = document.IdempotencyId ?? DocumentId.New();
+            appends[i] = document.Body is { } body
+                ? RawAppend.Document(id, body, document.RecordKey)
+                : RawAppend.Retirement(id, (RecordKey)document.RecordKey!); // a retirement always carries its key
+        }
+
+        IReadOnlyList<StoredDocument> stored;
+        try
+        {
+            // The store refuses a reused key before anything is written, so a refusal leaves the batch unstored.
+            stored = await _rawStore.AppendManyAsync(type, appends, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
+        {
+            throw new IntakeException($"Failed to accept {documents.Count} documents for form type '{type}'.", ex);
+        }
+
+        return stored.Select(document => document.Id).ToArray();
+    }
+
     private static async Task<DocumentId> AppendAsync(
         FormTypeRef type,
-        DocumentBody? body,
-        RecordKey? recordKey,
-        DocumentId id,
+        RawAppend request,
         Func<DocumentId, Task<StoredDocument>> append,
         string failure)
     {
         StoredDocument stored;
         try
         {
-            stored = await append(id).ConfigureAwait(false);
+            stored = await append(request.Id).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
         {
@@ -66,24 +91,8 @@ public sealed class IntakeService : IIntakeService
 
         // The store hands back what it already holds for a known id. The same request is a retry;
         // anything else is a second request wearing the first one's key, and accepting it would report a
-        // document that was never stored while dropping the one that was sent. Bodies are compared as
-        // JSON values, not text: a durable store gives back its own normalized form (property order,
-        // whitespace), which a genuine retry must still match.
-        if (!IsSameRequest(stored, type, body, recordKey))
-        {
-            throw new IdempotencyKeyReusedException(id, type, stored.Type);
-        }
-
+        // document that was never stored while dropping the one that was sent.
+        request.EnsureRepeats(type, stored);
         return stored.Id;
     }
-
-    private static bool IsSameRequest(StoredDocument stored, FormTypeRef type, DocumentBody? body, RecordKey? recordKey) =>
-        stored.Type == type
-        && stored.Key == recordKey
-        && (stored.Body, body) switch
-        {
-            (null, null) => true,
-            ({ } held, { } sent) => JsonElement.DeepEquals(held.Root, sent.Root),
-            _ => false,
-        };
 }

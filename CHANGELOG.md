@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+Breaking for code that implements `IRawStore` or `IIntakeService`.
+
+### Added
+
+- **Accepting a batch in one durable write.** `FormbaseEngine.AcceptManyAsync(type, documents)` takes
+  documents and retirements of one form type (`IntakeDocument.Accept`, `IntakeDocument.Retire`) and stores
+  them as one unit: when it returns all of them are durable, when it throws none is. Each accept on its own
+  waits for its own commit — on SQLite, a sync to disk per document — so filling a store one document at a
+  time is bound by that wait; a batch pays it once (10,000 documents into a SQLite file: about 13 times
+  faster). The batch's documents take consecutive watermarks in the order given. Idempotency keys work per
+  document, so a batch cut off and sent again stores nothing twice; a key already holding another request
+  refuses the whole batch with `IdempotencyKeyReusedException`, before anything is written.
+
+### Changed
+
+- **Breaking:** `IRawStore.AppendManyAsync(type, appends)` is new — a raw-store adapter implements it,
+  and must store the batch atomically, which is why there is no default implementation that appends one
+  at a time. `RawAppend.Distinct` and `RawAppend.EnsureRepeats` carry the idempotency rule an adapter
+  checks before writing. `IIntakeService.AcceptManyAsync` is new as well.
+
 ## 0.14.1
 
 Pairs with MorphDB `0.14.x`. Fixes for durable declarations: a declaration can no longer destroy the raw
