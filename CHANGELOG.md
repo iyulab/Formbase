@@ -30,9 +30,15 @@
   declared relations were gone after a restart. Both stores now keep `DeclarationVersion` and
   `Relations`; a table written by an earlier version is upgraded in place on first use, and the
   declarations in it read back as version 1 with no relations — what they were stored as.
+  Versions and relations declared before this release were never stored, so an upgraded store reads
+  those declarations as version 1 with no relations until they are declared again (on the host, send
+  `expectedDeclarationVersion: 1` for that one replacement).
 - A form type stored as JSON — the target of a bound field inside a durable declaration — read back as
-  the empty default, because `FormTypeRef` could be written but not read. It now reads back as the form
-  type it was, including from declarations already on disk.
+  the empty default, because `FormTypeRef` could be written but not read. On the SQLite and PostgreSQL
+  stores a form type with a bound field (`Snapshot` or `Reference` with a `Target`) therefore could not be
+  projected at all: resolving the target's table failed with "Value must be set". It now reads back as
+  the form type it was, including from declarations already on disk, so those form types project
+  without being declared again.
 
 ### Changed
 

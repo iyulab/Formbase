@@ -1,5 +1,6 @@
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
+using Formbase.Core.Projection;
 using Formbase.Core.Primitives;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
@@ -17,6 +18,47 @@ namespace Formbase.Core.Tests.DependencyInjection;
 public sealed class SqliteDiTests : IDisposable
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"formbase-di-{Guid.NewGuid():N}.db");
+
+    /// <summary>
+    /// A bound field names the form type it binds to, and the durable declaration store used to read
+    /// that form type back empty — so a form type with a bound field could not be projected at all on a
+    /// single file ("Value must be set"), and its declared version and relations came back as 1 and none.
+    /// </summary>
+    [Fact]
+    public async Task A_form_type_with_a_bound_field_and_a_relation_projects_on_one_file()
+    {
+        var services = new ServiceCollection();
+        services.AddFormbaseCore();
+        services.AddSqliteRawStore($"Data Source={_path}");
+        services.AddSqliteProjection($"Data Source={_path}");
+
+        await using var provider = services.BuildServiceProvider();
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        var hints = provider.GetRequiredService<SqliteFieldHintSource>();
+        var ct = TestContext.Current.CancellationToken;
+
+        var equipment = FormTypeRef.Create("equipment");
+        var inspection = FormTypeRef.Create("inspection-log");
+        await engine.AcceptAsync(equipment, DocumentBody.Parse("""{"code":"EQ-1","name":"Pump"}"""), cancellationToken: ct);
+        await engine.AcceptAsync(inspection, DocumentBody.Parse("""{"equipment":"EQ-1","result":"ok"}"""), cancellationToken: ct);
+        await hints.DeclareAsync(new FormTypeHints(equipment, "equipment_rows",
+            [new FieldHint("code", ColumnType.Text), new FieldHint("name", ColumnType.Text)]), ct);
+        await hints.DeclareAsync(new FormTypeHints(inspection, "inspection_rows",
+            [
+                new FieldHint("equipment", ColumnType.Text, Binding: FieldBinding.Snapshot, Target: new EntityRef(equipment, "code")),
+                new FieldHint("result", ColumnType.Text),
+            ],
+            [new RelationHint("equipment", RelationKind.Reference, equipment, "code")],
+            DeclarationVersion: 2), ct);
+
+        await engine.ProjectAsync(equipment, ct);
+        await engine.ProjectAsync(inspection, ct);
+
+        var rows = await engine.QueryAsync(inspection, new QuerySpec(), ct);
+        rows.Rows.Should().ContainSingle().Which["equipment"].Should().Be("EQ-1");
+        var status = await engine.GetProjectionStatusAsync(inspection, ct);
+        status.State.Should().Be(ProjectionState.Projected, "the declaration read back is the one the projection was built from");
+    }
 
     [Fact]
     public async Task AddSqliteProjection_resolves_an_engine_that_projects_queries_and_counts_into_one_file()
