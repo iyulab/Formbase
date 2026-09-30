@@ -11,7 +11,8 @@ Breaking for code that implements `IRawStore` or `IIntakeService`.
   them as one unit: when it returns all of them are durable, when it throws none is. Each accept on its own
   waits for its own commit — on SQLite, a sync to disk per document — so filling a store one document at a
   time is bound by that wait; a batch pays it once (10,000 documents into a SQLite file: about 13 times
-  faster). The batch's documents take consecutive watermarks in the order given. Idempotency keys work per
+  faster). On PostgreSQL a batch's inserts also travel together, a thousand to a round trip, so a database
+  across a network is not waited on once per document. The batch's documents take consecutive watermarks in the order given. Idempotency keys work per
   document, so a batch cut off and sent again stores nothing twice; a key already holding another request
   refuses the whole batch with `IdempotencyKeyReusedException`, before anything is written.
 

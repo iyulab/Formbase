@@ -32,6 +32,9 @@ namespace Formbase.Postgres;
 /// </remarks>
 public sealed class PostgresRawStore : IRawStore, IDisposable
 {
+    /// <summary>How many of a batch's inserts travel in one round trip.</summary>
+    internal const int InsertBatchSize = 1000;
+
     private readonly NpgsqlDataSource _dataSource;
     private readonly PostgresSchemaBootstrap _bootstrap;
     private readonly TimeProvider _clock;
@@ -156,12 +159,12 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         }
 
         var appendedAt = _clock.GetUtcNow();
-        await using var insert = CreateInsert(connection, transaction);
-        foreach (var append in distinct)
+        var pending = distinct.Where(append => !stored.ContainsKey(append.Id)).ToArray();
+        foreach (var chunk in pending.Chunk(InsertBatchSize))
         {
-            if (!stored.ContainsKey(append.Id))
+            foreach (var inserted in await InsertBatchAsync(connection, transaction, type, chunk, appendedAt, cancellationToken).ConfigureAwait(false))
             {
-                stored.Add(append.Id, await InsertAsync(insert, type, append, appendedAt, cancellationToken).ConfigureAwait(false));
+                stored.Add(inserted.Id, inserted);
             }
         }
 
@@ -217,6 +220,55 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
 
         var watermark = (long)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
         return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), appendedAt, append.Key);
+    }
+
+    /// <summary>
+    /// Inserts a batch's appends in one round trip rather than one each — on a database across a network
+    /// the per-row wait, not the write, is what a batch would otherwise spend its time on. The statements
+    /// run in order in the caller's transaction, under its lock, so the watermarks stay consecutive and in
+    /// the order given. A batch is sent in chunks of <see cref="InsertBatchSize"/>, which bounds what is
+    /// buffered on either side of the connection at once.
+    /// </summary>
+    private async Task<StoredDocument[]> InsertBatchAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, FormTypeRef type, RawAppend[] appends,
+        DateTimeOffset appendedAt, CancellationToken cancellationToken)
+    {
+        await using var batch = new NpgsqlBatch(connection, transaction);
+        foreach (var append in appends)
+        {
+            batch.BatchCommands.Add(new NpgsqlBatchCommand(
+                $"""
+                INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key)
+                VALUES ($1, $2, $3, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), $4, $5)
+                RETURNING watermark
+                """)
+            {
+                Parameters =
+                {
+                    new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Uuid, Value = append.Id.Value },
+                    new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = type.Value },
+                    new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Jsonb, Value = (object?)append.Body?.ToJsonString() ?? DBNull.Value },
+                    new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.TimestampTz, Value = appendedAt },
+                    new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = (object?)append.Key?.Value ?? DBNull.Value },
+                },
+            });
+        }
+
+        var inserted = new StoredDocument[appends.Length];
+        await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        for (var i = 0; i < appends.Length; i++)
+        {
+            if (i > 0)
+            {
+                await reader.NextResultAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var append = appends[i];
+            inserted[i] = new StoredDocument(append.Id, type, append.Body, new Watermark(reader.GetInt64(0)), appendedAt, append.Key);
+        }
+
+        return inserted;
     }
 
     public async Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)

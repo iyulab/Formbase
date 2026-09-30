@@ -321,6 +321,39 @@ public abstract class RawStoreContractTests
         streamed.Select(d => d.Body!.Root.GetProperty("n").GetInt32()).Should().Equal(1, 2, 3, 4, 5);
     }
 
+    /// <summary>
+    /// A batch larger than an adapter sends in one go, with already-held ids scattered through it: every
+    /// new append still takes the next watermark in the order given, and the held ones take none.
+    /// </summary>
+    [Fact]
+    public async Task AppendMany_of_a_large_batch_keeps_the_order_given_and_consecutive_watermarks()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var batch = Enumerable.Range(0, 2_500).Select(i => Doc($$"""{"n":{{i}}}""", i % 7 == 0 ? KeyA : null)).ToList();
+        batch.Add(RawAppend.Retirement(DocumentId.New(), KeyA));
+        var heldAt = new[] { 0, 999, 1_000, 1_777 };
+        var held = new Dictionary<DocumentId, StoredDocument>();
+        foreach (var i in heldAt)
+        {
+            held.Add(batch[i].Id, await store.AppendAsync(Qc, batch[i].Id, batch[i].Body!, batch[i].Key, ct));
+        }
+
+        var head = await store.HeadAsync(Qc, ct);
+
+        var stored = await store.AppendManyAsync(Qc, batch, ct);
+
+        stored.Select(s => s.Id).Should().Equal(batch.Select(a => a.Id));
+        stored.Where(s => held.ContainsKey(s.Id)).Select(s => s.Watermark).Should().Equal(
+            held.Values.Select(h => h.Watermark), "held appends come back as they were, taking no new watermark");
+        stored.Where(s => !held.ContainsKey(s.Id)).Select(s => s.Watermark.Value).Should().Equal(
+            Enumerable.Range(1, batch.Count - heldAt.Length).Select(i => head.Value + i));
+        stored[^1].IsRetirement.Should().BeTrue();
+        stored[7].Key.Should().Be(KeyA);
+        stored[8].Key.Should().BeNull();
+        (await store.HeadAsync(Qc, ct)).Should().Be(stored[^1].Watermark);
+    }
+
     [Fact]
     public async Task AppendMany_stores_record_keys_and_retirements()
     {
