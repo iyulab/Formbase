@@ -12,6 +12,15 @@ on:
     paths:
       - 'Directory.Build.props'
   workflow_dispatch:
+    inputs:
+      # Off by default: a manual run builds and probes the image, and publishes nothing. On, it publishes
+      # the version Directory.Build.props holds -- the recovery path for a release push whose run
+      # failed before publishing (a red test on the bump commit, fixed in a commit that does not touch
+      # Directory.Build.props and so does not fire this workflow again).
+      publish:
+        description: "Publish the version Directory.Build.props holds (recovers a failed release push)"
+        type: boolean
+        default: false
 
 concurrency:
   group: release-docker
@@ -80,7 +89,8 @@ jobs:
 
   build-and-push:
     needs: gate
-    # A manual run publishes nothing (see the push step), so it still builds and probes the image.
+    # A manual run publishes nothing unless it asks to (see the push step), so it still builds and
+    # probes the image.
     if: needs.gate.outputs.already != 'true' || github.event_name == 'workflow_dispatch'
     name: Build & Publish Image
     runs-on: ubuntu-latest
@@ -181,13 +191,16 @@ jobs:
           docker logs verify-host || true
           exit 1
 
-      # A manual run stops here: it builds the image and probes it, but publishes nothing. Without
+      # A manual run stops here unless it asks to publish: it builds the image and probes it, but
+      # publishes nothing. Without
       # this condition there is no way to exercise the workflow at all — every step from here on
       # writes tags that cannot be taken back, so "try it once" and "release it" would be the same
       # act, against whatever version the file happens to hold. A version bump that failed after
-      # this point is recovered by re-running that run, which keeps this condition true.
+      # this point is recovered by re-running that run, which keeps this condition true; one that
+      # failed before it and was fixed in a later commit, by a manual run with `publish`. Either way an
+      # image already published under this version is never pushed over.
       - name: Build and push Docker image
-        if: github.event_name == 'push'
+        if: (github.event_name == 'push' || inputs.publish) && needs.gate.outputs.already != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
