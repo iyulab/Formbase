@@ -39,9 +39,14 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
-  <!-- The repo-root README ships as the package readme. Inert in non-packable projects. -->
+  <!--
+    The repo-root README ships as the package readme, and the repo-root LICENSE ships beside it:
+    the expression above is what nuget.org shows, the text is what redistribution must carry.
+    Inert in non-packable projects.
+  -->
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

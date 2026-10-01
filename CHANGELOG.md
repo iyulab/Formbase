@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **Packages carry the license text.** Every package now ships `LICENSE` at its root beside the
+  `Apache-2.0` license expression, so redistributing a package carries the license copy the license
+  requires and tooling that collects third-party notices finds the text.
 - **`WatermarkLagTrigger` counts a form type's own documents.** A lag threshold above one compared the
   watermark gap, but watermarks are shared by every form type, so other types' documents brought a
   projection due early. It now counts this type's documents after the projected watermark, reading no
