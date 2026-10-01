@@ -134,7 +134,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task Projection_status_after_a_run_reports_what_that_run_skipped()
     {
         var type = NewFormType();
-        await DeclareAsync(type, "total");
+        await DeclareRequiredAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":[1,2]}"""); // an array where the declaration expects a scalar
 
@@ -159,7 +159,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task The_skips_of_the_last_run_are_readable_after_the_run_response_is_gone()
     {
         var type = NewFormType();
-        await DeclareAsync(type, "total");
+        await DeclareRequiredAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
         await AcceptAsync(type, """{"total":[1,2]}""");
 
@@ -186,7 +186,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task A_projection_that_dropped_most_documents_still_reports_projected_and_names_every_loss()
     {
         var type = NewFormType();
-        await DeclareAsync(type, "total");
+        await DeclareRequiredAsync(type, "total");
         await AcceptAsync(type, """{"total":1}""");
         for (var i = 0; i < 5; i++)
         {
@@ -205,6 +205,39 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         skips.GetProperty("skipped").EnumerateArray().Should().OnlyContain(
             s => s.GetProperty("reason").GetString()!.Contains("total"),
             "a reason that does not name the column leaves the reader to guess which declaration to fix");
+    }
+
+    /// <summary>
+    /// An optional field whose value cannot be held is emptied, not a reason to drop the row — and the
+    /// emptied box is named in the run response, in the status count, and in the recorded skips, so a
+    /// reader can find the document and fix the value.
+    /// </summary>
+    [Fact]
+    public async Task An_unconvertible_optional_field_is_emptied_and_named_while_its_row_lands()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        await AcceptAsync(type, """{"total":1}""");
+        await AcceptAsync(type, """{"total":"twelve"}""");
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
+        run.GetProperty("inserted").GetInt32().Should().Be(2, "the field is optional, so the row stands without it");
+        run.GetProperty("skipped").GetArrayLength().Should().Be(0);
+        run.GetProperty("skippedFields").GetArrayLength().Should().Be(1);
+        var emptiedInRun = run.GetProperty("skippedFields")[0];
+        emptiedInRun.GetProperty("field").GetString().Should().Be("total");
+        emptiedInRun.GetProperty("reason").GetString().Should().Contain("total");
+
+        var status = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection", TestContext.Current.CancellationToken));
+        status.GetProperty("lastRun").GetProperty("skippedFieldCount").GetInt32().Should().Be(1);
+
+        var skips = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken));
+        skips.GetProperty("count").GetInt32().Should().Be(0);
+        skips.GetProperty("fieldCount").GetInt32().Should().Be(1);
+        var recorded = skips.GetProperty("skippedFields")[0];
+        recorded.GetProperty("documentId").GetString().Should().Be(emptiedInRun.GetProperty("documentId").GetString(),
+            "the record names the same document the run reported, after the run response is gone");
+        recorded.GetProperty("field").GetString().Should().Be("total");
     }
 
     [Fact]
@@ -231,7 +264,7 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
     public async Task A_clean_rerun_clears_the_previous_runs_skips()
     {
         var type = NewFormType();
-        await DeclareAsync(type, "total");
+        await DeclareRequiredAsync(type, "total");
         await AcceptAsync(type, """{"total":[1,2]}""");
         await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
         (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken)))
@@ -312,6 +345,22 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
             tableName = type,
             declarationVersion = 1,
             fields = fields.Select(f => new { name = f, type = "integer" }).ToArray(),
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>
+    /// Declares fields the row cannot stand without. A value such a field cannot hold skips the whole
+    /// document — the case the skip tests here are about; an optional field would only be emptied.
+    /// </summary>
+    private async Task DeclareRequiredAsync(string type, params string[] fields)
+    {
+        var response = await _client.PutAsJsonAsync($"/formtypes/{type}/declaration", new
+        {
+            tableName = type,
+            declarationVersion = 1,
+            fields = fields.Select(f => new { name = f, type = "integer", nullable = false }).ToArray(),
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());

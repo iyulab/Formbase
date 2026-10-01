@@ -227,7 +227,25 @@ public class ProjectorTests
     }
 
     [Fact]
-    public async Task A_type_mismatch_skips_the_document()
+    public async Task A_type_mismatch_in_a_required_field_skips_the_document()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer, Nullable: false),
+        ]));
+        await h.Accept("""{"lot":"L-1","qty":"not-a-number"}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Inserted.Should().Be(0);
+        result.Skipped.Should().ContainSingle().Which.Reason.Should().Contain("qty");
+        result.SkippedFields.Should().BeEmpty("the document was dropped whole — there is no row whose field was emptied");
+    }
+
+    [Fact]
+    public async Task A_type_mismatch_in_an_optional_field_empties_that_field_and_keeps_the_row()
     {
         var h = new Harness();
         h.DeclareQcHints();
@@ -235,8 +253,72 @@ public class ProjectorTests
 
         var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        result.Inserted.Should().Be(0);
-        result.Skipped.Should().ContainSingle().Which.Reason.Should().Contain("qty");
+        result.Inserted.Should().Be(1, "the row stands without an optional field — hiding it would trade one empty box for a missing row");
+        result.Skipped.Should().BeEmpty();
+        var emptied = result.SkippedFields.Should().ContainSingle().Subject;
+        emptied.Field.Should().Be("qty");
+        emptied.Reason.Should().Contain("qty").And.Contain("Integer");
+        result.AbsentFieldCounts.Should().BeEmpty("the document did carry a value — it was unconvertible, not absent");
+
+        var rows = await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken);
+        var row = rows.Should().ContainSingle().Subject;
+        row["lot"].Should().Be("L-1");
+        row["qty"].Should().BeNull();
+        emptied.DocumentId.Value.Should().Be((Guid)row[ProjectionSystemColumns.DocumentId]!);
+    }
+
+    [Fact]
+    public async Task The_emptied_fields_are_recorded_with_the_run_and_replaced_by_the_next()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"L-1","qty":[1,2]}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        (await h.State.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken))
+            .Should().Equal(result.SkippedFields, "a reader who missed the run response gets the same answer");
+
+        await h.Accept("""{"lot":"L-1","qty":2}"""); // a later document for a new record — the first still stands
+        h.Hints.Declare(new FormTypeHints(Qc, Table, [new FieldHint("lot", ColumnType.Text, Nullable: false)]));
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        (await h.State.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeEmpty(
+            "the new declaration no longer asks for the field, so nothing was emptied this time");
+    }
+
+    /// <summary>
+    /// The shape a hand-edited file produces: one optional date column holding a date, a dotted local
+    /// date, free text, and nothing. Every document must land; only the free text is emptied, and both
+    /// dates read the same calendar day on any host.
+    /// </summary>
+    [Fact]
+    public async Task Hand_written_dates_land_as_rows_and_only_the_unreadable_one_is_emptied()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("received", ColumnType.Timestamp),
+        ]));
+        await h.Accept("""{"lot":"L-1","received":"2026-01-15"}""");
+        await h.Accept("""{"lot":"L-2","received":"2026. 1. 16."}""");
+        await h.Accept("""{"lot":"L-3","received":"last week"}""");
+        await h.Accept("""{"lot":"L-4"}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Inserted.Should().Be(4);
+        result.Skipped.Should().BeEmpty();
+        result.SkippedFields.Should().ContainSingle().Which.Field.Should().Be("received");
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["received"] = 1 });
+
+        var rows = (await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken))
+            .ToDictionary(r => (string)r["lot"]!, r => (DateTimeOffset?)r["received"]);
+        rows["L-1"].Should().Be(new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero));
+        rows["L-2"].Should().Be(new DateTimeOffset(2026, 1, 16, 0, 0, 0, TimeSpan.Zero));
+        rows["L-3"].Should().BeNull();
+        rows["L-4"].Should().BeNull();
     }
 
     [Fact]
@@ -412,10 +494,12 @@ public class ProjectorTests
     {
         public Task<ProjectionStamp?> GetAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult<ProjectionStamp?>(null);
-        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, IReadOnlyList<ProjectionSkip> skips, CancellationToken cancellationToken = default)
+        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, IReadOnlyList<ProjectionSkip> skips, IReadOnlyList<ProjectionFieldSkip> fieldSkips, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
         public Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ProjectionSkip>>([]);
+        public Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProjectionFieldSkip>>([]);
         public Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromException(failure);
         // The same outage that fails the cleanup fails the fallback too — the worst case, where the

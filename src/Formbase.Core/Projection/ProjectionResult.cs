@@ -4,14 +4,20 @@ namespace Formbase.Core.Projection;
 
 /// <summary>
 /// Outcome of a projection run. A run with no schema proposal is a no-op (<see cref="Projected"/> false);
-/// otherwise it reports how many rows landed, which documents were skipped, per-column absence counts,
-/// and the watermark reached.
+/// otherwise it reports how many rows landed, which documents were skipped, which optional fields were
+/// emptied, per-column absence counts, and the watermark reached.
 /// </summary>
 /// <param name="Projected">
 /// Whether the run projected anything; <see langword="false"/> when nothing proposed a schema.
 /// </param>
 /// <param name="Inserted">How many rows landed in the projection.</param>
 /// <param name="Skipped">The documents the run did not project, each with its reason.</param>
+/// <param name="SkippedFields">
+/// Optional fields the run left empty in rows it did project, because the document's value could
+/// not be converted to the column's type — each with the document, the column, and the reason. Not
+/// counted in <see cref="Skipped"/> (the row landed) nor in <see cref="AbsentFieldCounts"/> (the
+/// document did carry a value).
+/// </param>
 /// <param name="AbsentFieldCounts">
 /// For each declared column, how many projected rows came from documents that did not carry the field
 /// at all. An explicit <c>null</c> in the document is an answer and is not counted here — a field the
@@ -30,6 +36,7 @@ public sealed record ProjectionResult(
     bool Projected,
     int Inserted,
     IReadOnlyList<ProjectionSkip> Skipped,
+    IReadOnlyList<ProjectionFieldSkip> SkippedFields,
     IReadOnlyDictionary<string, int> AbsentFieldCounts,
     IReadOnlyList<string> UnresolvedReferences,
     Watermark ProjectedWatermark)
@@ -39,16 +46,17 @@ public sealed record ProjectionResult(
 
     /// <summary>No schema was proposed (e.g. no field hints yet); nothing was projected.</summary>
     public static ProjectionResult NoSchema() =>
-        new(Projected: false, Inserted: 0, Array.Empty<ProjectionSkip>(), NoAbsences, [], Watermark.Zero);
+        new(Projected: false, Inserted: 0, Array.Empty<ProjectionSkip>(), [], NoAbsences, [], Watermark.Zero);
 
     /// <summary>A projection completed, reaching <paramref name="watermark"/>.</summary>
     public static ProjectionResult Completed(
         int inserted,
         IReadOnlyList<ProjectionSkip> skipped,
+        IReadOnlyList<ProjectionFieldSkip> skippedFields,
         IReadOnlyDictionary<string, int> absentFieldCounts,
         IReadOnlyList<string> unresolvedReferences,
         Watermark watermark) =>
-        new(Projected: true, inserted, skipped, absentFieldCounts, unresolvedReferences, watermark);
+        new(Projected: true, inserted, skipped, skippedFields, absentFieldCounts, unresolvedReferences, watermark);
 
     /// <summary>
     /// Weighted Form Coverage Index for this run (Liolios et al. 2012 Metadata Coverage Index,

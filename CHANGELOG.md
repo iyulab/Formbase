@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+Breaking for code that implements `IProjectionState`.
+
+### Changed
+
+- **An optional field whose value cannot be converted empties that field instead of dropping the
+  document.** A nullable column holding a value its type cannot take (`"next week"` in a `Timestamp`, an
+  array in a `Text`) used to skip the whole document, so one bad value hid every other value it carried
+  from every query. The row now lands with that column empty, and the emptied field is recorded (see
+  Added). A required column that fails the same way still skips the document, as documented: the row
+  cannot stand without it. Re-projecting an existing store can therefore insert rows that were skipped
+  before.
+
+### Added
+
+- **Emptied fields are recorded like skipped documents.** `ProjectionFieldSkip` (document, field,
+  reason) for each optional field a run emptied: in `ProjectionResult.SkippedFields`, recorded with the
+  run by `IProjectionState` (`GetFieldSkipsAsync`, `FormbaseEngine.GetProjectionFieldSkipsAsync`) so it
+  survives a restart, and replaced by the next run. They are counted neither in `Skipped` (the row
+  landed) nor in `AbsentFieldCounts` (the document did carry a value). Host: `skippedFields` on the
+  projection run response, `skippedFields` and `fieldCount` on `GET /formtypes/{type}/projection/skips`,
+  and `lastRun.skippedFieldCount` on the projection status.
+- **Breaking for `IProjectionState` implementers**: `SetProjectedAsync` takes the field skips next to
+  the skips, and `GetFieldSkipsAsync` is new. The SQLite and PostgreSQL adapters keep them in a table of
+  their own (`fb_projection_field_skips` / `projection_field_skips`), created on first use in an
+  existing store.
+
 ### Fixed
 
 - **A timestamp written without an offset is read as UTC, not in the host's zone.** A date alone

@@ -6,7 +6,8 @@ namespace Formbase.Core.Ports;
 /// <summary>
 /// Stores, per form type, the <see cref="ProjectionStamp"/> of the last completed projection
 /// (absent when never projected): the watermark it reached plus the table name and schema
-/// fingerprint it materialized, and the <see cref="ProjectionSkip"/> records that run produced. The
+/// fingerprint it materialized, and the <see cref="ProjectionSkip"/> and <see cref="ProjectionFieldSkip"/>
+/// records that run produced. The
 /// derived <see cref="ProjectionStatus"/> — including staleness against both the raw head and the
 /// current declaration — is computed by <see cref="ProjectionStatus.Evaluate"/>.
 /// </summary>
@@ -26,14 +27,16 @@ public interface IProjectionState
 
     /// <summary>
     /// Records that a projection completed with <paramref name="stamp"/>, together with the
-    /// <paramref name="skips"/> it produced (empty when every document mapped). Replaces any
-    /// previously recorded skips for this form type — a run's skips describe that run, and the
+    /// <paramref name="skips"/> (documents dropped) and <paramref name="fieldSkips"/> (optional
+    /// fields emptied in rows that landed) it produced — each empty when nothing was dropped. Replaces
+    /// both previously recorded lists for this form type — a run's skips describe that run, and the
     /// previous run's answer to "what was dropped" stops being true the moment a new one completes.
     /// </summary>
     Task SetProjectedAsync(
         FormTypeRef type,
         ProjectionStamp stamp,
         IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -45,8 +48,15 @@ public interface IProjectionState
     Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The field skips recorded by the last completed projection, in the order the projector produced
+    /// them; empty when that run emptied no field, and also empty when this form type was never
+    /// projected — the same reading as <see cref="GetSkipsAsync"/>.
+    /// </summary>
+    Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Forgets any projection state for a form type (e.g. after its table is dropped), including its
-    /// recorded skips.
+    /// recorded skips and field skips.
     /// </summary>
     Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default);
 

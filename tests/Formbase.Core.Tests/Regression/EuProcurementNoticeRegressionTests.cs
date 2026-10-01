@@ -57,15 +57,14 @@ public sealed class EuProcurementNoticeRegressionTests
     /// <summary>
     /// The regression this fixture exists to catch: a real source document's currency is
     /// structurally an array, and the closest scalar declaration a first-time consumer reaches for
-    /// is <c>Text</c>. This asserts what that mismatch produces: exactly the notices that carry a
-    /// currency are skipped, each with a reason naming the column and the declaration that fits
-    /// (<c>Jsonb</c>); the rest project. Until 0.9.0 the same declaration produced no skip and the
-    /// literal text <c>["EUR"]</c> in the column — a plausible value where every other column type
-    /// recorded a skip — and this test pinned that; it was rewritten when the mapper changed, as
-    /// its own comment asked.
+    /// is <c>Text</c>. This asserts what that mismatch produces: every notice projects, and exactly
+    /// the notices that carry an array currency have that one optional field emptied, each named
+    /// with a reason pointing at the declaration that fits (<c>Jsonb</c>). Until 0.9.0 the same
+    /// declaration put the literal text <c>["EUR"]</c> in the column; until 0.16.0 it dropped those
+    /// notices whole — an optional field's bad value hid every other value the notice carried.
     /// </summary>
     [Fact]
-    public async Task A_text_declaration_for_the_arrayvalued_currency_skips_exactly_those_notices_and_names_the_fix()
+    public async Task A_text_declaration_for_the_arrayvalued_currency_empties_exactly_that_field_and_names_the_fix()
     {
         var provider = BuildProvider();
         var engine = provider.GetRequiredService<FormbaseEngine>();
@@ -83,11 +82,15 @@ public sealed class EuProcurementNoticeRegressionTests
 
         withArrayCurrency.Should().BeGreaterThan(0, "the fixture must contain at least one notice with an " +
             "array-valued currency, or this test is not exercising the mismatch it claims to");
-        result.Skipped.Should().HaveCount(withArrayCurrency,
-            "a structured value in a Text column is a skip, like the same value in any other scalar column");
-        result.Skipped.Should().AllSatisfy(skip =>
-            skip.Reason.Should().Contain("totalValueCurrency").And.Contain("Jsonb"));
-        result.Inserted.Should().Be(notices.Count - withArrayCurrency);
+        result.Skipped.Should().BeEmpty("the currency is optional — its value cannot hide the rest of the notice");
+        result.SkippedFields.Should().HaveCount(withArrayCurrency,
+            "a structured value in a Text column is recorded, like the same value in any other scalar column");
+        result.SkippedFields.Should().AllSatisfy(skip =>
+        {
+            skip.Field.Should().Be("totalValueCurrency");
+            skip.Reason.Should().Contain("totalValueCurrency").And.Contain("Jsonb");
+        });
+        result.Inserted.Should().Be(notices.Count);
         rows.Should().OnlyContain(r => r["totalValueCurrency"] == null || !LooksLikeAJsonArrayLiteral(r["totalValueCurrency"]),
             "no row carries an array's JSON as a text value any more");
     }

@@ -62,6 +62,16 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
                 reason      text   NOT NULL,
                 PRIMARY KEY (form_type, ordinal)
             );
+            -- Optional fields the same run emptied in rows it did project — replaced with the stamp
+            -- for the same reason as the skips above.
+            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".projection_field_skips (
+                form_type   text   NOT NULL,
+                ordinal     int    NOT NULL,
+                document_id uuid   NOT NULL,
+                field       text   NOT NULL,
+                reason      text   NOT NULL,
+                PRIMARY KEY (form_type, ordinal)
+            );
             """;
     }
 
@@ -88,10 +98,12 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         FormTypeRef type,
         ProjectionStamp stamp,
         IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stamp);
         ArgumentNullException.ThrowIfNull(skips);
+        ArgumentNullException.ThrowIfNull(fieldSkips);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
@@ -120,6 +132,7 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await ReplaceSkipsAsync(connection, type, skips, cancellationToken).ConfigureAwait(false);
+        await ReplaceFieldSkipsAsync(connection, type, fieldSkips, cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -161,6 +174,44 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task ReplaceFieldSkipsAsync(
+        NpgsqlConnection connection,
+        FormTypeRef type,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
+        CancellationToken cancellationToken)
+    {
+        await using (var delete = new NpgsqlCommand(
+            $"""DELETE FROM "{_bootstrap.Schema}".projection_field_skips WHERE form_type = @type""",
+            connection))
+        {
+            delete.Parameters.AddWithValue("type", type.Value);
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        if (fieldSkips.Count == 0)
+        {
+            return;
+        }
+
+        // Binary copy for the same reason as the skips: one badly typed optional column empties a
+        // field in every row, so this tracks the intake's size too.
+        await using var writer = await connection.BeginBinaryImportAsync(
+            $"""COPY "{_bootstrap.Schema}".projection_field_skips (form_type, ordinal, document_id, field, reason) FROM STDIN (FORMAT BINARY)""",
+            cancellationToken).ConfigureAwait(false);
+
+        for (var ordinal = 0; ordinal < fieldSkips.Count; ordinal++)
+        {
+            await writer.StartRowAsync(cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(type.Value, NpgsqlDbType.Text, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(ordinal, NpgsqlDbType.Integer, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(fieldSkips[ordinal].DocumentId.Value, NpgsqlDbType.Uuid, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(fieldSkips[ordinal].Field, NpgsqlDbType.Text, cancellationToken).ConfigureAwait(false);
+            await writer.WriteAsync(fieldSkips[ordinal].Reason, NpgsqlDbType.Text, cancellationToken).ConfigureAwait(false);
+        }
+
+        await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
@@ -185,6 +236,30 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         return skips;
     }
 
+    public async Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            $"""
+            SELECT document_id, field, reason FROM "{_bootstrap.Schema}".projection_field_skips
+                WHERE form_type = @type
+                ORDER BY ordinal
+            """,
+            connection);
+        command.Parameters.AddWithValue("type", type.Value);
+
+        var fieldSkips = new List<ProjectionFieldSkip>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            fieldSkips.Add(new ProjectionFieldSkip(DocumentId.From(reader.GetGuid(0)), reader.GetString(1), reader.GetString(2)));
+        }
+
+        return fieldSkips;
+    }
+
     public async Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
@@ -194,6 +269,7 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
             $"""
             DELETE FROM "{_bootstrap.Schema}".projection_state WHERE form_type = @type;
             DELETE FROM "{_bootstrap.Schema}".projection_skips WHERE form_type = @type;
+            DELETE FROM "{_bootstrap.Schema}".projection_field_skips WHERE form_type = @type;
             """,
             connection);
         command.Parameters.AddWithValue("type", type.Value);

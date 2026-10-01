@@ -32,7 +32,7 @@ public sealed class LastProjectionRunTracker
             return;
         }
 
-        _runs[type] = new LastProjectionRun(result.Inserted, result.Skipped.Count, DateTimeOffset.UtcNow);
+        _runs[type] = new LastProjectionRun(result.Inserted, result.Skipped.Count, result.SkippedFields.Count, DateTimeOffset.UtcNow);
     }
 
     public LastProjectionRun? TryGet(FormTypeRef type) =>
@@ -41,5 +41,6 @@ public sealed class LastProjectionRunTracker
 
 /// <param name="InsertedCount">Rows that landed in the projected table on that run.</param>
 /// <param name="SkippedCount">Documents that could not be mapped on that run.</param>
+/// <param name="SkippedFieldCount">Optional fields left empty in rows that run did project.</param>
 /// <param name="ObservedAt">When this host observed the run — not when raw last changed.</param>
-public sealed record LastProjectionRun(int InsertedCount, int SkippedCount, DateTimeOffset ObservedAt);
+public sealed record LastProjectionRun(int InsertedCount, int SkippedCount, int SkippedFieldCount, DateTimeOffset ObservedAt);

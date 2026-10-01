@@ -10,6 +10,7 @@ public sealed class InMemoryProjectionState : IProjectionState
 {
     private readonly ConcurrentDictionary<FormTypeRef, ProjectionStamp> _stamps = new();
     private readonly ConcurrentDictionary<FormTypeRef, IReadOnlyList<ProjectionSkip>> _skips = new();
+    private readonly ConcurrentDictionary<FormTypeRef, IReadOnlyList<ProjectionFieldSkip>> _fieldSkips = new();
 
     public Task<ProjectionStamp?> GetAsync(FormTypeRef type, CancellationToken cancellationToken = default)
         => Task.FromResult(_stamps.TryGetValue(type, out var stamp) ? stamp : null);
@@ -18,25 +19,32 @@ public sealed class InMemoryProjectionState : IProjectionState
         FormTypeRef type,
         ProjectionStamp stamp,
         IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(skips);
+        ArgumentNullException.ThrowIfNull(fieldSkips);
 
         // Copied rather than stored by reference: the projector builds the list it hands over and is
         // free to keep mutating its own, and a stored view that changed afterwards would report a
         // run that never happened.
         _stamps[type] = stamp;
         _skips[type] = [.. skips];
+        _fieldSkips[type] = [.. fieldSkips];
         return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
         => Task.FromResult(_skips.TryGetValue(type, out var skips) ? skips : []);
 
+    public Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+        => Task.FromResult(_fieldSkips.TryGetValue(type, out var fieldSkips) ? fieldSkips : []);
+
     public Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
         _stamps.TryRemove(type, out _);
         _skips.TryRemove(type, out _);
+        _fieldSkips.TryRemove(type, out _);
         return Task.CompletedTask;
     }
 

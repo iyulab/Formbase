@@ -12,6 +12,11 @@ namespace Formbase.Host.Contracts;
 /// <param name="Inserted">Rows that landed in the projected table.</param>
 /// <param name="ProjectedWatermark">The raw position the run reached.</param>
 /// <param name="Skipped">Documents that could not be mapped, with the reason for each.</param>
+/// <param name="SkippedFields">
+/// Optional fields left empty in rows that did land, because the document's value could not be
+/// converted to the column's type — with the document, the column and the reason for each. The row
+/// is not in <see cref="Skipped"/>; fix the value in the document and run again to fill the box.
+/// </param>
 /// <param name="AbsentFieldCounts">
 /// Per declared column, how many projected rows came from documents that did not carry the field at
 /// all. An explicit null in a document is an answer and is not counted here — the projected NULL
@@ -22,7 +27,7 @@ namespace Formbase.Host.Contracts;
 /// silently blank: an empty column with no explanation reads as absent data.
 /// </param>
 /// <param name="NotProjectedReason">
-/// Why nothing was built, when <see cref="Projected"/> is false; null when it is true. The three
+/// Why nothing was built, when <see cref="Projected"/> is false; null when it is true. The four
 /// diagnostic lists above describe a run that happened, so on a run that built nothing they are
 /// empty — and empty reads as "nothing was lost". This is what says the run did not happen and
 /// what would make it happen.
@@ -32,6 +37,7 @@ public sealed record ProjectionRunResponse(
     int Inserted,
     long ProjectedWatermark,
     IReadOnlyList<SkippedDocumentResponse> Skipped,
+    IReadOnlyList<SkippedFieldResponse> SkippedFields,
     IReadOnlyDictionary<string, int> AbsentFieldCounts,
     IReadOnlyList<string> UnresolvedReferences,
     NotProjectedReasonWire? NotProjectedReason);
@@ -59,6 +65,11 @@ public enum NotProjectedReasonWire
 /// <param name="Reason">Why it could not be mapped into the declared shape.</param>
 public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason);
 
+/// <param name="DocumentId">The document whose field was left empty; its row was projected.</param>
+/// <param name="Field">The projected column left empty.</param>
+/// <param name="Reason">Why the value could not be converted to the column's type.</param>
+public sealed record SkippedFieldResponse(Guid DocumentId, string Field, string Reason);
+
 /// <summary>
 /// What the last completed projection dropped. Unlike <see cref="LastRunResponse"/> — which is this
 /// host instance's own memory of the run it performed — this is read from the recorded projection
@@ -74,7 +85,16 @@ public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason);
 /// thing a caller checking "did this run lose anything" reads, and making them count an array they
 /// then discard is work the answer can do for them.
 /// </param>
-public sealed record ProjectionSkipsResponse(IReadOnlyList<SkippedDocumentResponse> Skipped, int Count);
+/// <param name="SkippedFields">
+/// The optional fields that run left empty in rows it did project, in the order it produced them —
+/// the smaller loss next to a skipped document: the row is there, one box of it is not.
+/// </param>
+/// <param name="FieldCount">How many entries <see cref="SkippedFields"/> holds.</param>
+public sealed record ProjectionSkipsResponse(
+    IReadOnlyList<SkippedDocumentResponse> Skipped,
+    int Count,
+    IReadOnlyList<SkippedFieldResponse> SkippedFields,
+    int FieldCount);
 
 /// <summary>
 /// Whether a form type has a queryable projection and whether it can be trusted, with the two
@@ -98,11 +118,12 @@ public sealed record ProjectionStatusResponse(
 
 /// <param name="InsertedCount">Rows that landed in the projected table on that run.</param>
 /// <param name="SkippedCount">Documents that could not be mapped on that run.</param>
+/// <param name="SkippedFieldCount">Optional fields left empty in rows that run did project.</param>
 /// <param name="ObservedAt">When this host observed the run.</param>
-public sealed record LastRunResponse(int InsertedCount, int SkippedCount, DateTimeOffset ObservedAt)
+public sealed record LastRunResponse(int InsertedCount, int SkippedCount, int SkippedFieldCount, DateTimeOffset ObservedAt)
 {
     internal static LastRunResponse? FromTracked(LastProjectionRun? run) =>
-        run is null ? null : new LastRunResponse(run.InsertedCount, run.SkippedCount, run.ObservedAt);
+        run is null ? null : new LastRunResponse(run.InsertedCount, run.SkippedCount, run.SkippedFieldCount, run.ObservedAt);
 }
 
 /// <summary>

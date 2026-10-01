@@ -34,6 +34,14 @@ public sealed class SqliteProjectionState : IProjectionState
             reason      TEXT    NOT NULL,
             PRIMARY KEY (form_type, ordinal)
         );
+        CREATE TABLE IF NOT EXISTS fb_projection_field_skips (
+            form_type   TEXT    NOT NULL,
+            ordinal     INTEGER NOT NULL,
+            document_id TEXT    NOT NULL,
+            field       TEXT    NOT NULL,
+            reason      TEXT    NOT NULL,
+            PRIMARY KEY (form_type, ordinal)
+        );
         """;
 
     private readonly SqliteDatabase _database;
@@ -64,10 +72,12 @@ public sealed class SqliteProjectionState : IProjectionState
         FormTypeRef type,
         ProjectionStamp stamp,
         IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stamp);
         ArgumentNullException.ThrowIfNull(skips);
+        ArgumentNullException.ThrowIfNull(fieldSkips);
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         // One transaction: a stamp without its skips would report a completed run with the previous
@@ -87,6 +97,7 @@ public sealed class SqliteProjectionState : IProjectionState
                         schema_fingerprint = excluded.schema_fingerprint,
                         verified = excluded.verified;
                 DELETE FROM fb_projection_skips WHERE form_type = $type;
+                DELETE FROM fb_projection_field_skips WHERE form_type = $type;
                 """;
             upsert.Parameters.AddWithValue("$type", type.Value);
             upsert.Parameters.AddWithValue("$watermark", stamp.Watermark.Value);
@@ -115,6 +126,27 @@ public sealed class SqliteProjectionState : IProjectionState
             }
         }
 
+        if (fieldSkips.Count > 0)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = "INSERT INTO fb_projection_field_skips (form_type, ordinal, document_id, field, reason) VALUES ($type, $ordinal, $document, $field, $reason)";
+            insert.Parameters.AddWithValue("$type", type.Value);
+            var ordinal = insert.Parameters.AddWithValue("$ordinal", 0);
+            var document = insert.Parameters.AddWithValue("$document", string.Empty);
+            var field = insert.Parameters.AddWithValue("$field", string.Empty);
+            var reason = insert.Parameters.AddWithValue("$reason", string.Empty);
+
+            for (var i = 0; i < fieldSkips.Count; i++)
+            {
+                ordinal.Value = i;
+                document.Value = fieldSkips[i].DocumentId.Value.ToString("D");
+                field.Value = fieldSkips[i].Field;
+                reason.Value = fieldSkips[i].Reason;
+                await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -135,6 +167,23 @@ public sealed class SqliteProjectionState : IProjectionState
         return skips;
     }
 
+    public async Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT document_id, field, reason FROM fb_projection_field_skips WHERE form_type = $type ORDER BY ordinal";
+        command.Parameters.AddWithValue("$type", type.Value);
+
+        var fieldSkips = new List<ProjectionFieldSkip>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            fieldSkips.Add(new ProjectionFieldSkip(DocumentId.From(Guid.Parse(reader.GetString(0))), reader.GetString(1), reader.GetString(2)));
+        }
+
+        return fieldSkips;
+    }
+
     public async Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -143,6 +192,7 @@ public sealed class SqliteProjectionState : IProjectionState
             """
             DELETE FROM fb_projection_state WHERE form_type = $type;
             DELETE FROM fb_projection_skips WHERE form_type = $type;
+            DELETE FROM fb_projection_field_skips WHERE form_type = $type;
             """;
         command.Parameters.AddWithValue("$type", type.Value);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

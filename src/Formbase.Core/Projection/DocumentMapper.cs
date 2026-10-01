@@ -8,7 +8,9 @@ namespace Formbase.Core.Projection;
 /// Maps a stored document into a projected row against a given domain schema. This is deterministic
 /// value coercion, not type inference: the schema is already known (from hints), and each field is
 /// read and converted per its declared column type. A required field that is missing or unconvertible
-/// makes the whole document unmappable — reported as a skip, never a raw-store mutation.
+/// makes the whole document unmappable — reported as a skip, never a raw-store mutation. An optional
+/// field that is present but unconvertible empties that one box and is reported as a field skip; the
+/// row still lands.
 /// </summary>
 internal static class DocumentMapper
 {
@@ -17,6 +19,7 @@ internal static class DocumentMapper
         IReadOnlyList<ColumnDef> domainColumns,
         out IReadOnlyDictionary<string, object?> row,
         out IReadOnlyList<string> absentFields,
+        out IReadOnlyList<ProjectionFieldSkip> fieldSkips,
         out string reason)
     {
         var mapped = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -27,15 +30,22 @@ internal static class DocumentMapper
         };
 
         List<string>? absent = null;
+        List<ProjectionFieldSkip>? emptied = null;
         // Only a standing record reaches here (RecordFold drops retirements), so a body is always present.
         var root = (document.Body ?? throw new ArgumentException("A retirement has no row to map.", nameof(document))).Root;
         foreach (var column in domainColumns)
         {
-            if (!TryConvert(root, column, out var value, out var fieldAbsent, out reason))
+            if (!TryConvert(root, column, out var value, out var fieldAbsent, out var unconvertible, out reason))
             {
                 row = mapped;
                 absentFields = [];
+                fieldSkips = [];
                 return false;
+            }
+
+            if (unconvertible is not null)
+            {
+                (emptied ??= []).Add(new ProjectionFieldSkip(document.Id, column.Name, unconvertible));
             }
 
             if (fieldAbsent)
@@ -48,11 +58,45 @@ internal static class DocumentMapper
 
         row = mapped;
         absentFields = absent ?? (IReadOnlyList<string>)[];
+        fieldSkips = emptied ?? (IReadOnlyList<ProjectionFieldSkip>)[];
         reason = string.Empty;
         return true;
     }
 
-    private static bool TryConvert(JsonElement root, ColumnDef column, out object? value, out bool absent, out string reason)
+    /// <summary>
+    /// Converts one field. Returns false only when the document cannot be mapped at all; a present
+    /// value an optional column cannot hold returns true with a null value and
+    /// <paramref name="unconvertible"/> set to why.
+    /// </summary>
+    private static bool TryConvert(
+        JsonElement root,
+        ColumnDef column,
+        out object? value,
+        out bool absent,
+        out string? unconvertible,
+        out string reason)
+    {
+        unconvertible = null;
+        if (TryConvertValue(root, column, out value, out absent, out reason))
+        {
+            return true;
+        }
+
+        // An optional column only fails here on a value that was there and could not be held (absent
+        // or null already succeeded as null), so that is the case softened. A required column keeps
+        // failing the document — the row cannot stand without it.
+        if (!column.Nullable)
+        {
+            return false;
+        }
+
+        unconvertible = reason;
+        reason = string.Empty;
+        value = null;
+        return true;
+    }
+
+    private static bool TryConvertValue(JsonElement root, ColumnDef column, out object? value, out bool absent, out string reason)
     {
         value = null;
         reason = string.Empty;

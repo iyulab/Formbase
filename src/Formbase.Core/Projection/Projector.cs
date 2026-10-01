@@ -80,6 +80,7 @@ public sealed class Projector : IProjector
 
             var rows = new List<IReadOnlyDictionary<string, object?>>();
             var skips = new List<ProjectionSkip>();
+            var fieldSkips = new List<ProjectionFieldSkip>();
             var absentCounts = new Dictionary<string, int>(StringComparer.Ordinal);
             // A declaration-level fact, not a per-row one: every row leaves the same columns empty,
             // so this is read off the schema rather than accumulated while mapping.
@@ -104,9 +105,10 @@ public sealed class Projector : IProjector
 
             foreach (var document in RecordFold.Latest(documents))
             {
-                if (DocumentMapper.TryMap(document, schema.Columns, out var row, out var absentFields, out var reason))
+                if (DocumentMapper.TryMap(document, schema.Columns, out var row, out var absentFields, out var emptied, out var reason))
                 {
                     rows.Add(row);
+                    fieldSkips.AddRange(emptied);
                     foreach (var field in absentFields)
                     {
                         absentCounts[field] = absentCounts.GetValueOrDefault(field) + 1;
@@ -124,9 +126,9 @@ public sealed class Projector : IProjector
             // evaluation compares it against the proposer's current output, which never carries the
             // system columns.
             var stamp = new ProjectionStamp(rawHead, schema.TableName, schema.Fingerprint());
-            await _projectionState.SetProjectedAsync(type, stamp, skips, cancellationToken).ConfigureAwait(false);
+            await _projectionState.SetProjectedAsync(type, stamp, skips, fieldSkips, cancellationToken).ConfigureAwait(false);
 
-            return ProjectionResult.Completed(inserted, skips, absentCounts, unresolvedReferences, rawHead);
+            return ProjectionResult.Completed(inserted, skips, fieldSkips, absentCounts, unresolvedReferences, rawHead);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

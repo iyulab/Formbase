@@ -32,7 +32,7 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "quality_checks", fingerprint: "fp-abc"), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "quality_checks", fingerprint: "fp-abc"), [], [], TestContext.Current.CancellationToken);
 
         var stamp = await state.GetAsync(Qc, TestContext.Current.CancellationToken);
         stamp.Should().Be(new ProjectionStamp(new Watermark(7), "quality_checks", "fp-abc"));
@@ -42,7 +42,7 @@ public abstract class ProjectionStateContractTests
     public async Task Clear_forgets_the_stamp()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
 
         await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
 
@@ -64,8 +64,8 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7, fingerprint: "fp-old"), [], TestContext.Current.CancellationToken);
-        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7, fingerprint: "fp-old"), [], [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"), [], [], TestContext.Current.CancellationToken);
 
         // A second row for the same form type would make the read ambiguous; the write is an upsert.
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(9, fingerprint: "fp-new"));
@@ -76,8 +76,8 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "qc"), [], TestContext.Current.CancellationToken);
-        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7, tableName: "qc"), [], [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [], [], TestContext.Current.CancellationToken);
 
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(7, tableName: "qc"));
         (await state.GetAsync(Work, TestContext.Current.CancellationToken)).Should().Be(Stamp(3, tableName: "work"));
@@ -87,8 +87,8 @@ public abstract class ProjectionStateContractTests
     public async Task Clearing_one_form_type_leaves_the_others_alone()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [], TestContext.Current.CancellationToken);
-        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [], [], TestContext.Current.CancellationToken);
 
         await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
 
@@ -101,7 +101,7 @@ public abstract class ProjectionStateContractTests
     {
         var state = CreateState();
 
-        await state.SetProjectedAsync(Qc, Stamp(7), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
 
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeTrue("a completed projection records verified integrity");
     }
@@ -110,7 +110,7 @@ public abstract class ProjectionStateContractTests
     public async Task Marking_unverified_flips_the_stamp_without_forgetting_it()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
 
         await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
@@ -133,15 +133,17 @@ public abstract class ProjectionStateContractTests
     public async Task Re_setting_a_projection_restores_verified()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
         await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
 
-        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(9, fingerprint: "fp-new"), [], [], TestContext.Current.CancellationToken);
 
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeTrue("a fresh projection clears the unverified mark");
     }
 
     private static ProjectionSkip Skip(string reason) => new(DocumentId.New(), reason);
+
+    private static ProjectionFieldSkip FieldSkip(string field, string reason) => new(DocumentId.New(), field, reason);
 
     [Fact]
     public async Task An_unprojected_form_type_has_no_skips()
@@ -161,7 +163,7 @@ public abstract class ProjectionStateContractTests
             Skip("field 'amount' is not convertible to Numeric"),
         };
 
-        await state.SetProjectedAsync(Qc, Stamp(7), skips, TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), skips, [], TestContext.Current.CancellationToken);
 
         (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken))
             .Should().Equal(skips, "a caller asking why rows are missing reads document and reason, "
@@ -172,9 +174,9 @@ public abstract class ProjectionStateContractTests
     public async Task A_later_run_replaces_the_previous_runs_skips()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("first run")], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("first run")], [], TestContext.Current.CancellationToken);
 
-        await state.SetProjectedAsync(Qc, Stamp(9), [Skip("second run")], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(9), [Skip("second run")], [], TestContext.Current.CancellationToken);
 
         (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken))
             .Should().ContainSingle().Which.Reason.Should().Be("second run",
@@ -185,9 +187,9 @@ public abstract class ProjectionStateContractTests
     public async Task A_clean_run_after_a_skipping_one_leaves_no_skips_behind()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("not convertible")], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("not convertible")], [], TestContext.Current.CancellationToken);
 
-        await state.SetProjectedAsync(Qc, Stamp(9), [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(9), [], [], TestContext.Current.CancellationToken);
 
         (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeEmpty(
             "every document mapped this time — a stale reason left behind would report a loss that "
@@ -198,7 +200,7 @@ public abstract class ProjectionStateContractTests
     public async Task Clearing_a_form_type_forgets_its_skips()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("not convertible")], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("not convertible")], [], TestContext.Current.CancellationToken);
 
         await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
 
@@ -210,8 +212,8 @@ public abstract class ProjectionStateContractTests
     public async Task Skips_are_kept_per_form_type()
     {
         var state = CreateState();
-        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("qc reason")], TestContext.Current.CancellationToken);
-        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [Skip("work reason")], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("qc reason")], [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [Skip("work reason")], [], TestContext.Current.CancellationToken);
 
         await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
 
@@ -219,4 +221,47 @@ public abstract class ProjectionStateContractTests
             .Should().ContainSingle().Which.Reason.Should().Be("work reason");
     }
 
+    [Fact]
+    public async Task The_field_skips_of_the_last_run_are_readable_in_the_order_they_were_produced()
+    {
+        var state = CreateState();
+        var fieldSkips = new[]
+        {
+            FieldSkip("deadline", "field 'deadline' is not convertible to Timestamp"),
+            FieldSkip("amount", "field 'amount' is not convertible to Decimal"),
+        };
+
+        await state.SetProjectedAsync(Qc, Stamp(7), [], fieldSkips, TestContext.Current.CancellationToken);
+
+        (await state.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken))
+            .Should().Equal(fieldSkips, "a reader fixing values reads document, field and reason, in the order the run produced them");
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeEmpty(
+            "an emptied field is not a dropped document");
+    }
+
+    [Fact]
+    public async Task A_later_run_replaces_the_previous_runs_field_skips()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [FieldSkip("deadline", "first run")], TestContext.Current.CancellationToken);
+
+        await state.SetProjectedAsync(Qc, Stamp(9), [], [], TestContext.Current.CancellationToken);
+
+        (await state.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeEmpty(
+            "field skips describe one run, like skips");
+    }
+
+    [Fact]
+    public async Task Clearing_a_form_type_forgets_its_field_skips_and_keeps_other_types()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [FieldSkip("deadline", "qc reason")], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(3, tableName: "work"), [], [FieldSkip("due", "work reason")], TestContext.Current.CancellationToken);
+
+        await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
+
+        (await state.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeEmpty();
+        (await state.GetFieldSkipsAsync(Work, TestContext.Current.CancellationToken))
+            .Should().ContainSingle().Which.Reason.Should().Be("work reason");
+    }
 }

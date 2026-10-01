@@ -48,7 +48,7 @@ public class ProjectionUnverifiedTests
         await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken); // no stamp yet — must be a no-op, not an insert
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
 
-        await state.SetProjectedAsync(Qc, Stamp, [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Qc, Stamp, [], [], TestContext.Current.CancellationToken);
         await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeFalse();
     }
@@ -102,10 +102,12 @@ public class ProjectionUnverifiedTests
 
         public Task<ProjectionStamp?> GetAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult<ProjectionStamp?>(null);
-        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, IReadOnlyList<ProjectionSkip> skips, CancellationToken cancellationToken = default)
+        public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, IReadOnlyList<ProjectionSkip> skips, IReadOnlyList<ProjectionFieldSkip> fieldSkips, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
         public Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ProjectionSkip>>([]);
+        public Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<ProjectionFieldSkip>>([]);
         public Task ClearAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromException(new TimeoutException("state store unreachable"));
         public Task MarkUnverifiedAsync(FormTypeRef type, CancellationToken cancellationToken = default)

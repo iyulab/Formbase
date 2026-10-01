@@ -1,5 +1,6 @@
 using Formbase.Core;
 using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Formbase.Host.Contracts;
 using Formbase.Host.Composition;
 using Formbase.Host.Projection;
@@ -38,7 +39,7 @@ internal static class ProjectionEndpoints
 
         routes.MapGet("/formtypes/{type}/projection/skips", GetSkipsAsync)
             .WithName("GetProjectionSkips")
-            .WithSummary("Lists the documents the last projection could not map, and why")
+            .WithSummary("Lists the documents the last projection could not map, and the optional fields it left empty, and why")
             .WithDescription(
                 "The status endpoint reports that a projection caught up with raw; this reports what " +
                 "it left behind getting there. A run that inserted 2 of 150 documents is 'projected' " +
@@ -46,7 +47,8 @@ internal static class ProjectionEndpoints
                 "projection itself, so it survives a restart and answers for runs another instance " +
                 "performed; a new run replaces it, because skips describe one run. Empty both when " +
                 "nothing was skipped and when the form type was never projected — the status " +
-                "endpoint is what separates those.")
+                "endpoint is what separates those. skippedFields lists optional fields left empty in " +
+                "rows that did land, because the document's value could not be converted.")
             .Produces<ProjectionSkipsResponse>();
 
         return routes;
@@ -70,6 +72,7 @@ internal static class ProjectionEndpoints
             result.Inserted,
             result.ProjectedWatermark.Value,
             [.. result.Skipped.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason))],
+            [.. result.SkippedFields.Select(ToResponse)],
             result.AbsentFieldCounts,
             result.UnresolvedReferences,
             result.Projected ? null
@@ -99,11 +102,19 @@ internal static class ProjectionEndpoints
         FormbaseEngine engine,
         CancellationToken cancellationToken)
     {
-        var skips = await engine.GetProjectionSkipsAsync(FormTypeRef.Create(type), cancellationToken)
+        var formType = FormTypeRef.Create(type);
+        var skips = await engine.GetProjectionSkipsAsync(formType, cancellationToken)
+            .ConfigureAwait(false);
+        var fieldSkips = await engine.GetProjectionFieldSkipsAsync(formType, cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(new ProjectionSkipsResponse(
             [.. skips.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason))],
-            skips.Count));
+            skips.Count,
+            [.. fieldSkips.Select(ToResponse)],
+            fieldSkips.Count));
     }
+
+    private static SkippedFieldResponse ToResponse(ProjectionFieldSkip skip) =>
+        new(skip.DocumentId.Value, skip.Field, skip.Reason);
 }

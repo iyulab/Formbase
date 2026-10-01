@@ -290,8 +290,8 @@
         "tags": [
           "ProjectionEndpoints"
         ],
-        "summary": "Lists the documents the last projection could not map, and why",
-        "description": "The status endpoint reports that a projection caught up with raw; this reports what it left behind getting there. A run that inserted 2 of 150 documents is \u0027projected\u0027 and current on that endpoint \u2014 the 148 reasons are here. Recorded with the projection itself, so it survives a restart and answers for runs another instance performed; a new run replaces it, because skips describe one run. Empty both when nothing was skipped and when the form type was never projected \u2014 the status endpoint is what separates those.",
+        "summary": "Lists the documents the last projection could not map, and the optional fields it left empty, and why",
+        "description": "The status endpoint reports that a projection caught up with raw; this reports what it left behind getting there. A run that inserted 2 of 150 documents is \u0027projected\u0027 and current on that endpoint \u2014 the 148 reasons are here. Recorded with the projection itself, so it survives a restart and answers for runs another instance performed; a new run replaces it, because skips describe one run. Empty both when nothing was skipped and when the form type was never projected \u2014 the status endpoint is what separates those. skippedFields lists optional fields left empty in rows that did land, because the document\u0027s value could not be converted.",
         "operationId": "GetProjectionSkips",
         "parameters": [
           {
@@ -1026,6 +1026,7 @@
         "required": [
           "insertedCount",
           "skippedCount",
+          "skippedFieldCount",
           "observedAt"
         ],
         "type": "object",
@@ -1039,6 +1040,14 @@
             "format": "int32"
           },
           "skippedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skippedFieldCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -1103,6 +1112,7 @@
           "inserted",
           "projectedWatermark",
           "skipped",
+          "skippedFields",
           "absentFieldCounts",
           "unresolvedReferences",
           "notProjectedReason"
@@ -1132,6 +1142,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SkippedDocumentResponse"
+            }
+          },
+          "skippedFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedFieldResponse"
             }
           },
           "absentFieldCounts": {
@@ -1166,7 +1182,9 @@
       "ProjectionSkipsResponse": {
         "required": [
           "skipped",
-          "count"
+          "count",
+          "skippedFields",
+          "fieldCount"
         ],
         "type": "object",
         "properties": {
@@ -1177,6 +1195,20 @@
             }
           },
           "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skippedFields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedFieldResponse"
+            }
+          },
+          "fieldCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
@@ -1314,6 +1346,26 @@
           "documentId": {
             "type": "string",
             "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SkippedFieldResponse": {
+        "required": [
+          "documentId",
+          "field",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "field": {
+            "type": "string"
           },
           "reason": {
             "type": "string"

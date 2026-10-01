@@ -34,7 +34,7 @@ Three things make this different from "define a table, then insert rows":
 
 - **Declaration is never required to accept data.** Documents land in the raw store immediately. Structure is declared later, and the raw stream is the source of truth — the typed table is a rebuildable projection of it.
 - **`FormType` is the unit of typing, and it stays inside Formbase.** MorphDB only ever sees a generic table; the form concept never leaks into it.
-- **Less-derived is a state, not a failure.** The engine never demands that input be complete. No hints means no projection — but intake still succeeds and raw reads always work. An unmappable document becomes a recorded `ProjectionSkip`, not an exception. What the input has not decided stays empty rather than being filled with a plausible default, because **a wrong value is never discovered while an empty one can still be filled in.**
+- **Less-derived is a state, not a failure.** The engine never demands that input be complete. No hints means no projection — but intake still succeeds and raw reads always work. An unmappable document becomes a recorded `ProjectionSkip`, not an exception — and an optional field whose value cannot be converted empties just that field, recorded as a `ProjectionFieldSkip`, rather than hiding the whole row. What the input has not decided stays empty rather than being filled with a plausible default, because **a wrong value is never discovered while an empty one can still be filled in.**
 
 ## How it works
 
@@ -184,7 +184,7 @@ Nine ports define the engine; everything else composes them.
 | `IFieldHintSource` | Supply the declared structure for a form type — the input to schema proposal. |
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
 | `IProjector` | Drop-and-rebuild the projected table from raw. |
-| `IProjectionState` | Record what the last completed projection did — the watermark it reached, and the `ProjectionSkip`s it produced. |
+| `IProjectionState` | Record what the last completed projection did — the watermark it reached, and the `ProjectionSkip`s and `ProjectionFieldSkip`s it produced. |
 | `IProjectionTrigger` | Decide whether a form type's projection should run *now* — the seam where projection-automation policy plugs in. Pure decision; the host owns the cadence. |
 | `IRecordQuery` | Query projected records; distinguish not-projected / stale / unavailable. |
 | `IProjectionStore` | The typed-table target — the adapter seam over the backing database. |

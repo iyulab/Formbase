@@ -418,6 +418,7 @@ POST /formtypes/orders/projection
   "inserted": 2,
   "projectedWatermark": 12,
   "skipped": [{ "documentId": "…", "reason": "…" }],
+  "skippedFields": [{ "documentId": "…", "field": "deadline", "reason": "…" }],
   "absentFieldCounts": { "total": 1 },
   "unresolvedReferences": ["customerName"],
   "notProjectedReason": null
@@ -432,7 +433,7 @@ landing under a watermark that does not cover them.
 `projected: false` means no declaration proposed a schema **and** schema intelligence (see
 [What this instance is](#what-this-instance-is)) had nothing to observe either. That is not an
 error — documents are accepted without one — and nothing about the recorded state changes.
-The three diagnostic fields are empty on such a run, because no run happened for them to describe;
+The four diagnostic fields are empty on such a run, because no run happened for them to describe;
 **`notProjectedReason`** is what says so, and what would change the answer:
 
 | `notProjectedReason` | Meaning | What to do |
@@ -457,8 +458,15 @@ Two fields exist so that silence stays visible:
   resolved. Named rather than silently blank: an empty column with no explanation reads as absent
   data.
 
-`skipped` carries documents that could not be mapped into the declared shape. A mapping failure
-skips one document and never touches raw.
+`skipped` carries documents that could not be mapped into the declared shape — a required field
+missing, null, or holding a value its column type cannot take. A mapping failure skips one document
+and never touches raw.
+
+`skippedFields` carries the smaller loss: an **optional** field whose value its column type cannot
+take (`"next week"` in a `timestamp`, an array in a `text`). The row lands with that column empty, and
+the field is named here with the document and the reason — fix the value in the document and run
+again to fill it. It is counted neither in `skipped` (the row is there) nor in `absentFieldCounts`
+(the document did carry a value).
 
 ---
 
@@ -473,7 +481,7 @@ GET /formtypes/orders/projection
   "state": "stale",
   "projectedWatermark": 8,
   "rawHead": 12,
-  "lastRun": { "insertedCount": 8, "skippedCount": 2, "observedAt": "2026-08-19T10:00:00Z" }
+  "lastRun": { "insertedCount": 8, "skippedCount": 2, "skippedFieldCount": 1, "observedAt": "2026-08-19T10:00:00Z" }
 }
 ```
 
@@ -511,9 +519,13 @@ GET /formtypes/orders/projection/skips
 ```json
 {
   "skipped": [
-    { "documentId": "0f3c1e2a-1c4d-4e6a-9a11-2b7c9d0e4f55", "reason": "field 'deadline' is not convertible to Timestamp" }
+    { "documentId": "0f3c1e2a-1c4d-4e6a-9a11-2b7c9d0e4f55", "reason": "required field 'deadline' is absent from the document" }
   ],
-  "count": 1
+  "count": 1,
+  "skippedFields": [
+    { "documentId": "7a1d4b90-3e2f-4c88-b5d1-6f0e2a9c1b37", "field": "receivedAt", "reason": "field 'receivedAt' is not convertible to Timestamp" }
+  ],
+  "fieldCount": 1
 }
 ```
 

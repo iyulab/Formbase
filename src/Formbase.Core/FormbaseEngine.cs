@@ -121,4 +121,12 @@ public sealed class FormbaseEngine
     /// </summary>
     public Task<IReadOnlyList<ProjectionSkip>> GetProjectionSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
         => _projectionState.GetSkipsAsync(type, cancellationToken);
+
+    /// <summary>
+    /// The optional fields the last completed projection of <paramref name="type"/> left empty because
+    /// their values could not be converted — the rows landed. Empty when none were, and when the form
+    /// type was never projected.
+    /// </summary>
+    public Task<IReadOnlyList<ProjectionFieldSkip>> GetProjectionFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+        => _projectionState.GetFieldSkipsAsync(type, cancellationToken);
 }
