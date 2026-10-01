@@ -261,6 +261,8 @@ public class DeclarationVocabularyTests
 
         public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
             => _inner.BulkInsertAsync(tableName, rows, cancellationToken);
+        public Task<int> ReplaceRowsAsync(string tableName, IReadOnlyCollection<RecordKey> removeKeys, IReadOnlyCollection<DocumentId> removeDocuments, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+            => _inner.ReplaceRowsAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken);
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
             => _inner.QueryAsync(tableName, spec, cancellationToken);
 

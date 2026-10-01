@@ -1,5 +1,7 @@
 using System.Globalization;
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
 
@@ -356,5 +358,59 @@ public abstract class ProjectionStoreContractTests
 
         Values(rows).Should().Equal(1L, 2L);
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    private TableSchema ProjectedSchema() =>
+        new(TableName, [.. ProjectionSystemColumns.All, new ColumnDef("v", ColumnType.Integer)]);
+
+    private static IReadOnlyDictionary<string, object?> ProjectedRow(DocumentId document, string? key, long v) =>
+        new Dictionary<string, object?>
+        {
+            [ProjectionSystemColumns.DocumentId] = document.Value,
+            [ProjectionSystemColumns.Watermark] = v,
+            [ProjectionSystemColumns.RecordKey] = key,
+            ["v"] = v,
+        };
+
+    [Fact]
+    public async Task Replacing_rows_removes_by_record_key_and_by_document_then_inserts()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(ProjectedSchema(), TestContext.Current.CancellationToken);
+        var (a, b, c, d) = (DocumentId.New(), DocumentId.New(), DocumentId.New(), DocumentId.New());
+        await store.BulkInsertAsync(TableName, [ProjectedRow(a, "k1", 1), ProjectedRow(b, "k2", 2), ProjectedRow(c, null, 3)], TestContext.Current.CancellationToken);
+
+        var inserted = await store.ReplaceRowsAsync(TableName, [RecordKey.Create("k1"), RecordKey.Create("absent")], [c, DocumentId.New()], [ProjectedRow(d, "k1", 4)], TestContext.Current.CancellationToken);
+
+        inserted.Should().Be(1);
+        Values(await store.QueryAsync(TableName, QuerySpec.All, TestContext.Current.CancellationToken)).Order().Should().Equal(2L, 4L);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Replacing_the_same_rows_twice_leaves_the_table_as_once()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(ProjectedSchema(), TestContext.Current.CancellationToken);
+        var (old, corrected, standalone) = (DocumentId.New(), DocumentId.New(), DocumentId.New());
+        await store.BulkInsertAsync(TableName, [ProjectedRow(old, "k1", 1)], TestContext.Current.CancellationToken);
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> delta = [ProjectedRow(corrected, "k1", 2), ProjectedRow(standalone, null, 3)];
+
+        // A retry after a failure between the rows and the projection state applies the same delta again.
+        await store.ReplaceRowsAsync(TableName, [RecordKey.Create("k1")], [corrected, standalone], delta, TestContext.Current.CancellationToken);
+        await store.ReplaceRowsAsync(TableName, [RecordKey.Create("k1")], [corrected, standalone], delta, TestContext.Current.CancellationToken);
+
+        Values(await store.QueryAsync(TableName, QuerySpec.All, TestContext.Current.CancellationToken)).Order().Should().Equal(2L, 3L);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Replacing_rows_in_a_missing_table_fails()
+    {
+        var store = CreateStore();
+
+        var act = () => store.ReplaceRowsAsync(TableName, [], [], [ProjectedRow(DocumentId.New(), null, 1)], TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<Exception>();
     }
 }

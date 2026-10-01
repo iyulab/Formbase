@@ -104,6 +104,8 @@ public class ProjectionUnverifiedTests
             => Task.FromResult<ProjectionStamp?>(null);
         public Task SetProjectedAsync(FormTypeRef type, ProjectionStamp stamp, IReadOnlyList<ProjectionSkip> skips, IReadOnlyList<ProjectionFieldSkip> fieldSkips, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+        public Task<bool> ApplyProjectedDeltaAsync(FormTypeRef type, Watermark expectedWatermark, ProjectionStamp stamp, IReadOnlyCollection<RecordKey> withdrawnKeys, IReadOnlyCollection<DocumentId> withdrawnDocuments, IReadOnlyList<ProjectionSkip> addedSkips, IReadOnlyList<ProjectionFieldSkip> addedFieldSkips, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
         public Task<IReadOnlyList<ProjectionSkip>> GetSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<ProjectionSkip>>([]);
         public Task<IReadOnlyList<ProjectionFieldSkip>> GetFieldSkipsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
@@ -123,6 +125,8 @@ public class ProjectionUnverifiedTests
         public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("bulk insert failed");
+        public Task<int> ReplaceRowsAsync(string tableName, IReadOnlyCollection<RecordKey> removeKeys, IReadOnlyCollection<DocumentId> removeDocuments, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("bulk insert failed");
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<IReadOnlyDictionary<string, object?>>>([]);

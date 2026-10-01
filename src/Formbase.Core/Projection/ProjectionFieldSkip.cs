@@ -17,4 +17,5 @@ namespace Formbase.Core.Projection;
 /// <param name="DocumentId">The document whose field was emptied; its row was projected.</param>
 /// <param name="Field">The projected column left empty.</param>
 /// <param name="Reason">Why the value could not be converted to the column's type.</param>
-public sealed record ProjectionFieldSkip(DocumentId DocumentId, string Field, string Reason);
+/// <param name="Key">The record the document stood for, or null for a document that is a record of its own — as on <see cref="ProjectionSkip.Key"/>.</param>
+public sealed record ProjectionFieldSkip(DocumentId DocumentId, string Field, string Reason, RecordKey? Key = null);

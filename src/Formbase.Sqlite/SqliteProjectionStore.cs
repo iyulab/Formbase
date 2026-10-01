@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text;
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
 using Microsoft.Data.Sqlite;
@@ -21,6 +23,9 @@ namespace Formbase.Sqlite;
 public sealed class SqliteProjectionStore : IProjectionStore
 {
     private const string Component = "projection-store";
+
+    // Each removed key or document is one bound parameter; well under SQLite's per-statement limit.
+    private const int RemoveChunk = 500;
 
     private const string InitDdl =
         """
@@ -96,14 +101,41 @@ public sealed class SqliteProjectionStore : IProjectionStore
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+    public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+        => ReplaceRowsAsync(tableName, [], [], rows, cancellationToken);
+
+    public async Task<int> ReplaceRowsAsync(
+        string tableName,
+        IReadOnlyCollection<RecordKey> removeKeys,
+        IReadOnlyCollection<DocumentId> removeDocuments,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(removeKeys);
+        ArgumentNullException.ThrowIfNull(removeDocuments);
         ArgumentNullException.ThrowIfNull(rows);
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var columns = await RequireColumnsAsync(connection, tableName, cancellationToken).ConfigureAwait(false);
 
+        // One transaction for the removal and the insert: a reader never sees a corrected record gone
+        // and its replacement not yet there.
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var removals = removeKeys.Select(k => (Column: ProjectionSystemColumns.RecordKey, Value: k.Value))
+            .Concat(removeDocuments.Select(d => (Column: ProjectionSystemColumns.DocumentId, Value: d.Value.ToString("D"))));
+        foreach (var chunk in removals.Chunk(RemoveChunk))
+        {
+            await using var delete = connection.CreateCommand();
+            delete.Transaction = transaction;
+            delete.CommandText = $"DELETE FROM {SqliteValues.Quote(tableName)} WHERE {string.Join(" OR ", chunk.Select((r, i) => $"{SqliteValues.Quote(r.Column)} = $r{i}"))}";
+            for (var i = 0; i < chunk.Length; i++)
+            {
+                delete.Parameters.AddWithValue($"$r{i}", chunk[i].Value);
+            }
+
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await using var insert = connection.CreateCommand();
         insert.Transaction = transaction;
         insert.CommandText =

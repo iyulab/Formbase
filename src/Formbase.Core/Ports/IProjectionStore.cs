@@ -1,3 +1,4 @@
+using Formbase.Core.Primitives;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
 
@@ -20,6 +21,23 @@ public interface IProjectionStore
 
     /// <summary>Inserts rows into an existing table; returns the number inserted.</summary>
     Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Brings an existing table forward without rebuilding it: removes every row whose
+    /// <see cref="Projection.ProjectionSystemColumns.RecordKey"/> is one of <paramref name="removeKeys"/>
+    /// or whose <see cref="Projection.ProjectionSystemColumns.DocumentId"/> is one of
+    /// <paramref name="removeDocuments"/>, then inserts <paramref name="rows"/>; returns the number
+    /// inserted. Keys and documents with no row are ignored, so applying the same call twice leaves the
+    /// table as applying it once — the property a retry after a failure between the rows and the
+    /// projection state relies on. A store with transactions applies the call in one; one without
+    /// relies on that idempotence instead.
+    /// </summary>
+    Task<int> ReplaceRowsAsync(
+        string tableName,
+        IReadOnlyCollection<RecordKey> removeKeys,
+        IReadOnlyCollection<DocumentId> removeDocuments,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Queries rows from a projected table. Rows carry both system and domain columns. Every

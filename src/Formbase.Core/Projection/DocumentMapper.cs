@@ -45,7 +45,7 @@ internal static class DocumentMapper
 
             if (unconvertible is not null)
             {
-                (emptied ??= []).Add(new ProjectionFieldSkip(document.Id, column.Name, unconvertible));
+                (emptied ??= []).Add(new ProjectionFieldSkip(document.Id, column.Name, unconvertible, document.Key));
             }
 
             if (fieldAbsent)

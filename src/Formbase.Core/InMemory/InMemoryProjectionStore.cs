@@ -1,4 +1,6 @@
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
 
@@ -50,6 +52,30 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         lock (_gate)
         {
             var table = Require(tableName);
+            foreach (var row in rows)
+            {
+                table.Rows.Add(new Dictionary<string, object?>(row, StringComparer.Ordinal));
+            }
+
+            return Task.FromResult(rows.Count);
+        }
+    }
+
+    public Task<int> ReplaceRowsAsync(
+        string tableName,
+        IReadOnlyCollection<RecordKey> removeKeys,
+        IReadOnlyCollection<DocumentId> removeDocuments,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken = default)
+    {
+        var keys = removeKeys.Select(k => k.Value).ToHashSet(StringComparer.Ordinal);
+        var documents = removeDocuments.Select(d => d.Value).ToHashSet();
+        lock (_gate)
+        {
+            var table = Require(tableName);
+            table.Rows.RemoveAll(row =>
+                (row.TryGetValue(ProjectionSystemColumns.RecordKey, out var key) && key is string k && keys.Contains(k))
+                || (row.TryGetValue(ProjectionSystemColumns.DocumentId, out var id) && id is Guid g && documents.Contains(g)));
             foreach (var row in rows)
             {
                 table.Rows.Add(new Dictionary<string, object?>(row, StringComparer.Ordinal));

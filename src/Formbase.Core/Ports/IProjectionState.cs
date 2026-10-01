@@ -40,6 +40,28 @@ public interface IProjectionState
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Records that a projection brought the table forward from the stamp at
+    /// <paramref name="expectedWatermark"/> to <paramref name="stamp"/> without rebuilding it: the stamp
+    /// is replaced, every recorded skip and field skip whose <see cref="ProjectionSkip.Key"/> is one of
+    /// <paramref name="withdrawnKeys"/> or whose document is one of <paramref name="withdrawnDocuments"/>
+    /// is removed — the records those documents stood for were replaced — and
+    /// <paramref name="addedSkips"/> and <paramref name="addedFieldSkips"/> are appended after the rest,
+    /// in order. Returns false and changes nothing when the recorded stamp is not at
+    /// <paramref name="expectedWatermark"/>, is unverified, or there is none: another projection got
+    /// there first, or a failed rebuild left the table in doubt, and the caller cannot know what its own
+    /// run now overlaps.
+    /// </summary>
+    Task<bool> ApplyProjectedDeltaAsync(
+        FormTypeRef type,
+        Watermark expectedWatermark,
+        ProjectionStamp stamp,
+        IReadOnlyCollection<RecordKey> withdrawnKeys,
+        IReadOnlyCollection<DocumentId> withdrawnDocuments,
+        IReadOnlyList<ProjectionSkip> addedSkips,
+        IReadOnlyList<ProjectionFieldSkip> addedFieldSkips,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// The skips recorded by the last completed projection, in the order the projector produced
     /// them; empty when that run skipped nothing, and also empty when this form type was never
     /// projected (<see cref="GetAsync"/> is what distinguishes those two — a caller that needs to

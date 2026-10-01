@@ -382,6 +382,9 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) =>
             inner.BulkInsertAsync(tableName, rows, cancellationToken);
 
+        public Task<int> ReplaceRowsAsync(string tableName, IReadOnlyCollection<RecordKey> removeKeys, IReadOnlyCollection<DocumentId> removeDocuments, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+            => inner.ReplaceRowsAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken);
+
         public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The projection store is not reachable.");
 

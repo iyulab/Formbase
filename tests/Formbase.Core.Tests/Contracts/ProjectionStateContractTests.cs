@@ -264,4 +264,82 @@ public abstract class ProjectionStateContractTests
         (await state.GetFieldSkipsAsync(Work, TestContext.Current.CancellationToken))
             .Should().ContainSingle().Which.Reason.Should().Be("work reason");
     }
+
+    private static readonly RecordKey K1 = RecordKey.Create("k1");
+    private static readonly RecordKey K2 = RecordKey.Create("k2");
+
+    [Fact]
+    public async Task Skip_keys_and_the_keyed_flag_round_trip()
+    {
+        var state = CreateState();
+        var skips = new[] { new ProjectionSkip(DocumentId.New(), "keyed", K1), new ProjectionSkip(DocumentId.New(), "unkeyed") };
+        var fieldSkips = new[] { new ProjectionFieldSkip(DocumentId.New(), "amount", "keyed", K2) };
+
+        await state.SetProjectedAsync(Qc, Stamp(7) with { SkipsKeyed = true }, skips, fieldSkips, TestContext.Current.CancellationToken);
+
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.SkipsKeyed.Should().BeTrue();
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(skips);
+        (await state.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(fieldSkips);
+    }
+
+    [Fact]
+    public async Task A_delta_withdraws_by_key_and_by_document_and_appends_after_the_rest_in_order()
+    {
+        var state = CreateState();
+        var (byKey, byDocument, kept) = (new ProjectionSkip(DocumentId.New(), "corrected later", K1), new ProjectionSkip(DocumentId.New(), "same document again"), new ProjectionSkip(DocumentId.New(), "kept", K2));
+        var keptField = new ProjectionFieldSkip(DocumentId.New(), "amount", "kept", K2);
+        await state.SetProjectedAsync(Qc, Stamp(7) with { SkipsKeyed = true }, [byKey, byDocument, kept], [new ProjectionFieldSkip(DocumentId.New(), "amount", "corrected later", K1), keptField], TestContext.Current.CancellationToken);
+        var (added1, added2) = (new ProjectionSkip(DocumentId.New(), "new 1", K1), new ProjectionSkip(DocumentId.New(), "new 2"));
+        var addedField = new ProjectionFieldSkip(DocumentId.New(), "amount", "new field");
+
+        var applied = await state.ApplyProjectedDeltaAsync(Qc, new Watermark(7), Stamp(12) with { SkipsKeyed = true }, [K1], [byDocument.DocumentId], [added1, added2], [addedField], TestContext.Current.CancellationToken);
+
+        applied.Should().BeTrue();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(12) with { SkipsKeyed = true });
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(kept, added1, added2);
+        (await state.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(keptField, addedField);
+    }
+
+    [Fact]
+    public async Task A_delta_from_a_stamp_that_moved_changes_nothing()
+    {
+        var state = CreateState();
+        var skip = new ProjectionSkip(DocumentId.New(), "kept", K1);
+        await state.SetProjectedAsync(Qc, Stamp(9), [skip], [], TestContext.Current.CancellationToken);
+
+        var applied = await state.ApplyProjectedDeltaAsync(Qc, new Watermark(7), Stamp(12), [K1], [], [new ProjectionSkip(DocumentId.New(), "new")], [], TestContext.Current.CancellationToken);
+
+        applied.Should().BeFalse();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(9));
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(skip);
+    }
+
+    [Fact]
+    public async Task A_delta_over_no_stamp_or_an_unverified_one_changes_nothing()
+    {
+        var state = CreateState();
+
+        (await state.ApplyProjectedDeltaAsync(Qc, new Watermark(0), Stamp(3), [], [], [], [], TestContext.Current.CancellationToken)).Should().BeFalse();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
+
+        (await state.ApplyProjectedDeltaAsync(Qc, new Watermark(7), Stamp(12), [], [], [], [], TestContext.Current.CancellationToken)).Should().BeFalse();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_delta_touches_only_its_own_form_type()
+    {
+        var state = CreateState();
+        var other = new ProjectionSkip(DocumentId.New(), "other type", K1);
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+        await state.SetProjectedAsync(Work, Stamp(7), [other], [], TestContext.Current.CancellationToken);
+
+        await state.ApplyProjectedDeltaAsync(Qc, new Watermark(7), Stamp(9), [K1], [], [], [], TestContext.Current.CancellationToken);
+
+        (await state.GetSkipsAsync(Work, TestContext.Current.CancellationToken)).Should().Equal(other);
+        (await state.GetAsync(Work, TestContext.Current.CancellationToken)).Should().Be(Stamp(7));
+    }
 }

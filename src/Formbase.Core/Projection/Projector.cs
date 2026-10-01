@@ -116,7 +116,7 @@ public sealed class Projector : IProjector
                 }
                 else
                 {
-                    skips.Add(new ProjectionSkip(document.Id, reason));
+                    skips.Add(new ProjectionSkip(document.Id, reason, document.Key));
                 }
             }
 

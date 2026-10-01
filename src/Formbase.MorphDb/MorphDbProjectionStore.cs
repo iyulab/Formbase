@@ -1,4 +1,6 @@
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
+using Formbase.Core.Projection;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
 using System.Globalization;
@@ -158,6 +160,56 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         }
 
         return inserted;
+    }
+
+    /// <summary>
+    /// MorphDB deletes by record id only, so the rows to remove are found first — one equality query per
+    /// key or document, which suits the few records a projection brings forward at a time — and deleted
+    /// in one batch, then the new rows inserted. Neither step spans the other in a transaction; a retry
+    /// after a failure between them is safe because the call is idempotent.
+    /// </summary>
+    public async Task<int> ReplaceRowsAsync(
+        string tableName,
+        IReadOnlyCollection<RecordKey> removeKeys,
+        IReadOnlyCollection<DocumentId> removeDocuments,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(removeKeys);
+        ArgumentNullException.ThrowIfNull(removeDocuments);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var ids = new HashSet<Guid>();
+        var matches = removeKeys.Select(k => (Column: ProjectionSystemColumns.RecordKey, Value: (object)k.Value))
+            .Concat(removeDocuments.Select(d => (Column: ProjectionSystemColumns.DocumentId, Value: (object)d.Value)));
+        foreach (var (column, value) in matches)
+        {
+            for (var page = 1; ; page++)
+            {
+                var request = new QueryRequest { Filters = [new Filter(column, MorphOperator.Equal, value)], PageSize = MaxPageSize, Page = page };
+                var paged = await _client.Data.QueryAsync(tableName, request, cancellationToken).ConfigureAwait(false);
+                ids.UnionWith(paged.Data.Select(record => record.Id));
+                if (paged.Data.Count < MaxPageSize)
+                {
+                    break;
+                }
+            }
+        }
+
+        foreach (var chunk in ids.Chunk(InsertChunkSize))
+        {
+            var response = await _client.Batch.ExecuteAsync(
+                new BatchRequest { Operations = [.. chunk.Select(id => new BatchOperation { Method = BatchMethod.Delete, Table = tableName, Id = id })] },
+                cancellationToken).ConfigureAwait(false);
+            if (response.FailureCount > 0)
+            {
+                var reason = response.Results.FirstOrDefault(r => !r.Success)?.Error ?? "unknown";
+                throw new InvalidOperationException(
+                    $"MorphDB refused to delete {response.FailureCount} of {chunk.Length} rows from '{tableName}': {reason}");
+            }
+        }
+
+        return await BulkInsertAsync(tableName, rows, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
