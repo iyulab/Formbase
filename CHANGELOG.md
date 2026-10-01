@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+Breaking for code that constructs or reads `EntityRef`, and for HTTP clients that send or read a bound
+field's `target`.
+
+### Changed
+
+- **A bound field's target names its value column as `ValueField`, not `KeyField`.** The old name read
+  as a lookup key, and declarations were written that way — `KeyField` was always the column the value
+  comes from. `EntityRef(entity, valueField, lookupKey, viaField)`; on the wire, `target.valueField`
+  replaces `target.keyField`. Declarations already stored by an earlier release read back unchanged.
+  `RelationHint.KeyField` (a relation's link field) is unaffected.
+
+### Added
+
+- **A bound field can say which record its value belongs to.** `EntityRef.LookupKey` (the field on the
+  target that identifies a record) and `EntityRef.ViaField` (the field of this declaration carrying that
+  key) — optional, and only as a pair. On the wire, `target.lookupKey` and `target.viaField`.
+- **A target naming a field that does not exist is refused.** Every declaration writer (in-memory,
+  SQLite, PostgreSQL) refuses a `ViaField` that is not a field of the same declaration, and a
+  `ValueField` or `LookupKey` that is not a field of the target form type when that form type is
+  declared (`DeclaredTargets`); the host answers `400` `/problems/invalid-declaration`. An undeclared
+  target is accepted unchecked.
+
 ## 0.16.0
 
 Pairs with MorphDB `0.14.x`. An optional field whose value cannot be converted no longer drops its

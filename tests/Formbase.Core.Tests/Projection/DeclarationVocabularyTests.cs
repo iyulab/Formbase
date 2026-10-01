@@ -120,6 +120,7 @@ public class DeclarationVocabularyTests
         h.Hints.Declare(new FormTypeHints(FormTypeRef.Create("items"), "master_items",
         [
             new FieldHint("key", ColumnType.Text),
+            new FieldHint("price", ColumnType.Decimal),
         ]));
         h.Hints.Declare(new FormTypeHints(Qc, "qc",
         [
@@ -148,6 +149,7 @@ public class DeclarationVocabularyTests
         h.Hints.Declare(new FormTypeHints(FormTypeRef.Create("items"), "master_items",
         [
             new FieldHint("key", ColumnType.Text),
+            new FieldHint("price", ColumnType.Decimal),
         ]));
         h.Hints.Declare(new FormTypeHints(Qc, "qc",
         [

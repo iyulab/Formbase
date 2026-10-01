@@ -96,7 +96,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
 
         field.GetProperty("binding").GetString().Should().Be("reference");
         field.GetProperty("target").GetProperty("formType").GetString().Should().Be("customers");
-        field.GetProperty("target").GetProperty("keyField").GetString().Should().Be("name");
+        field.GetProperty("target").GetProperty("valueField").GetString().Should().Be("name");
     }
 
     [Fact]

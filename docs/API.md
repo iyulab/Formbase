@@ -308,7 +308,10 @@ GET /formtypes/orders/declaration
     { "name": "total", "type": "integer", "nullable": false, "sourceKey": null,
       "binding": "stored", "target": null },
     { "name": "customerName", "type": "text", "nullable": true, "sourceKey": null,
-      "binding": "reference", "target": { "formType": "customers", "keyField": "name" } }
+      "binding": "reference", "target": { "formType": "customers", "valueField": "name",
+                                          "lookupKey": "id", "viaField": "customerId" } },
+    { "name": "customerId", "type": "text", "nullable": true, "sourceKey": null,
+      "binding": "stored", "target": null }
   ],
   "relations": [
     { "name": "lines", "kind": "child", "target": "orderlines", "keyField": "orderId" }
@@ -329,11 +332,16 @@ This is the shape the next projection run will build. A form type with no declar
   resolved by the engine today:** a run names it among `unresolvedReferences` and leaves it empty
   rather than filling it with the document's own fixed-then copy, which would be a different answer
   wearing the same column name.
-- **`target`** on a bound field — `formType` is where the value comes from, and `keyField` is the
+- **`target`** on a bound field — `formType` is where the value comes from, and `valueField` is the
   field on that form type whose value this field carries: the column a `snapshot` was copied from, or
-  the one a `reference` reads (`customers.name` above). Despite its name, `keyField` is not a lookup
-  key — the declaration does not say which `customers` record the value belongs to, nor which field of
-  the order carries that record's key.
+  the one a `reference` reads (`customers.name` above). It is not a lookup key. **`lookupKey`** and
+  **`viaField`** say which record the value belongs to: the field on the target that identifies a
+  record (`customers.id`), and the field of this declaration whose value is that record's key
+  (`customerId`). They are optional and come as a pair — one without the other is refused.
+  A declaration is refused (`400` `/problems/invalid-declaration`) when `viaField` is not one of its
+  own fields, or when `valueField` or `lookupKey` is not a field of the target form type's declaration.
+  A target form type that is not declared yet is accepted unchecked, and a target redeclared later
+  without the column is not re-checked.
 - **`kind`** on a relation — `child` (an owned entity whose key field points back here) or
   `reference` (a link out).
 

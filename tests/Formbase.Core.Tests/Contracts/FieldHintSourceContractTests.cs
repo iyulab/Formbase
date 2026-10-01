@@ -256,4 +256,103 @@ public abstract class FieldHintSourceContractTests
         read!.DeclarationVersion.Should().Be(1);
         (read.Relations ?? []).Should().BeEmpty();
     }
+
+    private static FormTypeHints Equipment() => new(Work, "work_table",
+    [
+        new FieldHint("number", ColumnType.Text, Nullable: false),
+        new FieldHint("name", ColumnType.Text),
+    ]);
+
+    /// <summary>
+    /// A snapshot of a target's value taken by its key states three columns — which value, which key on
+    /// the target, which field here carries that key — and all three come back.
+    /// </summary>
+    [Fact]
+    public async Task A_target_with_its_lookup_pair_round_trips()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, Equipment());
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("equipment_number", ColumnType.Text),
+            new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot,
+                Target: new EntityRef(Work, "name", lookupKey: "number", viaField: "equipment_number")),
+        ]);
+
+        await DeclareAsync(source, hints);
+
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken))!.Fields[1].Target
+            .Should().Be(new EntityRef(Work, "name", "number", "equipment_number"));
+    }
+
+    [Theory]
+    [InlineData("label", null, "value field")]
+    [InlineData("name", "serial", "lookup key")]
+    public async Task A_target_naming_a_field_its_declared_form_type_lacks_is_refused(string valueField, string? lookupKey, string role)
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, Equipment());
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("equipment_number", ColumnType.Text),
+            new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot,
+                Target: new EntityRef(Work, valueField, lookupKey, lookupKey is null ? null : "equipment_number")),
+        ]);
+
+        var act = () => DeclareAsync(source, hints);
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage($"*{role}*");
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull("nothing is stored for a refused declaration");
+    }
+
+    [Fact]
+    public async Task A_via_field_that_is_not_a_field_of_the_declaration_is_refused()
+    {
+        var source = CreateSource();
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot,
+                Target: new EntityRef(Work, "name", "number", "equipment_number")),
+        ]);
+
+        var act = () => DeclareAsync(source, hints);
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*equipment_number*");
+    }
+
+    /// <summary>
+    /// A target nobody has declared yet cannot be checked, and refusing it would make declaration
+    /// order matter — the projection already falls back to the form-type name for its table.
+    /// </summary>
+    [Fact]
+    public async Task A_target_on_an_undeclared_form_type_is_accepted()
+    {
+        var source = CreateSource();
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot, Target: new EntityRef(Work, "anything")),
+        ]);
+
+        await DeclareAsync(source, hints);
+
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task A_target_on_its_own_form_type_is_checked_against_the_declaration_being_stored()
+    {
+        var source = CreateSource();
+        var refused = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("parent", ColumnType.Text, Binding: FieldBinding.Snapshot, Target: new EntityRef(Qc, "missing")),
+        ]);
+        var accepted = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("serial", ColumnType.Text),
+            new FieldHint("parent", ColumnType.Text, Binding: FieldBinding.Snapshot, Target: new EntityRef(Qc, "serial")),
+        ]);
+
+        await ((Func<Task>)(() => DeclareAsync(source, refused))).Should().ThrowAsync<ArgumentException>();
+        await DeclareAsync(source, accepted);
+    }
 }

@@ -221,6 +221,53 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     /// A declaration into a table of the form type's own: a table belongs to one form type, so tests
     /// that each declare a fresh type must not share one.
     /// </summary>
+    /// <summary>
+    /// A bound field states which value it carries and, optionally, how the target record is found.
+    /// All of it comes back; a column the target does not declare, or half of the lookup pair, is a
+    /// fault in this declaration and answers as one.
+    /// </summary>
+    [Fact]
+    public async Task A_bound_targets_lookup_pair_reads_back_and_a_missing_column_is_refused()
+    {
+        var equipment = NewFormType();
+        (await _client.PutAsJsonAsync($"/formtypes/{equipment}/declaration", new
+        {
+            tableName = $"declared_{equipment}",
+            declarationVersion = 1,
+            fields = new[] { new { name = "number", type = "text" }, new { name = "name", type = "text" } },
+        }, TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        object Inspection(string valueField, string? lookupKey, string? viaField) => new
+        {
+            tableName = $"declared_{equipment}_inspection",
+            declarationVersion = 1,
+            fields = new object[]
+            {
+                new { name = "equipment_number", type = "text" },
+                new { name = "equipment_name", type = "text", binding = "snapshot", target = new { formType = equipment, valueField, lookupKey, viaField } },
+            },
+        };
+
+        var missing = await DeclareAsync(NewFormType(), Inspection("label", null, null));
+        missing.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await ReadAsync(missing);
+        problem.GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+        problem.GetProperty("detail").GetString().Should().Contain("label");
+
+        var half = await DeclareAsync(NewFormType(), Inspection("name", "number", null));
+        half.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(half)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+
+        var inspection = NewFormType();
+        var stored = await DeclareAsync(inspection, Inspection("name", "number", "equipment_number"));
+        stored.StatusCode.Should().Be(HttpStatusCode.Created, await stored.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var target = (await ReadAsync(await _client.GetAsync($"/formtypes/{inspection}/declaration", TestContext.Current.CancellationToken)))
+            .GetProperty("fields")[1].GetProperty("target");
+        target.GetProperty("valueField").GetString().Should().Be("name");
+        target.GetProperty("lookupKey").GetString().Should().Be("number");
+        target.GetProperty("viaField").GetString().Should().Be("equipment_number");
+    }
+
     private static object Declaration(string type, int version, int? expected = null, string? extraField = null, string? tableName = null)
     {
         var fields = new List<object> { new { name = "total", type = "integer", nullable = false } };

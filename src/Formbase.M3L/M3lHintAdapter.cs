@@ -129,7 +129,7 @@ public static class M3lHintAdapter
         if (field.Binding is not null)
         {
             binding = field.Binding.IsHard ? FieldBinding.Snapshot : FieldBinding.Reference;
-            target = new EntityRef(FormTypeRef.Create(ToSnake(field.Binding.Entity)), field.Binding.Column);
+            target = new EntityRef(FormTypeRef.Create(ToSnake(field.Binding.Entity)), valueField: field.Binding.Column);
         }
 
         foreach (var attribute in field.Attributes)

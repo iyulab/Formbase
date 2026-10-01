@@ -14,7 +14,8 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
     /// <summary>
     /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
     /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
-    /// type already projects into throws <see cref="Errors.TableNameInUseException"/>; neither stores anything.
+    /// type already projects into throws <see cref="Errors.TableNameInUseException"/>, and a target naming a field
+    /// that does not exist (<see cref="DeclaredTargets"/>) throws <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
     public void Declare(FormTypeHints hints)
     {
@@ -24,6 +25,7 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
         lock (_declaring)
         {
             DeclaredTableName.EnsureUnclaimed(hints, _hints.Values.Select(h => (h.Type, h.TableName)));
+            DeclaredTargets.EnsureResolvable(hints, type => _hints.TryGetValue(type, out var declared) ? declared.Fields : null);
             _hints[hints.Type] = hints;
         }
     }

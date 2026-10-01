@@ -301,7 +301,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
             declarationVersion = 1,
             fields = new object[]
             {
-                new { name = "equipment", type = "text", binding = "snapshot", target = new { formType = equipment, keyField = "code" } },
+                new { name = "equipment", type = "text", binding = "snapshot", target = new { formType = equipment, valueField = "code" } },
                 new { name = "result", type = "text", binding = "stored", target = (object?)null },
             },
         }, ct);
@@ -349,7 +349,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
             {
                 new { name = "noticeId", type = "text", sourceKey = (string?)null, binding = "stored", target = (object?)null },
                 new { name = "publishedAt", type = "timestamp", sourceKey = "published_at", binding = "stored", target = (object?)null },
-                new { name = "buyerName", type = "text", sourceKey = (string?)null, binding = "reference", target = new { formType = lot, keyField = "noticeId" } },
+                new { name = "buyerName", type = "text", sourceKey = (string?)null, binding = "reference", target = new { formType = lot, valueField = "noticeId" } },
             },
             relations = new[] { new { name = "lots", kind = "child", target = lot, keyField = "noticeId" } },
         }, ct);

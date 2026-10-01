@@ -109,7 +109,17 @@ internal static class DeclarationEndpoints
             return conflict;
         }
 
-        await writer.DeclareAsync(ToEngine(formType, request), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await writer.DeclareAsync(ToEngine(formType, request), cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArgumentException e)
+        {
+            // What only the engine can judge — a bound target naming a field that does not exist, or
+            // half of a lookup pair — is still a fault in this declaration, not in the form type the
+            // route names, so it answers as one.
+            return Invalid(e.Message);
+        }
 
         // Read back rather than echo: the caller needs what is in force, and only the store knows
         // whether it stored what it was handed.
@@ -233,7 +243,7 @@ internal static class DeclarationEndpoints
                 f.Binding.ToEngine(),
                 f.Target is null
                     ? null
-                    : new EntityRef(FormTypeRef.Create(f.Target.FormType), f.Target.KeyField)))],
+                    : new EntityRef(FormTypeRef.Create(f.Target.FormType), f.Target.ValueField, f.Target.LookupKey, f.Target.ViaField)))],
             request.Relations is null
                 ? null
                 : [.. request.Relations.Select(r => new RelationHint(
@@ -253,7 +263,7 @@ internal static class DeclarationEndpoints
                 f.Binding.ToWire(),
                 f.Target is null
                     ? null
-                    : new DeclaredTargetResponse(f.Target.Entity.Value, f.Target.KeyField)))],
+                    : new DeclaredTargetResponse(f.Target.Entity.Value, f.Target.ValueField, f.Target.LookupKey, f.Target.ViaField)))],
             [.. (declaration.Relations ?? []).Select(r => new DeclaredRelationResponse(
                 r.Name,
                 r.Kind.ToWire(),

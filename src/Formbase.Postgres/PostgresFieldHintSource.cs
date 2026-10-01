@@ -108,19 +108,25 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         }
 
         var declared = new List<(FormTypeRef, string)>();
+        var declaredFields = new Dictionary<FormTypeRef, string>();
         await using (var read = new NpgsqlCommand(
-            $"""SELECT form_type, table_name FROM "{_bootstrap.Schema}".field_hints""",
+            $"""SELECT form_type, table_name, fields::text FROM "{_bootstrap.Schema}".field_hints""",
             connection,
             transaction))
         await using (var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
         {
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                declared.Add((FormTypeRef.Create(reader.GetString(0)), reader.GetString(1)));
+                var type = FormTypeRef.Create(reader.GetString(0));
+                declared.Add((type, reader.GetString(1)));
+                declaredFields[type] = reader.GetString(2);
             }
         }
 
         DeclaredTableName.EnsureUnclaimed(hints, declared);
+        DeclaredTargets.EnsureResolvable(hints, type => declaredFields.TryGetValue(type, out var json)
+            ? JsonSerializer.Deserialize<List<FieldHint>>(json, FieldJson)
+            : null);
 
         await using var command = new NpgsqlCommand(
             $"""

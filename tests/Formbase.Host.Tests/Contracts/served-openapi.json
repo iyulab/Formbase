@@ -986,15 +986,27 @@
       "DeclaredTargetResponse": {
         "required": [
           "formType",
-          "keyField"
+          "valueField"
         ],
         "type": "object",
         "properties": {
           "formType": {
             "type": "string"
           },
-          "keyField": {
+          "valueField": {
             "type": "string"
+          },
+          "lookupKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "viaField": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

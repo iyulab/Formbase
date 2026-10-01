@@ -42,12 +42,20 @@ public sealed record DeclaredFieldResponse(
     DeclaredTargetResponse? Target);
 
 /// <param name="FormType">The form type the bound field's value comes from.</param>
-/// <param name="KeyField">
+/// <param name="ValueField">
 /// The field on that form type whose value the bound field carries — the column a snapshot was copied
 /// from, or the column a reference reads. Not a lookup key: it does not say which record the value
-/// belongs to.
+/// belongs to; <paramref name="LookupKey"/> and <paramref name="ViaField"/> do.
 /// </param>
-public sealed record DeclaredTargetResponse(string FormType, string KeyField);
+/// <param name="LookupKey">
+/// The field on that form type that identifies the record the value belongs to. Given together with
+/// <paramref name="ViaField"/> or not at all.
+/// </param>
+/// <param name="ViaField">
+/// The field of this declaration whose value is that record's key. Given together with
+/// <paramref name="LookupKey"/> or not at all.
+/// </param>
+public sealed record DeclaredTargetResponse(string FormType, string ValueField, string? LookupKey = null, string? ViaField = null);
 
 /// <param name="Name">The relation's declared name.</param>
 /// <param name="Kind">Whether the target is owned or merely referenced.</param>

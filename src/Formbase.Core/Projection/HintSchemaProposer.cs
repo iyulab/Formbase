@@ -31,7 +31,7 @@ public sealed class HintSchemaProposer : ISchemaProposer
         {
             var bindingTarget = field.Target is null
                 ? null
-                : $"{await ResolveTableAsync(field.Target.Entity, cancellationToken).ConfigureAwait(false)}.{field.Target.KeyField}";
+                : $"{await ResolveTableAsync(field.Target.Entity, cancellationToken).ConfigureAwait(false)}.{field.Target.ValueField}";
             columns.Add(new ColumnDef(field.Name, field.Type, field.Nullable, field.SourceKey, field.Binding, bindingTarget));
         }
 

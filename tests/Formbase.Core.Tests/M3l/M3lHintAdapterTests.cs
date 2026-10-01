@@ -148,7 +148,7 @@ public class M3lHintAdapterTests
         // soft binding => reads true now
         fields["unit"].Binding.Should().Be(FieldBinding.Reference);
         fields["unit"].Target!.Entity.Value.Should().Be("master_item");
-        fields["unit"].Target!.KeyField.Should().Be("Key");
+        fields["unit"].Target!.ValueField.Should().Be("Key");
         // hard binding => fixed then
         fields["approved_price"].Binding.Should().Be(FieldBinding.Snapshot);
         fields["approved_price"].Target!.Entity.Value.Should().Be("price_book");

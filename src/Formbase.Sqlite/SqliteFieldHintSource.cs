@@ -48,7 +48,8 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     /// <summary>
     /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
     /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
-    /// type already projects into throws <see cref="TableNameInUseException"/>; neither stores anything.
+    /// type already projects into throws <see cref="TableNameInUseException"/>, and a target naming a field
+    /// that does not exist (<see cref="DeclaredTargets"/>) throws <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
     public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
     {
@@ -62,18 +63,24 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         await using var transaction = connection.BeginTransaction(deferred: false);
 
         var declared = new List<(FormTypeRef, string)>();
+        var declaredFields = new Dictionary<FormTypeRef, string>();
         await using (var read = connection.CreateCommand())
         {
             read.Transaction = transaction;
-            read.CommandText = "SELECT form_type, table_name FROM fb_field_hints";
+            read.CommandText = "SELECT form_type, table_name, fields FROM fb_field_hints";
             await using var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                declared.Add((FormTypeRef.Create(reader.GetString(0)), reader.GetString(1)));
+                var type = FormTypeRef.Create(reader.GetString(0));
+                declared.Add((type, reader.GetString(1)));
+                declaredFields[type] = reader.GetString(2);
             }
         }
 
         DeclaredTableName.EnsureUnclaimed(hints, declared);
+        DeclaredTargets.EnsureResolvable(hints, type => declaredFields.TryGetValue(type, out var json)
+            ? JsonSerializer.Deserialize<List<FieldHint>>(json, FieldJson)
+            : null);
 
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
