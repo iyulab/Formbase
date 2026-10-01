@@ -22,9 +22,9 @@ GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
 PUT    /formtypes/{type}/declaration   # Put a declaration in force
 DELETE /formtypes/{type}/declaration   # Remove it, and the projection it built
-POST   /formtypes/{type}/projection    # Rebuild the projected table
+POST   /formtypes/{type}/projection    # Build the projected table, or bring it forward
 GET    /formtypes/{type}/projection    # Read projection state
-GET    /formtypes/{type}/projection/skips  # Read what the last run could not map
+GET    /formtypes/{type}/projection/skips  # Read what the projection could not map
 GET    /formtypes/{type}/records       # Query projected records
 DELETE /formtypes/{type}/records       # Retire a record (?recordKey=)
 GET    /settings                       # What this instance was composed as
@@ -429,14 +429,26 @@ POST /formtypes/orders/projection
   "skippedFields": [{ "documentId": "…", "field": "deadline", "reason": "…" }],
   "absentFieldCounts": { "total": 1 },
   "unresolvedReferences": ["customerName"],
-  "notProjectedReason": null
+  "notProjectedReason": null,
+  "mode": "rebuild"
 }
 ```
 
-**Safe to repeat and safe to retry.** The table is rebuilt from the raw stream rather than updated
-in place, so two runs over an unchanged stream leave the same table. A run is bounded to the raw
-head it saw when it started, so documents arriving mid-run are left for the next run rather than
-landing under a watermark that does not cover them.
+**Safe to repeat and safe to retry.** Two runs over an unchanged stream leave the same table, and a
+run is bounded to the raw head it saw when it started, so documents arriving mid-run are left for the
+next run rather than landing under a watermark that does not cover them.
+
+**A run rebuilds the table, or brings it forward — with the same result.** `mode` says which:
+
+| `mode` | When | What the counts cover |
+|---|---|---|
+| `rebuild` | The first run; the declaration or its table changed; a failed run left the table in doubt (`unverified`); or the recorded state predates this behavior. The table is dropped and refilled from every document | Every document in the stream |
+| `incremental` | Nothing but documents changed since the last run. Only documents appended since its watermark are read: records they correct or retire lose their old row, and their own rows and skips are added | Only the documents this run read |
+
+The table and [`GET …/projection/skips`](#what-a-projection-skipped) are what a rebuild would have produced either
+way; only `inserted`, `skipped`, `skippedFields` and `absentFieldCounts` change meaning, describing
+the documents the run read. A run that fails partway through marks the projection `unverified`, and
+the next run rebuilds it. `mode` is `null` when `projected` is `false`.
 
 `projected: false` means no declaration proposed a schema **and** schema intelligence (see
 [What this instance is](#what-this-instance-is)) had nothing to observe either. That is not an
@@ -543,8 +555,10 @@ the head, because the 148 documents it could not map were read and recorded rath
 silently. Those 148 reasons are here, and nowhere else.
 
 **Unlike `lastRun`, this is durable.** It is recorded with the projection itself, so it survives a
-restart and answers for a run a different instance performed. A new run replaces it, because skips
-describe one run: after a re-declaration that fixes the mismatch, a clean run leaves `count: 0`.
+restart and answers for a run a different instance performed. It describes the table as it stands —
+what a rebuild of the current stream would leave behind: a rebuild replaces it, and a run that brings
+the table forward withdraws the skips of records it corrected and adds its own. After a re-declaration
+that fixes the mismatch, the run (a rebuild) leaves `count: 0`.
 
 `count: 0` means the same thing for "the last run mapped everything" and "this form type was never
 projected" — read `GET /formtypes/{type}/projection` to tell those apart (`projected` versus

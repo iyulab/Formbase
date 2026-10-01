@@ -98,6 +98,17 @@ public sealed class SqliteProjectionStore : IProjectionStore
             await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        // A projection brought forward removes rows by document and by record key; without an index
+        // each removal reads the whole table, and a run's cost would follow the table's size rather
+        // than what was appended. The indexes go with the table when it is dropped.
+        foreach (var column in schema.Columns.Select(c => c.Name).Where(n => n is ProjectionSystemColumns.DocumentId or ProjectionSystemColumns.RecordKey))
+        {
+            await using var index = connection.CreateCommand();
+            index.Transaction = transaction;
+            index.CommandText = $"CREATE INDEX {SqliteValues.Quote($"fb_ix_{schema.TableName}_{column}")} ON {SqliteValues.Quote(schema.TableName)} ({SqliteValues.Quote(column)})";
+            await index.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
