@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`WatermarkLagTrigger` counts a form type's own documents.** A lag threshold above one compared the
+  watermark gap, but watermarks are shared by every form type, so other types' documents brought a
+  projection due early. It now counts this type's documents after the projected watermark, reading no
+  more than the threshold. The default threshold of one is unaffected.
+
 ## 0.17.0
 
 Pairs with MorphDB `0.14.x`. A projection whose declaration has not changed reads only the documents

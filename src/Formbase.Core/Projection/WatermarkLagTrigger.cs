@@ -7,9 +7,10 @@ namespace Formbase.Core.Projection;
 /// First-cycle <see cref="IProjectionTrigger"/>: observes the gap between the raw head and the
 /// recorded projection stamp. A shape change (redeclared fingerprint, moved table) fires
 /// immediately — the projection is answering with the wrong shape until rebuilt. Pure data lag
-/// fires only at <c>lagThreshold</c> documents behind: a projection is a
-/// drop-and-rebuild, so rebuilding on every single document would thrash; the threshold is the
-/// policy knob between freshness and rebuild cost. Never fires when nothing proposes a schema
+/// fires only at <c>lagThreshold</c> of this form type's documents behind — counted, not read off the
+/// watermarks, which are global across form types and so also move for every other type's documents.
+/// A run that only brings the table forward costs what was appended, so the default of one keeps a
+/// projection current; a higher threshold batches runs. Never fires when nothing proposes a schema
 /// (projection would be a no-op) or when a declared type has no documents yet.
 /// </summary>
 public sealed class WatermarkLagTrigger : IProjectionTrigger
@@ -55,12 +56,35 @@ public sealed class WatermarkLagTrigger : IProjectionTrigger
             // shaped wrong — no threshold applies. Data lag is quantitative and waits for the knob.
             ProjectionState.Stale when stamp!.SchemaFingerprint != schema!.Fingerprint()
                 => ProjectionTriggerReason.ShapeDrift,
-            ProjectionState.Stale when rawHead.Value - status.ProjectedWatermark.Value >= _lagThreshold
+            ProjectionState.Stale when await IsBehindAsync(type, status.ProjectedWatermark, rawHead, cancellationToken).ConfigureAwait(false)
                 => ProjectionTriggerReason.DataLag,
 
             _ => ProjectionTriggerReason.None,
         };
 
         return new ProjectionTriggerDecision(reason, status);
+    }
+
+    /// <summary>
+    /// Whether at least <c>lagThreshold</c> of this form type's documents lie after the projected
+    /// watermark. Reads no more than that many, so the check costs the threshold, not the backlog.
+    /// </summary>
+    private async Task<bool> IsBehindAsync(FormTypeRef type, Watermark projected, Watermark rawHead, CancellationToken cancellationToken)
+    {
+        long behind = 0;
+        await foreach (var document in _rawStore.StreamAsync(type, projected, cancellationToken).ConfigureAwait(false))
+        {
+            if (document.Watermark > rawHead)
+            {
+                break;
+            }
+
+            if (++behind >= _lagThreshold)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

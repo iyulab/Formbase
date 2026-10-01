@@ -140,6 +140,29 @@ public class ProjectionTriggerTests
     }
 
     [Fact]
+    public async Task Documents_of_other_form_types_do_not_count_toward_the_lag()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"L-1"}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        // Watermarks are global across form types, so another type's documents sit between this
+        // type's — they are not this projection's lag.
+        var other = FormTypeRef.Create("other");
+        for (var n = 0; n < 5; n++)
+        {
+            await h.Intake.AcceptAsync(other, DocumentBody.Parse("""{"x":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        await h.Accept("""{"lot":"L-2"}""");
+
+        var decision = await h.Trigger(lagThreshold: 3).EvaluateAsync(Qc, TestContext.Current.CancellationToken);
+
+        decision.ShouldProject.Should().BeFalse("one qc document is behind, not the six positions the watermarks moved");
+        decision.Status.State.Should().Be(ProjectionState.Stale);
+    }
+
+    [Fact]
     public async Task Fires_at_the_lag_threshold()
     {
         var h = new Harness();

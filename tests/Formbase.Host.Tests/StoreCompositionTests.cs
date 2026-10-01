@@ -156,8 +156,8 @@ public class StoreCompositionTests
     private static Dictionary<string, string?> Durable() => new()
     {
         ["Formbase:Store"] = "Durable",
-        ["ConnectionStrings:Formbase"] = "Host=localhost;Database=formbase;Username=x;Password=y",
-        ["Formbase:MorphDb:Url"] = "http://localhost:8080",
+        ["ConnectionStrings:Formbase"] = "Host=127.0.0.1;Port=1;Database=formbase;Username=x;Password=y",
+        ["Formbase:MorphDb:Url"] = "http://127.0.0.1:1",
         ["Formbase:MorphDb:ProjectId"] = "6f1a6f6e-0000-4000-8000-000000000001",
     };
 

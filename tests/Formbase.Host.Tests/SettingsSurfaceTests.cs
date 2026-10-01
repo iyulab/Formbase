@@ -62,12 +62,14 @@ public sealed class SettingsSurfaceTests : IClassFixture<WebApplicationFactory<P
     {
         // UseSetting rather than ConfigureAppConfiguration: the stores are composed while the builder
         // is still being configured, and only settings given this way are visible by then.
+        // Port 1 on loopback: nothing listens there, so the host starts with both stores unverified
+        // whatever else this machine runs — a real server on a default port answered and failed startup.
         using var durable = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Formbase:Store", "Durable");
             builder.UseSetting("Formbase:Schema", "store");
-            builder.UseSetting("ConnectionStrings:Formbase", "Host=localhost;Database=formbase;Username=x;Password=y");
-            builder.UseSetting("Formbase:MorphDb:Url", "http://localhost:8080");
+            builder.UseSetting("ConnectionStrings:Formbase", "Host=127.0.0.1;Port=1;Database=formbase;Username=x;Password=y");
+            builder.UseSetting("Formbase:MorphDb:Url", "http://127.0.0.1:1");
             builder.UseSetting("Formbase:MorphDb:ProjectId", "6f1a6f6e-0000-4000-8000-000000000002");
         });
         using var client = durable.CreateClient();
