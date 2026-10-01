@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.17.0
 
-Breaking for code that constructs or reads `EntityRef`, and for HTTP clients that send or read a bound
-field's `target`. Breaking for implementers of `IProjectionStore` and `IProjectionState`, which gain a
-member each.
+Pairs with MorphDB `0.14.x`. A projection whose declaration has not changed reads only the documents
+appended since its last run, with the result a rebuild would have, and a bound field names its value
+column and, optionally, which record its value belongs to. Breaking for code that constructs or reads
+`EntityRef`, for HTTP clients that send or read a bound field's `target`, and for implementers of
+`IProjectionStore` and `IProjectionState`, which gain a member each.
 
 ### Changed
 
