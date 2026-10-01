@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.16.0
 
-Breaking for code that implements `IProjectionState`.
+Pairs with MorphDB `0.14.x`. An optional field whose value cannot be converted no longer drops its
+document, and a timestamp without an offset reads the same on every host. Breaking for code that
+implements `IProjectionState`.
 
 ### Changed
 
