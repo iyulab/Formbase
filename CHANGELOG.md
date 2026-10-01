@@ -3,7 +3,8 @@
 ## Unreleased
 
 Breaking for code that constructs or reads `EntityRef`, and for HTTP clients that send or read a bound
-field's `target`.
+field's `target`. Breaking for implementers of `IProjectionStore` and `IProjectionState`, which gain a
+member each.
 
 ### Changed
 
@@ -23,6 +24,26 @@ field's `target`.
   `ValueField` or `LookupKey` that is not a field of the target form type when that form type is
   declared (`DeclaredTargets`); the host answers `400` `/problems/invalid-declaration`. An undeclared
   target is accepted unchecked.
+- **A projection brings its table forward instead of rebuilding it when only documents were appended.**
+  When the declaration, table and recorded state are unchanged since the last projection, a run reads
+  only the documents appended since its watermark: rows of records they correct or retire are removed,
+  their own rows inserted, and the recorded skips updated in place. The table and `GET
+  …/projection/skips` are what a rebuild would have produced; the cost of a run follows what was
+  appended, not the size of the raw stream. A first run, a changed declaration or table, a table left
+  in doubt by a failed run, and the first run after upgrading still rebuild. `ProjectionResult.Mode`
+  (and `mode` on `POST …/projection`: `rebuild` or `incremental`) says which happened; on an
+  incremental run the run's counts and skip lists cover the documents it read.
+- `IProjectionStore.ReplaceRowsAsync` (remove rows by record key or document, then insert — idempotent)
+  and `IProjectionState.ApplyProjectedDeltaAsync` (compare-and-set on the recorded watermark, withdraw
+  skips by record or document, append new ones). `ProjectionSkip.Key` and `ProjectionFieldSkip.Key`
+  name the record a skipped document stood for; `ProjectionStamp.SkipsKeyed` says whether they do.
+  SQLite and PostgreSQL state stores add the columns on first use.
+
+### Fixed
+
+- Two projections of one form type started at once in one process no longer race: they run one after
+  the other. A run that finds the recorded projection moved under it marks it unverified, so the next
+  run rebuilds rather than serving a table both runs wrote to.
 
 ## 0.16.0
 

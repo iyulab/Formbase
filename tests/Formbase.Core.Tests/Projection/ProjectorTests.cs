@@ -322,7 +322,7 @@ public class ProjectorTests
     }
 
     [Fact]
-    public async Task Re_projection_rebuilds_from_raw_and_advances_the_watermark()
+    public async Task Re_projection_brings_the_table_forward_and_advances_the_watermark()
     {
         var h = new Harness();
         h.DeclareQcHints();
@@ -332,7 +332,8 @@ public class ProjectorTests
         await h.Accept("""{"lot":"L-2","qty":2}""");
         var second = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        second.Inserted.Should().Be(2, "drop-and-rebuild reprojects the whole raw stream, not just the delta");
+        second.Mode.Should().Be(ProjectionMode.Incremental, "nothing about the shape changed, so only what was appended is read");
+        second.Inserted.Should().Be(1, "the run's counts cover the documents it read");
         (await h.State.GetAsync(Qc, TestContext.Current.CancellationToken))?.Watermark.Should().Be(new Watermark(2));
         (await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken)).Should().HaveCount(2);
     }
@@ -439,7 +440,8 @@ public class ProjectorTests
         // Bounding a run defers the straggler, it does not drop it.
         var second = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        second.Inserted.Should().Be(2);
+        second.Inserted.Should().Be(1, "the next run reads from where the bounded one stopped");
+        (await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken)).Should().HaveCount(2);
         (await h.State.GetAsync(Qc, TestContext.Current.CancellationToken))?.Watermark.Should().Be(new Watermark(2));
     }
 

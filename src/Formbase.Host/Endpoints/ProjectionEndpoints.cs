@@ -77,7 +77,10 @@ internal static class ProjectionEndpoints
             result.UnresolvedReferences,
             result.Projected ? null
                 : intelligence.Installed ? NotProjectedReasonWire.NothingToInfer
-                : NotProjectedReasonWire.NoDeclaration));
+                : NotProjectedReasonWire.NoDeclaration,
+            !result.Projected ? null
+                : result.Mode == ProjectionMode.Incremental ? ProjectionModeWire.Incremental
+                : ProjectionModeWire.Rebuild));
     }
 
     private static async Task<IResult> GetStatusAsync(

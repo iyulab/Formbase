@@ -1118,6 +1118,13 @@
           }
         }
       },
+      "ProjectionModeWire": {
+        "enum": [
+          "rebuild",
+          "incremental",
+          null
+        ]
+      },
       "ProjectionRunResponse": {
         "required": [
           "projected",
@@ -1127,7 +1134,8 @@
           "skippedFields",
           "absentFieldCounts",
           "unresolvedReferences",
-          "notProjectedReason"
+          "notProjectedReason",
+          "mode"
         ],
         "type": "object",
         "properties": {
@@ -1186,6 +1194,16 @@
               },
               {
                 "$ref": "#/components/schemas/NotProjectedReasonWire"
+              }
+            ]
+          },
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectionModeWire"
               }
             ]
           }

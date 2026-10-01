@@ -32,6 +32,11 @@ namespace Formbase.Host.Contracts;
 /// empty — and empty reads as "nothing was lost". This is what says the run did not happen and
 /// what would make it happen.
 /// </param>
+/// <param name="Mode">
+/// How the run built the table, when <see cref="Projected"/> is true; null when it is false. On an
+/// incremental run, <see cref="Inserted"/> and the diagnostic lists cover only the documents appended
+/// since the last projection — the table and <c>GET …/projection/skips</c> still cover everything.
+/// </param>
 public sealed record ProjectionRunResponse(
     bool Projected,
     int Inserted,
@@ -40,7 +45,24 @@ public sealed record ProjectionRunResponse(
     IReadOnlyList<SkippedFieldResponse> SkippedFields,
     IReadOnlyDictionary<string, int> AbsentFieldCounts,
     IReadOnlyList<string> UnresolvedReferences,
-    NotProjectedReasonWire? NotProjectedReason);
+    NotProjectedReasonWire? NotProjectedReason,
+    ProjectionModeWire? Mode);
+
+/// <summary>How a projection run built its table.</summary>
+public enum ProjectionModeWire
+{
+    /// <summary>
+    /// Dropped and rebuilt from every document: a first run, a changed declaration or table, or a table
+    /// left in doubt by a failed run.
+    /// </summary>
+    Rebuild,
+
+    /// <summary>
+    /// Brought forward from the last projection with only the documents appended since — the same table
+    /// a rebuild would have produced.
+    /// </summary>
+    Incremental,
+}
 
 /// <summary>
 /// Why a projection run built nothing. Both mean no field hints are declared for the form type; they

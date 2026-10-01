@@ -100,11 +100,14 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         var first = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
         var second = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
 
-        second.GetProperty("inserted").GetInt32().Should().Be(first.GetProperty("inserted").GetInt32(),
-            "a second run rebuilds from the same raw stream — rows accumulating across runs would " +
-            "mean the table is being appended to rather than rebuilt");
+        first.GetProperty("mode").GetString().Should().Be("rebuild");
+        second.GetProperty("mode").GetString().Should().Be("incremental",
+            "nothing changed since the first run, so the second brings the table forward");
+        second.GetProperty("inserted").GetInt32().Should().Be(0, "no document was appended since the first run");
         second.GetProperty("projectedWatermark").GetInt64().Should()
             .Be(first.GetProperty("projectedWatermark").GetInt64());
+        var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
+        records.GetProperty("rows").GetArrayLength().Should().Be(2, "rows accumulating across runs would mean the table is appended to twice");
     }
 
     /// <summary>

@@ -41,6 +41,14 @@ public sealed record ProjectionResult(
     IReadOnlyList<string> UnresolvedReferences,
     Watermark ProjectedWatermark)
 {
+    /// <summary>
+    /// Whether the run rebuilt the table or brought it forward (<see cref="ProjectionMode"/>). On an
+    /// incremental run <see cref="Inserted"/>, <see cref="Skipped"/>, <see cref="SkippedFields"/> and
+    /// <see cref="AbsentFieldCounts"/> cover the documents that run read — those appended since the last
+    /// projection — while the table and the recorded skips cover everything.
+    /// </summary>
+    public ProjectionMode Mode { get; init; } = ProjectionMode.Rebuild;
+
     private static readonly IReadOnlyDictionary<string, int> NoAbsences =
         new Dictionary<string, int>();
 

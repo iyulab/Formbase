@@ -99,14 +99,14 @@ public class CoreEngineIntegrationTests
         (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Stale);
         (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Stale.Should().BeTrue();
 
-        // Re-project → current again, all 15 rows, no duplicates.
+        // Re-project → current again, all 15 rows, no duplicates; only the five new documents are read.
         var second = await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
-        second.Inserted.Should().Be(15);
+        second.Inserted.Should().Be(5);
         (await e.Core.GetProjectionStatusAsync(Qc, TestContext.Current.CancellationToken)).State.Should().Be(ProjectionState.Projected);
 
         // Re-projecting unchanged raw is idempotent.
         var third = await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
-        third.Inserted.Should().Be(15);
+        third.Inserted.Should().Be(0);
         (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().HaveCount(15);
     }
 
@@ -144,7 +144,14 @@ public class CoreEngineIntegrationTests
         await e.Core.ProjectAsync(Qc, TestContext.Current.CancellationToken);
         (await e.Core.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().HaveCount(1);
 
-        // A rebuild that fails after the drop (store unavailable mid-projection).
+        // A rebuild — the declaration gained a column — that fails after the drop (store unavailable
+        // mid-projection).
+        e.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer, Nullable: true),
+            new FieldHint("note", ColumnType.Text, Nullable: true),
+        ]));
         e.Store.IsAvailable = false;
         await FluentActions.Awaiting(() => e.Core.ProjectAsync(Qc)).Should().ThrowAsync<Exception>();
         e.Store.IsAvailable = true;
