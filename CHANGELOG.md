@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.17.1
+
+A patch. Pairs with MorphDB `0.14.x`, unchanged from 0.17.0. No contract change.
 
 ### Fixed
 
