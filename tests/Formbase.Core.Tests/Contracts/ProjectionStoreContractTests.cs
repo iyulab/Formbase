@@ -286,6 +286,44 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
+    // The documents behind each group come from the same read as its count, in the order they were
+    // accepted -- not in the order of their ids, which differs between stores -- cut at the limit.
+    // The ids below are chosen so that id order and acceptance order disagree.
+    [Fact]
+    public async Task Aggregate_carries_each_groups_documents_in_acceptance_order_up_to_the_limit()
+    {
+        var store = CreateStore();
+        var schema = new TableSchema(TableName, [.. ProjectionSystemColumns.All, new ColumnDef("k", ColumnType.Text)]);
+        await store.CreateTableAsync(schema, TestContext.Current.CancellationToken);
+        Guid Id(char c) => Guid.Parse(new string(c, 8) + "-0000-7000-8000-000000000000");
+        IReadOnlyDictionary<string, object?> Doc(char id, long watermark, string? k) => new Dictionary<string, object?>
+        {
+            [ProjectionSystemColumns.DocumentId] = Id(id),
+            [ProjectionSystemColumns.Watermark] = watermark,
+            [ProjectionSystemColumns.RecordKey] = null,
+            ["k"] = k,
+        };
+        await store.BulkInsertAsync(TableName,
+            [Doc('1', 3, "a"), Doc('f', 1, "a"), Doc('2', 2, "b"), Doc('0', 5, "a"), Doc('9', 4, null)],
+            TestContext.Current.CancellationToken);
+
+        var grouped = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], DocumentsPerGroup: 2), TestContext.Current.CancellationToken);
+
+        var a = grouped.Single(g => Equals(g.Key["k"], "a"));
+        a.Count.Should().Be(3);
+        a.Documents.Should().Equal(DocumentId.From(Id('f')), DocumentId.From(Id('1')));
+        grouped.Single(g => Equals(g.Key["k"], "b")).Documents.Should().Equal(DocumentId.From(Id('2')));
+        grouped.Single(g => g.Key["k"] is null).Documents.Should().Equal(DocumentId.From(Id('9')));
+
+        var all = await store.AggregateAsync(TableName, new AggregateSpec(DocumentsPerGroup: 3), TestContext.Current.CancellationToken);
+        all.Should().ContainSingle().Which.Documents.Should().Equal(DocumentId.From(Id('f')), DocumentId.From(Id('2')), DocumentId.From(Id('1')));
+
+        var none = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"]), TestContext.Current.CancellationToken);
+        none.Should().OnlyContain(g => g.Documents == null, "documents are read only when asked for");
+
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
     private TableSchema TypedSchema() =>
         new(TableName,
         [

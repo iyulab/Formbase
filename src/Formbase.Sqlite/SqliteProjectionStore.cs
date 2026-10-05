@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
@@ -223,14 +224,44 @@ public sealed class SqliteProjectionStore : IProjectionStore
 
         await using var command = connection.CreateCommand();
         var keys = groupBy.Select(SqliteValues.Quote).ToList();
+
+        // The rows counted: the table, filtered — and, when the documents behind each group are asked
+        // for, each row numbered within its group in the order it was accepted, so the documents are
+        // read by the same statement as the count and the limit cuts the same ones every time.
+        var source = new StringBuilder();
+        var documents = spec.DocumentsPerGroup;
+        if (documents is null)
+        {
+            source.Append(SqliteValues.Quote(tableName));
+            AppendWhere(source, command, spec.Filters, types);
+        }
+        else
+        {
+            var watermark = SqliteValues.Quote(ProjectionSystemColumns.Watermark);
+            source.Append("(SELECT *, ROW_NUMBER() OVER (")
+                .Append(keys.Count > 0 ? "PARTITION BY " + string.Join(", ", keys) + " " : string.Empty)
+                .Append("ORDER BY ").Append(watermark).Append(") AS ").Append(SqliteValues.Quote(RowNumberColumn))
+                .Append(" FROM ").Append(SqliteValues.Quote(tableName));
+            AppendWhere(source, command, spec.Filters, types);
+            source.Append(')');
+        }
+
         var sql = new StringBuilder("SELECT ");
         foreach (var key in keys)
         {
             sql.Append(key).Append(", ");
         }
 
-        sql.Append("COUNT(*) FROM ").Append(SqliteValues.Quote(tableName));
-        AppendWhere(sql, command, spec.Filters, types);
+        sql.Append("COUNT(*)");
+        if (documents is { } limit)
+        {
+            sql.Append(", json_group_array(").Append(SqliteValues.Quote(ProjectionSystemColumns.DocumentId))
+                .Append(" ORDER BY ").Append(SqliteValues.Quote(ProjectionSystemColumns.Watermark))
+                .Append(") FILTER (WHERE ").Append(SqliteValues.Quote(RowNumberColumn)).Append(" <= ")
+                .Append(limit.ToString(CultureInfo.InvariantCulture)).Append(')');
+        }
+
+        sql.Append(" FROM ").Append(source);
         if (keys.Count > 0)
         {
             sql.Append(" GROUP BY ").Append(string.Join(", ", keys));
@@ -248,10 +279,20 @@ public sealed class SqliteProjectionStore : IProjectionStore
                 key[groupBy[i]] = SqliteValues.FromStorage(reader.GetValue(i), types.GetValueOrDefault(groupBy[i], ColumnType.Text));
             }
 
-            groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count)));
+            var ids = documents is null ? null : ReadDocumentIds(reader.IsDBNull(groupBy.Count + 1) ? "[]" : reader.GetString(groupBy.Count + 1));
+            groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count), ids));
         }
 
         return groups;
+    }
+
+    /// <summary>The per-group row number the documents' limit reads; prefixed like the system columns so no declared column shares it.</summary>
+    private const string RowNumberColumn = "fb_group_row";
+
+    private static List<DocumentId> ReadDocumentIds(string json)
+    {
+        using var array = JsonDocument.Parse(json);
+        return array.RootElement.EnumerateArray().Select(id => DocumentId.From(Guid.Parse(id.GetString()!))).ToList();
     }
 
     private static void AppendWhere(

@@ -56,6 +56,12 @@ public sealed class RecordQuery : IRecordQuery
 
     public async Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(spec);
+        if (spec.DocumentsPerGroup is { } perGroup)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(perGroup, nameof(spec));
+        }
+
         var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
 
         var groupBy = spec.GroupBy ?? [];

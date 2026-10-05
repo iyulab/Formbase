@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **An aggregate says which documents each count is made of.** `AggregateSpec.DocumentsPerGroup` asks
+  each group to carry up to that many of the documents behind its count (`AggregateGroup.Documents`), in
+  the order they were accepted, read by the same read as the count — so a number and its evidence cannot
+  come from two moments of the projection. Fewer documents than `Count` means the list stopped at the
+  limit; `AggregateSpec.RecordsOf(group)` is the query that reads all of a group's records (the
+  aggregate's filters plus each grouping column equal to the group's value, an empty value as `IsNull`).
+  Every store answers it in one statement: in-memory, SQLite (a window over the group) and MorphDB (its
+  `ARRAY_AGG` — `Formbase.MorphDb` with `DocumentsPerGroup` needs a MorphDB server of `0.15.0` or later).
+  A non-positive `DocumentsPerGroup` is refused. `AggregateSpec` and `AggregateGroup` gain a trailing
+  optional parameter each — a store implementing `IProjectionStore` outside this repository answers
+  `DocumentsPerGroup` or leaves `Documents` null.
+
 ## 0.17.2
 
 A patch. Pairs with MorphDB `0.14.x`, unchanged from 0.17.1. No contract change.

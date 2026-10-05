@@ -44,7 +44,7 @@ public class RecordQueryTests
             new FieldHint("at", ColumnType.Timestamp, Nullable: true),
         ]));
 
-        public Task Accept(string json) => Intake.AcceptAsync(Qc, DocumentBody.Parse(json));
+        public Task<DocumentId> Accept(string json) => Intake.AcceptAsync(Qc, DocumentBody.Parse(json));
     }
 
     [Fact]
@@ -346,6 +346,50 @@ public class RecordQueryTests
             ("A", (object?)2L, 2L),
             ("B", null, 1L),
             ("B", 1L, 1L));
+    }
+
+    // The documents a group's count is made of come back with it, and the group's own query reads every
+    // record behind it — the same rows, including past the limit, a null key included.
+    [Fact]
+    public async Task A_groups_documents_come_with_its_count_and_its_query_reads_the_same_records()
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"B","qty":1}""");
+        var a2 = await h.Accept("""{"lot":"A","qty":2}""");
+        await h.Accept("""{"lot":"C"}""");
+        var a3 = await h.Accept("""{"lot":"A","qty":3}""");
+        await h.Accept("""{"lot":"A","qty":4}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        var spec = new AggregateSpec(GroupBy: ["lot"], Filters: [new FieldFilter("qty", FilterOperator.GreaterThanOrEqual, 2L)], DocumentsPerGroup: 2);
+
+        var result = await h.Query.AggregateAsync(Qc, spec, TestContext.Current.CancellationToken);
+
+        var a = result.Groups.Single(g => Equals(g.Key["lot"], "A"));
+        a.Count.Should().Be(3);
+        a.Documents.Should().Equal([a2, a3], "the first of its documents in the order they were accepted — the limit cuts the list, not the count");
+        var all = await h.Query.QueryAsync(Qc, spec.RecordsOf(a), TestContext.Current.CancellationToken);
+        all.Rows.Select(r => r["qty"]).Should().Equal(2L, 3L, 4L);
+
+        var byQty = new AggregateSpec(GroupBy: ["qty"], DocumentsPerGroup: 1);
+        var noQty = (await h.Query.AggregateAsync(Qc, byQty, TestContext.Current.CancellationToken)).Groups.Single(g => g.Key["qty"] is null);
+        (await h.Query.QueryAsync(Qc, byQty.RecordsOf(noQty), TestContext.Current.CancellationToken)).Rows
+            .Select(r => r["lot"]).Should().Equal("C");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task Asking_for_no_documents_per_group_is_refused(int documents)
+    {
+        var h = new Harness();
+        h.DeclareHints();
+        await h.Accept("""{"lot":"L-1","qty":1}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var act = () => h.Query.AggregateAsync(Qc, new AggregateSpec(DocumentsPerGroup: documents));
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }
 
     [Fact]

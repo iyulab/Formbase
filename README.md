@@ -45,7 +45,7 @@ A document's life:
 2. **Projection** — when a form type has declared field hints, `ProjectAsync(formType)` drops any existing table, recreates it from the proposed schema, streams the raw documents through deterministic value mapping (recording — never discarding — any that can't be mapped, and counting per column how many documents never carried the field at all, as opposed to answering `null`), and records the watermark it reached. Because raw is the source of truth, a schema change needs no `ALTER` diffing: the table is simply rebuilt. When to re-project is a pluggable policy (`IProjectionTrigger`): the built-in trigger fires immediately on a shape change and at a configurable document-lag threshold for new data; drive `ProjectionSupervisor.RunOnceAsync` from whatever cadence your host owns.
 3. **Reading** — there are two questions with two paths:
    - *"Show me this document"* → the raw store, always available.
-   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees.
+   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees — and, when asked (`DocumentsPerGroup`), each group carries the documents its count is made of, read with the count so the two cannot disagree; `AggregateSpec.RecordsOf(group)` is the query for all of a group's records.
 
 ## Install
 
@@ -172,6 +172,10 @@ var counts = await engine.AggregateAsync(qc, new AggregateSpec(
     GroupBy: ["lot"],
     Filters: [new FieldFilter("qty", FilterOperator.GreaterThanOrEqual, 10)]));
 // counts.Groups -> one group per lot, each with its Count
+
+// 5) Or ask which documents each count is made of — the first 50 per lot, in the order accepted.
+var traced = await engine.AggregateAsync(qc, new AggregateSpec(GroupBy: ["lot"], DocumentsPerGroup: 50));
+// traced.Groups[i].Documents -> the DocumentIds behind Count (fewer than Count when cut at 50)
 ```
 
 ## Architecture

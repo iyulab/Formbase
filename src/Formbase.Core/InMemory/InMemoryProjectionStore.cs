@@ -134,7 +134,8 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             {
                 // Ungrouped counts are one answer even when nothing is kept — COUNT(*) over no rows is 0,
                 // not an absent row.
-                IReadOnlyList<AggregateGroup> total = [new AggregateGroup(new Dictionary<string, object?>(StringComparer.Ordinal), kept.Count)];
+                IReadOnlyList<AggregateGroup> total =
+                    [new AggregateGroup(new Dictionary<string, object?>(StringComparer.Ordinal), kept.Count, DocumentsOf(kept, spec.DocumentsPerGroup))];
                 return Task.FromResult(total);
             }
 
@@ -143,12 +144,23 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                 .Select(group => new AggregateGroup(
                     groupBy.Select((column, i) => (column, value: group.Key.Values[i]))
                         .ToDictionary(pair => pair.column, pair => pair.value, StringComparer.Ordinal),
-                    group.LongCount()))
+                    group.LongCount(),
+                    DocumentsOf(group, spec.DocumentsPerGroup)))
                 .ToList();
 
             return Task.FromResult(groups);
         }
     }
+
+    /// <summary>The first <paramref name="limit"/> rows' documents in the order they were accepted, or null when none were asked for.</summary>
+    private static List<DocumentId>? DocumentsOf(IEnumerable<Dictionary<string, object?>> rows, int? limit) =>
+        limit is { } n
+            ? rows
+                .OrderBy(row => row.GetValueOrDefault(ProjectionSystemColumns.Watermark), ValueOrder.Comparer)
+                .Take(n)
+                .Select(row => DocumentId.From((Guid)row[ProjectionSystemColumns.DocumentId]!))
+                .ToList()
+            : null;
 
     private static IEnumerable<Dictionary<string, object?>> ApplyOrder(
         IEnumerable<Dictionary<string, object?>> query, IReadOnlyList<OrderKey> orderBy)

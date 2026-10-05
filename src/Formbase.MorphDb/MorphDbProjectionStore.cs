@@ -269,9 +269,13 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     public async Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
     {
         var groupBy = spec.GroupBy ?? [];
+        // The documents behind each group ride the same request as its count: an ARRAY_AGG of the document
+        // ids in the order they were accepted, cut at the limit by the server.
         var request = new AggregationRequest
         {
-            Aggregations = [AggregationColumn.Count(CountAlias)],
+            Aggregations = spec.DocumentsPerGroup is { } limit
+                ? [AggregationColumn.Count(CountAlias), AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark)]
+                : [AggregationColumn.Count(CountAlias)],
             GroupBy = groupBy,
             Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f), f.Value)).ToList(),
         };
@@ -281,9 +285,18 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         return response.Data
             .Select(row => new AggregateGroup(
                 groupBy.ToDictionary(column => column, column => row.TryGetValue(column, out var value) ? value : null, StringComparer.Ordinal),
-                Convert.ToInt64(row[CountAlias], CultureInfo.InvariantCulture)))
+                Convert.ToInt64(row[CountAlias], CultureInfo.InvariantCulture),
+                spec.DocumentsPerGroup is null ? null : DocumentIds(row.TryGetValue(DocumentsAlias, out var documents) ? documents : null)))
             .ToList();
     }
+
+    /// <summary>The documents alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
+    private const string DocumentsAlias = "fb_documents";
+
+    private static List<DocumentId> DocumentIds(object? array) =>
+        array is System.Collections.IEnumerable values and not string
+            ? values.Cast<object?>().Select(id => DocumentId.From(id is Guid guid ? guid : Guid.Parse(Convert.ToString(id, CultureInfo.InvariantCulture)!))).ToList()
+            : [];
 
     /// <summary>
     /// The alias the count comes back under. The projection's bookkeeping prefix keeps it clear of every
