@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.17.2
+
+A patch. Pairs with MorphDB `0.14.x`, unchanged from 0.17.1. No contract change.
 
 ### Fixed
 
@@ -9,6 +11,10 @@
   type's own converter rather than back through the serializer, which needed reflection metadata a
   Native AOT host does not have. Before, a Native AOT publish of anything referencing `Formbase.Core`
   reported trim and AOT warnings from it. Stored shapes are unchanged.
+
+### Changed
+
+- `Formbase.M3L` builds on `M3L.Native` 0.19.0 (was 0.17.0).
 
 ## 0.17.1
 
