@@ -267,12 +267,19 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     public async Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
     {
         var groupBy = spec.GroupBy ?? [];
-        // The documents behind each group ride the same request as its count: an ARRAY_AGG of the document
-        // ids in the order they were accepted, cut at the limit by the server.
+        // The records behind each group ride the same request as its count: two ARRAY_AGGs — the document
+        // ids and the record keys — both in the order the documents were accepted and cut at the same
+        // limit by the server. ARRAY_AGG keeps nulls, so a document that is a record of its own keeps its
+        // place in the keys and the two arrays pair up index by index.
         var request = new AggregationRequest
         {
-            Aggregations = spec.DocumentsPerGroup is { } limit
-                ? [AggregationColumn.Count(CountAlias), AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark)]
+            Aggregations = spec.RecordsPerGroup is { } limit
+                ?
+                [
+                    AggregationColumn.Count(CountAlias),
+                    AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark),
+                    AggregationColumn.ArrayAgg(ProjectionSystemColumns.RecordKey, KeysAlias, limit, orderBy: ProjectionSystemColumns.Watermark),
+                ]
                 : [AggregationColumn.Count(CountAlias)],
             GroupBy = groupBy,
             Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f), f.Value)).ToList(),
@@ -284,17 +291,42 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             .Select(row => new AggregateGroup(
                 groupBy.ToDictionary(column => column, column => row.TryGetValue(column, out var value) ? value : null, StringComparer.Ordinal),
                 Convert.ToInt64(row[CountAlias], CultureInfo.InvariantCulture),
-                spec.DocumentsPerGroup is null ? null : DocumentIds(row.TryGetValue(DocumentsAlias, out var documents) ? documents : null)))
+                spec.RecordsPerGroup is null
+                    ? null
+                    : Records(row.TryGetValue(DocumentsAlias, out var documents) ? documents : null, row.TryGetValue(KeysAlias, out var keys) ? keys : null)))
             .ToList();
     }
 
-    /// <summary>The documents alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
+    /// <summary>The document ids' alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
     private const string DocumentsAlias = "fb_documents";
 
-    private static List<DocumentId> DocumentIds(object? array) =>
-        array is System.Collections.IEnumerable values and not string
-            ? values.Cast<object?>().Select(id => DocumentId.From(id is Guid guid ? guid : Guid.Parse(Convert.ToString(id, CultureInfo.InvariantCulture)!))).ToList()
-            : [];
+    /// <summary>The record keys' alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
+    private const string KeysAlias = "fb_record_keys";
+
+    /// <summary>
+    /// Pairs the two arrays index by index. Arrays of different lengths mean the server did not keep a
+    /// null key in its place — pairing them anyway would name the wrong record for a document, so the
+    /// answer is refused instead.
+    /// </summary>
+    private static List<RecordRef> Records(object? documents, object? keys)
+    {
+        var ids = Elements(documents);
+        var names = Elements(keys);
+        if (ids.Count != names.Count)
+        {
+            throw new InvalidOperationException(
+                $"MorphDB answered {ids.Count} documents but {names.Count} record keys for one group; the two are read in the same order and must pair up.");
+        }
+
+        return ids
+            .Select((id, i) => new RecordRef(
+                DocumentId.From(id is Guid guid ? guid : Guid.Parse(Convert.ToString(id, CultureInfo.InvariantCulture)!)),
+                names[i] is { } key ? RecordKey.Create(Convert.ToString(key, CultureInfo.InvariantCulture)!) : null))
+            .ToList();
+    }
+
+    private static List<object?> Elements(object? array) =>
+        array is System.Collections.IEnumerable values and not string ? values.Cast<object?>().ToList() : [];
 
     /// <summary>
     /// The alias the count comes back under. The projection's bookkeeping prefix keeps it clear of every

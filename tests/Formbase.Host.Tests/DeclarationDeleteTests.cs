@@ -170,7 +170,7 @@ public sealed class DeclarationDeleteTests : IClassFixture<WebApplicationFactory
     private async Task<List<long>> RowsAsync(string type)
     {
         var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records"));
-        return [.. result.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("total").GetInt64())];
+        return [.. result.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("fields").GetProperty("total").GetInt64())];
     }
 
     private static async Task<JsonElement> ReadAsync(HttpResponseMessage response)

@@ -15,10 +15,12 @@ public sealed record AggregateResult(IReadOnlyList<AggregateGroup> Groups, bool 
 /// </summary>
 /// <param name="Key">The value of each grouping column.</param>
 /// <param name="Count">How many records the group has.</param>
-/// <param name="Documents">
-/// The documents the count is made of — each record's current document, in the order they were
-/// accepted — when the aggregate asked for them (<see cref="AggregateSpec.DocumentsPerGroup"/>), else
-/// null. Fewer than <paramref name="Count"/> means the list stopped at that limit;
-/// <see cref="AggregateSpec.RecordsOf"/> reads the rest.
+/// <param name="Records">
+/// The records the count is made of — each one as its current document and its key, in the order
+/// their documents were accepted — when the aggregate asked for them
+/// (<see cref="AggregateSpec.RecordsPerGroup"/>), else null. They are the same identities the rows of
+/// <see cref="AggregateSpec.RecordsOf"/> carry (<see cref="RecordRow.Record"/>), so the evidence for a
+/// count can be matched to the rows that make it up. Fewer than <paramref name="Count"/> means the list
+/// stopped at that limit; <see cref="AggregateSpec.RecordsOf"/> reads the rest.
 /// </param>
-public sealed record AggregateGroup(IReadOnlyDictionary<string, object?> Key, long Count, IReadOnlyList<DocumentId>? Documents = null);
+public sealed record AggregateGroup(IReadOnlyDictionary<string, object?> Key, long Count, IReadOnlyList<RecordRef>? Records = null);

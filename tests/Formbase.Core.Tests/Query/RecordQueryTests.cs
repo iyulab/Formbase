@@ -118,7 +118,7 @@ public class RecordQueryTests
 
         var result = await h.Query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken);
 
-        result.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty"]);
+        result.Rows[0].Fields.Keys.Should().BeEquivalentTo(["lot", "qty"]);
     }
 
     [Fact]
@@ -144,8 +144,8 @@ public class RecordQueryTests
         result.Rows.Should().HaveCount(1, "the last projected snapshot still serves");
         // The row contract holds even under drift: the declared key set, with the not-yet-projected
         // column reading null rather than being absent.
-        result.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty", "inspector"]);
-        result.Rows[0]["inspector"].Should().BeNull();
+        result.Rows[0].Fields.Keys.Should().BeEquivalentTo(["lot", "qty", "inspector"]);
+        result.Rows[0].Fields["inspector"].Should().BeNull();
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class RecordQueryTests
             Filters: [FieldFilter.Equal("qty", 20)]), TestContext.Current.CancellationToken);
 
         result.Rows.Should().ContainSingle();
-        result.Rows[0]["lot"].Should().Be("L-2");
+        result.Rows[0].Fields["lot"].Should().Be("L-2");
     }
 
     [Fact]
@@ -293,7 +293,7 @@ public class RecordQueryTests
             new FieldFilter("qty", FilterOperator.LessThan, 100),
         ]), TestContext.Current.CancellationToken);
 
-        result.Rows.Should().ContainSingle().Which["lot"].Should().Be("L-2");
+        result.Rows.Should().ContainSingle().Which.Fields["lot"].Should().Be("L-2");
     }
 
     [Fact]
@@ -310,8 +310,8 @@ public class RecordQueryTests
         var fromUtcMidnight = await h.Query.QueryAsync(Qc, new QuerySpec(Filters:
             [new FieldFilter("at", FilterOperator.GreaterThanOrEqual, "2026-01-15T00:00:00Z")]), TestContext.Current.CancellationToken);
 
-        equal.Rows.Should().ContainSingle().Which["lot"].Should().Be("L-2");
-        fromUtcMidnight.Rows.Should().ContainSingle().Which["lot"].Should().Be("L-2",
+        equal.Rows.Should().ContainSingle().Which.Fields["lot"].Should().Be("L-2");
+        fromUtcMidnight.Rows.Should().ContainSingle().Which.Fields["lot"].Should().Be("L-2",
             "a date written without an offset is that date's UTC midnight, on the document side and the filter side alike");
     }
 
@@ -348,10 +348,10 @@ public class RecordQueryTests
             ("B", 1L, 1L));
     }
 
-    // The documents a group's count is made of come back with it, and the group's own query reads every
+    // The records a group's count is made of come back with it, and the group's own query reads every
     // record behind it — the same rows, including past the limit, a null key included.
     [Fact]
-    public async Task A_groups_documents_come_with_its_count_and_its_query_reads_the_same_records()
+    public async Task A_groups_records_come_with_its_count_and_its_query_reads_the_same_records()
     {
         var h = new Harness();
         h.DeclareHints();
@@ -361,33 +361,35 @@ public class RecordQueryTests
         var a3 = await h.Accept("""{"lot":"A","qty":3}""");
         await h.Accept("""{"lot":"A","qty":4}""");
         await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
-        var spec = new AggregateSpec(GroupBy: ["lot"], Filters: [new FieldFilter("qty", FilterOperator.GreaterThanOrEqual, 2L)], DocumentsPerGroup: 2);
+        var spec = new AggregateSpec(GroupBy: ["lot"], Filters: [new FieldFilter("qty", FilterOperator.GreaterThanOrEqual, 2L)], RecordsPerGroup: 2);
 
         var result = await h.Query.AggregateAsync(Qc, spec, TestContext.Current.CancellationToken);
 
         var a = result.Groups.Single(g => Equals(g.Key["lot"], "A"));
         a.Count.Should().Be(3);
-        a.Documents.Should().Equal([a2, a3], "the first of its documents in the order they were accepted — the limit cuts the list, not the count");
+        a.Records.Should().Equal([new RecordRef(a2, null), new RecordRef(a3, null)],
+            "the first of its records in the order they were accepted — the limit cuts the list, not the count");
         var all = await h.Query.QueryAsync(Qc, spec.RecordsOf(a), TestContext.Current.CancellationToken);
-        all.Rows.Select(r => r["qty"]).Should().Equal(2L, 3L, 4L);
+        all.Rows.Select(r => r.Fields["qty"]).Should().Equal(2L, 3L, 4L);
+        all.Rows.Take(2).Select(r => r.Record).Should().Equal(a.Records, "the evidence names the same records the group's rows are");
 
-        var byQty = new AggregateSpec(GroupBy: ["qty"], DocumentsPerGroup: 1);
+        var byQty = new AggregateSpec(GroupBy: ["qty"], RecordsPerGroup: 1);
         var noQty = (await h.Query.AggregateAsync(Qc, byQty, TestContext.Current.CancellationToken)).Groups.Single(g => g.Key["qty"] is null);
         (await h.Query.QueryAsync(Qc, byQty.RecordsOf(noQty), TestContext.Current.CancellationToken)).Rows
-            .Select(r => r["lot"]).Should().Equal("C");
+            .Select(r => r.Fields["lot"]).Should().Equal("C");
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    public async Task Asking_for_no_documents_per_group_is_refused(int documents)
+    public async Task Asking_for_no_records_per_group_is_refused(int records)
     {
         var h = new Harness();
         h.DeclareHints();
         await h.Accept("""{"lot":"L-1","qty":1}""");
         await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        var act = () => h.Query.AggregateAsync(Qc, new AggregateSpec(DocumentsPerGroup: documents));
+        var act = () => h.Query.AggregateAsync(Qc, new AggregateSpec(RecordsPerGroup: records));
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
     }

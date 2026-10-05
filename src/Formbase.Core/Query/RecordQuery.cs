@@ -57,7 +57,7 @@ public sealed class RecordQuery : IRecordQuery
     public async Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(spec);
-        if (spec.DocumentsPerGroup is { } perGroup)
+        if (spec.RecordsPerGroup is { } perGroup)
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(perGroup, nameof(spec));
         }
@@ -158,28 +158,60 @@ public sealed class RecordQuery : IRecordQuery
     }
 
     /// <summary>
-    /// Shapes raw store rows to the row contract: exactly the declared fields, nothing else. Stores
-    /// return whatever their backend materializes — fb_* bookkeeping, backend system columns — and
-    /// none of that is the consumer's to see: an internal that leaks into rows a consumer serializes
-    /// onward calcifies into that consumer's public contract. A declared column the physical table
-    /// lacks (a stale, drifted shape) reads null, so the key set holds unconditionally.
+    /// Shapes raw store rows to the row contract: which record each row is, and exactly the declared
+    /// fields, nothing else. Stores return whatever their backend materializes — fb_* bookkeeping,
+    /// backend system columns — and none of that is the consumer's to see as a field: an internal that
+    /// leaks into rows a consumer serializes onward calcifies into that consumer's public contract. The
+    /// two bookkeeping values that say which record a row is are read out into
+    /// <see cref="RecordRow.Record"/> instead, typed, so the identity is a contract and the column names
+    /// stay internal. A declared column the physical table lacks (a stale, drifted shape) reads null, so
+    /// the key set holds unconditionally.
     /// </summary>
-    private static List<IReadOnlyDictionary<string, object?>> Shape(
+    private static List<RecordRow> Shape(
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, TableSchema schema)
     {
-        var shaped = new List<IReadOnlyDictionary<string, object?>>(rows.Count);
+        var shaped = new List<RecordRow>(rows.Count);
         foreach (var row in rows)
         {
-            var projected = new Dictionary<string, object?>(schema.Columns.Count, StringComparer.Ordinal);
+            var fields = new Dictionary<string, object?>(schema.Columns.Count, StringComparer.Ordinal);
             foreach (var column in schema.Columns)
             {
-                projected[column.Name] = row.TryGetValue(column.Name, out var value) ? value : null;
+                fields[column.Name] = row.TryGetValue(column.Name, out var value) ? value : null;
             }
 
-            shaped.Add(projected);
+            shaped.Add(new RecordRow(IdentityOf(row), fields));
         }
 
         return shaped;
+    }
+
+    /// <summary>
+    /// Which record a store row is, from the system columns every projected row carries. A store hands
+    /// the document id back as its backend reads it — a <see cref="Guid"/>, or its text over a JSON
+    /// wire — and may leave out a column that is null, which for the record key means a document that
+    /// is a record of its own. A row without a document id is a store that broke its contract; reading
+    /// it as some other record would hand the caller a wrong identity, so it is refused.
+    /// </summary>
+    private static RecordRef IdentityOf(IReadOnlyDictionary<string, object?> row)
+    {
+        var document = row.TryGetValue(ProjectionSystemColumns.DocumentId, out var id) ? id : null;
+        var documentId = document switch
+        {
+            Guid guid => DocumentId.From(guid),
+            string text when Guid.TryParse(text, out var parsed) => DocumentId.From(parsed),
+            _ => throw new InvalidOperationException(
+                $"A projected row came back without a readable '{ProjectionSystemColumns.DocumentId}' " +
+                $"(read '{document ?? "null"}'); every projected row carries the document it was mapped from."),
+        };
+
+        var key = row.TryGetValue(ProjectionSystemColumns.RecordKey, out var held) ? held : null;
+        return new RecordRef(documentId, key switch
+        {
+            null => null,
+            string text => RecordKey.Create(text),
+            _ => throw new InvalidOperationException(
+                $"A projected row's '{ProjectionSystemColumns.RecordKey}' is not text (read a {key.GetType().Name})."),
+        });
     }
 
     /// <summary>

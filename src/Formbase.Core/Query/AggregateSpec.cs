@@ -7,15 +7,15 @@ namespace Formbase.Core.Query;
 /// </summary>
 /// <param name="GroupBy">The columns whose distinct combinations are the groups.</param>
 /// <param name="Filters">The rows counted.</param>
-/// <param name="DocumentsPerGroup">
-/// When set, each group also carries the documents its count is made of
-/// (<see cref="AggregateGroup.Documents"/>) — at most this many, in the order they were accepted, read
-/// in the same read as the count so the two cannot disagree. Must be positive.
+/// <param name="RecordsPerGroup">
+/// When set, each group also carries the records its count is made of
+/// (<see cref="AggregateGroup.Records"/>) — at most this many, in the order their documents were
+/// accepted, read in the same read as the count so the two cannot disagree. Must be positive.
 /// </param>
 public sealed record AggregateSpec(
     IReadOnlyList<string>? GroupBy = null,
     IReadOnlyList<FieldFilter>? Filters = null,
-    int? DocumentsPerGroup = null)
+    int? RecordsPerGroup = null)
 {
     /// <summary>The count of every record.</summary>
     public static AggregateSpec CountAll { get; } = new();
@@ -23,7 +23,7 @@ public sealed record AggregateSpec(
     /// <summary>
     /// The query that reads every record behind <paramref name="group"/>: this aggregate's filters plus
     /// each grouping column equal to the group's value — an empty value as an empty column — read in the
-    /// order the documents were accepted, as a record query without an order is. It reaches past <see cref="DocumentsPerGroup"/>; it is a read
+    /// order the documents were accepted, as a record query without an order is. It reaches past <see cref="RecordsPerGroup"/>; it is a read
     /// of its own, so a projection that moved between the two can answer it differently.
     /// </summary>
     public QuerySpec RecordsOf(AggregateGroup group)

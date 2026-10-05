@@ -1,4 +1,5 @@
 using System.Globalization;
+using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
@@ -286,42 +287,149 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
-    // The documents behind each group come from the same read as its count, in the order they were
-    // accepted -- not in the order of their ids, which differs between stores -- cut at the limit.
-    // The ids below are chosen so that id order and acceptance order disagree.
+    // The records behind each group come from the same read as its count, in the order they were
+    // accepted -- not in the order of their ids, which differs between stores -- cut at the limit. The
+    // ids below are chosen so that id order and acceptance order disagree, and keyed and keyless
+    // documents are interleaved within a group so that a key read apart from its document (a null
+    // dropped, or the two read in different orders) pairs a document with the wrong key.
     [Fact]
-    public async Task Aggregate_carries_each_groups_documents_in_acceptance_order_up_to_the_limit()
+    public async Task Aggregate_carries_each_groups_records_in_acceptance_order_up_to_the_limit()
     {
         var store = CreateStore();
         var schema = new TableSchema(TableName, [.. ProjectionSystemColumns.All, new ColumnDef("k", ColumnType.Text)]);
         await store.CreateTableAsync(schema, TestContext.Current.CancellationToken);
         Guid Id(char c) => Guid.Parse(new string(c, 8) + "-0000-7000-8000-000000000000");
-        IReadOnlyDictionary<string, object?> Doc(char id, long watermark, string? k) => new Dictionary<string, object?>
+        IReadOnlyDictionary<string, object?> Doc(char id, long watermark, string? key, string? k) => new Dictionary<string, object?>
         {
             [ProjectionSystemColumns.DocumentId] = Id(id),
             [ProjectionSystemColumns.Watermark] = watermark,
-            [ProjectionSystemColumns.RecordKey] = null,
+            [ProjectionSystemColumns.RecordKey] = key,
             ["k"] = k,
         };
+        RecordRef Ref(char id, string? key) => new(DocumentId.From(Id(id)), key is null ? null : RecordKey.Create(key));
         await store.BulkInsertAsync(TableName,
-            [Doc('1', 3, "a"), Doc('f', 1, "a"), Doc('2', 2, "b"), Doc('0', 5, "a"), Doc('9', 4, null)],
+            [Doc('1', 3, null, "a"), Doc('f', 1, "kf", "a"), Doc('2', 2, null, "b"), Doc('0', 5, "k0", "a"), Doc('9', 4, "k9", null)],
             TestContext.Current.CancellationToken);
 
-        var grouped = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], DocumentsPerGroup: 2), TestContext.Current.CancellationToken);
+        var grouped = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], RecordsPerGroup: 2), TestContext.Current.CancellationToken);
 
         var a = grouped.Single(g => Equals(g.Key["k"], "a"));
         a.Count.Should().Be(3);
-        a.Documents.Should().Equal(DocumentId.From(Id('f')), DocumentId.From(Id('1')));
-        grouped.Single(g => Equals(g.Key["k"], "b")).Documents.Should().Equal(DocumentId.From(Id('2')));
-        grouped.Single(g => g.Key["k"] is null).Documents.Should().Equal(DocumentId.From(Id('9')));
+        a.Records.Should().Equal(Ref('f', "kf"), Ref('1', null));
+        grouped.Single(g => Equals(g.Key["k"], "b")).Records.Should().Equal(Ref('2', null));
+        grouped.Single(g => g.Key["k"] is null).Records.Should().Equal(Ref('9', "k9"));
 
-        var all = await store.AggregateAsync(TableName, new AggregateSpec(DocumentsPerGroup: 3), TestContext.Current.CancellationToken);
-        all.Should().ContainSingle().Which.Documents.Should().Equal(DocumentId.From(Id('f')), DocumentId.From(Id('2')), DocumentId.From(Id('1')));
+        var whole = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], RecordsPerGroup: 3), TestContext.Current.CancellationToken);
+        whole.Single(g => Equals(g.Key["k"], "a")).Records.Should().Equal(
+            [Ref('f', "kf"), Ref('1', null), Ref('0', "k0")], "a key after a keyless document keeps its own document");
+
+        var all = await store.AggregateAsync(TableName, new AggregateSpec(RecordsPerGroup: 3), TestContext.Current.CancellationToken);
+        all.Should().ContainSingle().Which.Records.Should().Equal(Ref('f', "kf"), Ref('2', null), Ref('1', null));
 
         var none = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"]), TestContext.Current.CancellationToken);
-        none.Should().OnlyContain(g => g.Documents == null, "documents are read only when asked for");
+        none.Should().OnlyContain(g => g.Records == null, "records are read only when asked for");
 
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The engine's read path over the store under test: raw, declarations and projection state in
+    /// memory, the projected table in the store. Which record a row is comes from the store's system
+    /// columns, so this is where a store that returned them in a shape the core cannot read would show.
+    /// </summary>
+    private (FormbaseEngine Engine, FormTypeRef Type) Engine(IProjectionStore store)
+    {
+        var type = FormTypeRef.Create(TableName);
+        var raw = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        var state = new InMemoryProjectionState();
+        var proposer = new HintSchemaProposer(hints);
+        var engine = new FormbaseEngine(
+            new IntakeService(raw),
+            raw,
+            new Projector(raw, proposer, store, state),
+            new RecordQuery(raw, proposer, store, state),
+            state,
+            proposer);
+        hints.Declare(new FormTypeHints(type, TableName,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("qty", ColumnType.Integer),
+        ]));
+        return (engine, type);
+    }
+
+    // A keyed record keeps its key through a correction and moves to the correcting document; a
+    // document without a key is a record of its own, named by its document alone. Both projection
+    // paths are crossed: the first run builds the table, the second brings it forward.
+    [Fact]
+    public async Task A_query_row_says_which_record_it_is_across_a_correction()
+    {
+        var store = CreateStore();
+        var (engine, type) = Engine(store);
+        var key = RecordKey.Create("rec-1");
+        var ct = TestContext.Current.CancellationToken;
+
+        var standalone = await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":1}"""), cancellationToken: ct);
+        var original = await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":2}"""), recordKey: key, cancellationToken: ct);
+        await engine.ProjectAsync(type, ct);
+
+        var before = await engine.QueryAsync(type, QuerySpec.All, ct);
+        before.Rows.Select(r => r.Record).Should().Equal(new RecordRef(standalone, null), new RecordRef(original, key));
+        before.Rows.Select(r => r.Fields["qty"]).Should().Equal(1L, 2L);
+        before.Rows.Should().AllSatisfy(r => r.Fields.Keys.Should().BeEquivalentTo(["lot", "qty"],
+            "the identity is carried beside the fields, not among them"));
+
+        var corrected = await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":5}"""), recordKey: key, cancellationToken: ct);
+        await engine.ProjectAsync(type, ct);
+
+        var after = await engine.QueryAsync(type, QuerySpec.All, ct);
+        after.Rows.Select(r => r.Record).Should().Equal(
+            [new RecordRef(standalone, null), new RecordRef(corrected, key)],
+            "the corrected record is still the record named rec-1, now standing on the correcting document");
+        after.Rows.Select(r => r.Fields["qty"]).Should().Equal(1L, 5L);
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
+    // The evidence an aggregate gives for a count names the same records the group's own query reads,
+    // in the same order — so a count can be matched to its rows — and stops at the limit.
+    [Fact]
+    public async Task An_aggregates_records_are_the_records_its_groups_query_reads()
+    {
+        var store = CreateStore();
+        var (engine, type) = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":1}"""), cancellationToken: ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":2}"""), recordKey: RecordKey.Create("rec-1"), cancellationToken: ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"B","qty":3}"""), cancellationToken: ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":4}"""), recordKey: RecordKey.Create("rec-2"), cancellationToken: ct);
+        await engine.ProjectAsync(type, ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":6}"""), recordKey: RecordKey.Create("rec-1"), cancellationToken: ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":7}"""), cancellationToken: ct);
+        await engine.ProjectAsync(type, ct);
+
+        var spec = new AggregateSpec(GroupBy: ["lot"], RecordsPerGroup: 10);
+        var groups = (await engine.AggregateAsync(type, spec, ct)).Groups;
+
+        groups.Should().HaveCount(2);
+        foreach (var group in groups)
+        {
+            var rows = await engine.QueryAsync(type, spec.RecordsOf(group), ct);
+            group.Records.Should().Equal(rows.Rows.Select(r => r.Record), "group {0}'s evidence is its rows", group.Key["lot"]);
+            group.Count.Should().Be(rows.Rows.Count);
+        }
+
+        var a = groups.Single(g => Equals(g.Key["lot"], "A"));
+        a.Records!.Select(r => r.Key?.Value).Should().Equal([null, "rec-2", "rec-1", null],
+            "in the order their current documents were accepted — the corrected record after the one accepted before its correction");
+
+        var cut = (await engine.AggregateAsync(type, spec with { RecordsPerGroup = 2 }, ct)).Groups.Single(g => Equals(g.Key["lot"], "A"));
+        cut.Count.Should().Be(4, "the limit cuts the list, not the count");
+        cut.Records.Should().Equal(a.Records!.Take(2));
+
+        await store.DropTableAsync(TableName, ct);
     }
 
     private TableSchema TypedSchema() =>

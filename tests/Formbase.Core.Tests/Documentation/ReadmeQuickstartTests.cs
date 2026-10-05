@@ -53,7 +53,7 @@ public sealed class ReadmeQuickstartTests
         // The sample's closing comment: "result.Rows -> the L-2 record". A quickstart that runs but
         // returns something other than what it promises is still a false document.
         result.Rows.Should().ContainSingle("the filter selects exactly the second document")
-            .Which["lot"].Should().Be("L-2");
+            .Which.Fields["lot"].Should().Be("L-2");
 
         // 4) Or count them — here, lots with qty of at least 10, per lot.
         var counts = await engine.AggregateAsync(qc, new AggregateSpec(

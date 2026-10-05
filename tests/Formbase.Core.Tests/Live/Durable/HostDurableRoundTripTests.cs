@@ -89,8 +89,11 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         run.GetProperty("inserted").GetInt32().Should().Be(1);
 
         var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
-        records.GetProperty("rows")[0].GetProperty("total").GetInt64().Should().Be(41,
+        records.GetProperty("rows")[0].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(41,
             "the row came back from MorphDB, having gone in from PostgreSQL");
+        var record = records.GetProperty("rows")[0].GetProperty("record");
+        record.GetProperty("document").GetGuid().Should().Be(documentId, "the row names the document it was projected from");
+        record.GetProperty("key").ValueKind.Should().Be(JsonValueKind.Null, "the document was sent without a record key");
     }
 
     /// <summary>
@@ -212,7 +215,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
 
         await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken);
         var records = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
-        records.GetProperty("rows")[0].GetProperty("total").GetInt64().Should().Be(7,
+        records.GetProperty("rows")[0].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(7,
             "raw was never touched, so the projection is reconstructible");
     }
 
@@ -243,7 +246,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
             "databases still held the projection");
 
         var records = await ReadAsync(await client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
-        records.GetProperty("rows")[0].GetProperty("total").GetInt64().Should().Be(5);
+        records.GetProperty("rows")[0].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(5);
     }
 
     private static string NewFormType() => $"hostdur{Guid.NewGuid():N}"[..18];
@@ -317,8 +320,8 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         run.GetProperty("projected").GetBoolean().Should().BeTrue(await _client.GetStringAsync($"/formtypes/{inspection}/projection", ct));
 
         var records = await ReadAsync(await _client.GetAsync($"/formtypes/{inspection}/records", ct));
-        records.GetProperty("rows")[0].GetProperty("equipment").GetString().Should().Be("EQ-1");
-        records.GetProperty("rows")[0].GetProperty("result").GetString().Should().Be("ok");
+        records.GetProperty("rows")[0].GetProperty("fields").GetProperty("equipment").GetString().Should().Be("EQ-1");
+        records.GetProperty("rows")[0].GetProperty("fields").GetProperty("result").GetString().Should().Be("ok");
     }
 
     /// <summary>
@@ -365,7 +368,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         run.GetProperty("unresolvedReferences").EnumerateArray().Select(e => e.GetString())
             .Should().Contain("buyerName", "a reference column is left empty and named, not filled with the document's copy");
 
-        var row = (await ReadAsync(await _client.GetAsync($"/formtypes/{notice}/records", ct))).GetProperty("rows")[0];
+        var row = (await ReadAsync(await _client.GetAsync($"/formtypes/{notice}/records", ct))).GetProperty("rows")[0].GetProperty("fields");
         row.GetProperty("noticeId").GetString().Should().Be("N-1");
         row.GetProperty("publishedAt").ValueKind.Should().NotBe(JsonValueKind.Null, "the renamed field reads its original document key");
         row.TryGetProperty("buyerName", out var buyer).Should().BeTrue();

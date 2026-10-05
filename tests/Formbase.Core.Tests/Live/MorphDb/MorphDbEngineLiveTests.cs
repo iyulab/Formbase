@@ -69,14 +69,16 @@ public sealed class MorphDbEngineLiveTests
 
         // The row contract against a real backend: exactly the declared fields. MorphDB materializes
         // its own system columns (_id, project_id, _created_at, _updated_at, _version) and formbase
-        // adds fb_* bookkeeping — none of it may reach the consumer's rows.
-        all.Rows[0].Keys.Should().BeEquivalentTo(["lot", "qty"]);
+        // adds fb_* bookkeeping — none of it may reach a row's fields. Which record the row is reaches
+        // the caller as its identity instead, read from MorphDB's text rendering of the document id.
+        all.Rows[0].Fields.Keys.Should().BeEquivalentTo(["lot", "qty"]);
+        all.Rows.Should().OnlyContain(r => r.Record.Key == null, "these documents were sent without keys");
 
         // 5) An equality filter (int coerced to the bigint column) round-trips through MorphDB.
         var filtered = await engine.QueryAsync(qc, new QuerySpec(
             Filters: [FieldFilter.Equal("qty", 3)]), TestContext.Current.CancellationToken);
         filtered.Rows.Should().ContainSingle();
-        filtered.Rows[0]["lot"].Should().Be("L-3");
+        filtered.Rows[0].Fields["lot"].Should().Be("L-3");
 
         // Cleanup.
         await store.DropTableAsync(table, TestContext.Current.CancellationToken);

@@ -78,7 +78,7 @@ public sealed class EuProcurementNoticeRegressionTests
         }
 
         var result = await engine.ProjectAsync(NoticeType, TestContext.Current.CancellationToken);
-        var rows = (await engine.QueryAsync(NoticeType, QuerySpec.All, TestContext.Current.CancellationToken)).Rows;
+        var rows = (await engine.QueryAsync(NoticeType, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Select(r => r.Fields).ToList();
 
         withArrayCurrency.Should().BeGreaterThan(0, "the fixture must contain at least one notice with an " +
             "array-valued currency, or this test is not exercising the mismatch it claims to");

@@ -4,6 +4,34 @@
 
 ### Changed
 
+- **Breaking: a query row says which record it is.** `QueryResult.Rows` is a list of `RecordRow` —
+  `Record`, a `RecordRef` (the document the record stands on now, and its `RecordKey` when it has one),
+  and `Fields`, exactly the declared columns as before. A keyed record keeps its key through every
+  correction while its document moves to the correcting one, so the key is what identifies a record
+  across reads; a document without a key is a record of its own (`Key` is null) and its document is its
+  identity. Before, a row carried only its declared fields, so a row could not be tied to a document or
+  to the same record in a later read.
+- **Breaking: an aggregate's evidence is records, not documents.** `AggregateGroup.Documents` is
+  `AggregateGroup.Records` (a list of `RecordRef`), and `AggregateSpec.DocumentsPerGroup` is
+  `AggregateSpec.RecordsPerGroup`. Order (the order the documents were accepted) and the limit are
+  unchanged; the records are the same identities the rows of `AggregateSpec.RecordsOf(group)` carry, so a
+  count can be matched to the rows that make it up. Every store reads each record's key with its document
+  in the same statement as the count — SQLite as one array of pairs, MorphDB as a second `ARRAY_AGG` in
+  the same order beside the document ids.
+- **Breaking (HTTP): a record read's rows are `{ "record": { "document", "key" }, "fields": { … } }`.**
+  `GET /formtypes/{type}/records` used to answer each row as the declared fields alone; they are now under
+  `fields`, beside `record`, whose `key` is `null` for a document sent without one (present, not omitted).
+  The served OpenAPI document gains `RecordRowResponse` and `RecordRefResponse`.
+
+  **Migrating.** Read a field as `row.Fields["name"]` instead of `row["name"]` (over HTTP,
+  `row.fields.name` instead of `row.name`). Read an aggregate's evidence as `group.Records[i].Document`
+  where it was `group.Documents[i]`, and ask for it with `RecordsPerGroup` instead of `DocumentsPerGroup`.
+  To keep track of a record across reads, compare `Record.Key` when it is set and `Record.Document`
+  otherwise. A store implementing `IProjectionStore` outside this repository returns `AggregateGroup.Records`
+  — each record's key beside its document, null for a document without one — and keeps returning the
+  `fb_doc_id` and `fb_record_key` system columns with its query rows, which the core now reads; a query
+  row without a readable document id is refused as a broken store contract.
+
 - **`Formbase.MorphDb` pairs with MorphDB `0.16.x`** (was `0.15.x`), and reads a query window from where it
   starts: one request with the window's offset, where it used to assemble an arbitrary offset from the
   pages that covered it (two requests in the common case). A window wider than the most rows MorphDB

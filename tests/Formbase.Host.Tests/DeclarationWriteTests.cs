@@ -212,7 +212,7 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
 
         var rows = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken)))
             .GetProperty("rows");
-        rows[0].GetProperty("total").GetInt64().Should().Be(7);
+        rows[0].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(7);
     }
 
     private static string NewFormType() => $"decw{Guid.NewGuid():N}"[..16];

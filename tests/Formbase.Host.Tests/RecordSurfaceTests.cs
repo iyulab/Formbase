@@ -73,9 +73,10 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         result.GetProperty("stale").GetBoolean().Should().BeFalse();
         var rows = result.GetProperty("rows").EnumerateArray().ToList();
         rows.Should().HaveCount(2);
-        rows.Select(r => r.GetProperty("total").GetInt64()).Should().BeEquivalentTo([1L, 2L]);
-        rows[0].EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["total"],
-            "a row carries the declared columns and nothing else — the projection's own bookkeeping " +
+        rows.Select(r => r.GetProperty("fields").GetProperty("total").GetInt64()).Should().BeEquivalentTo([1L, 2L]);
+        rows[0].EnumerateObject().Select(p => p.Name).Should().Equal(["record", "fields"]);
+        rows[0].GetProperty("fields").EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["total"],
+            "a row's fields are the declared columns and nothing else — the projection's own bookkeeping " +
             "would calcify into the caller's contract");
     }
 
@@ -93,7 +94,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
 
         var rows = result.GetProperty("rows").EnumerateArray().ToList();
         rows.Should().HaveCount(1, "a filter that failed to compare would return every row instead");
-        rows[0].GetProperty("total").GetInt64().Should().Be(2);
+        rows[0].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(2);
     }
 
     [Fact]
@@ -105,7 +106,7 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
             await _client.GetAsync($"/formtypes/{type}/records?orderBy=-total&limit=2", TestContext.Current.CancellationToken));
 
         result.GetProperty("rows").EnumerateArray()
-            .Select(r => r.GetProperty("total").GetInt64())
+            .Select(r => r.GetProperty("fields").GetProperty("total").GetInt64())
             .Should().Equal(3L, 2L);
     }
 

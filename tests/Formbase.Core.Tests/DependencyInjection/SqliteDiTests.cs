@@ -56,7 +56,7 @@ public sealed class SqliteDiTests : IDisposable
         await engine.ProjectAsync(inspection, ct);
 
         var rows = await engine.QueryAsync(inspection, new QuerySpec(), ct);
-        rows.Rows.Should().ContainSingle().Which["equipment"].Should().Be("EQ-1");
+        rows.Rows.Should().ContainSingle().Which.Fields["equipment"].Should().Be("EQ-1");
         var status = await engine.GetProjectionStatusAsync(inspection, ct);
         status.State.Should().Be(ProjectionState.Projected, "the declaration read back is the one the projection was built from");
     }
@@ -88,7 +88,7 @@ public sealed class SqliteDiTests : IDisposable
         var recent = new FieldFilter("filed", FilterOperator.GreaterThanOrEqual, "2026-09-14T00:00:00Z");
 
         var rows = await engine.QueryAsync(reports, new QuerySpec(Filters: [recent, new FieldFilter("title", FilterOperator.Contains, "SAVE")]), TestContext.Current.CancellationToken);
-        rows.Rows.Should().ContainSingle().Which["title"].Should().Be("Save slow");
+        rows.Rows.Should().ContainSingle().Which.Fields["title"].Should().Be("Save slow");
 
         var bySeverity = await engine.AggregateAsync(reports, new AggregateSpec(GroupBy: ["severity"], Filters: [recent]), TestContext.Current.CancellationToken);
         bySeverity.Stale.Should().BeFalse();
@@ -123,7 +123,7 @@ public sealed class SqliteDiTests : IDisposable
         // No re-append, no re-projection: the file already holds both, and the stamp still names raw's head.
         var open = await restarted.QueryAsync(reports, new QuerySpec(Filters: [FieldFilter.IsNull("closed")]), TestContext.Current.CancellationToken);
         open.Stale.Should().BeFalse();
-        open.Rows.Should().ContainSingle().Which["title"].Should().Be("Typo");
+        open.Rows.Should().ContainSingle().Which.Fields["title"].Should().Be("Typo");
 
         var appended = await second.GetRequiredService<IRawStore>().AppendAsync(
             reports, DocumentId.New(), DocumentBody.Parse("""{"title":"Save slow"}"""), cancellationToken: TestContext.Current.CancellationToken);

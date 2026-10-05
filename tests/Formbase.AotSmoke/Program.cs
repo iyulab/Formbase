@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 // The local single-file path end to end under Native AOT: documents into SQLite, a declaration with a
 // bound field and a relation stored and read back, a projection, a query, and an aggregate with the
-// documents behind each count — then the MorphDB projection store against a stub server (MorphDbPath).
+// records behind each count — then the MorphDB projection store against a stub server (MorphDbPath).
 // A path that still needs reflection throws here, so the process exits
 // non-zero and the publish-and-run step fails.
 
@@ -27,9 +27,10 @@ try
         var equipment = FormTypeRef.Create("equipment");
         var inspection = FormTypeRef.Create("inspection");
         await engine.AcceptAsync(equipment, DocumentBody.Parse("""{"code":"EQ-1","name":"펌프"}"""));
-        var first = await engine.AcceptAsync(inspection, DocumentBody.Parse("""{"equipment":"EQ-1","result":"ok"}"""));
+        var key = RecordKey.Create("I-1");
+        var first = await engine.AcceptAsync(inspection, DocumentBody.Parse("""{"equipment":"EQ-1","result":"ok"}"""), recordKey: key);
         await engine.AcceptAsync(inspection, DocumentBody.Parse("""{"equipment":"EQ-1","result":"fail"}"""));
-        await engine.AcceptAsync(inspection, DocumentBody.Parse("""{"equipment":"EQ-1","result":"ok"}"""));
+        var third = await engine.AcceptAsync(inspection, DocumentBody.Parse("""{"equipment":"EQ-1","result":"ok"}"""));
 
         await hints.DeclareAsync(new FormTypeHints(equipment, "equipment_rows",
             [new FieldHint("code", ColumnType.Text), new FieldHint("name", ColumnType.Text)]));
@@ -49,10 +50,14 @@ try
 
         var rows = await engine.QueryAsync(inspection, new QuerySpec(Filters: [FieldFilter.Equal("result", "ok")]));
         Check(rows.Rows.Count == 2, $"query rows: {rows.Rows.Count}");
+        var keyed = new RecordRef(first, key);
+        var keyless = new RecordRef(third, null);
+        Check(rows.Rows is [{ Record: var a }, { Record: var b }] && a == keyed && b == keyless && Equals(rows.Rows[0].Fields["result"], "ok"),
+            "query row identities");
 
-        var counts = await engine.AggregateAsync(inspection, new AggregateSpec(GroupBy: ["result"], DocumentsPerGroup: 1));
+        var counts = await engine.AggregateAsync(inspection, new AggregateSpec(GroupBy: ["result"], RecordsPerGroup: 2));
         var ok = counts.Groups.Single(g => Equals(g.Key["result"], "ok"));
-        Check(ok.Count == 2 && ok.Documents is [var only] && only == first, "aggregate documents");
+        Check(ok.Count == 2 && ok.Records is [var x, var y] && x == keyed && y == keyless, "aggregate records");
     }
 
     await MorphDbPath.RunAsync();

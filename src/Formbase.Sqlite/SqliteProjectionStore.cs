@@ -225,12 +225,12 @@ public sealed class SqliteProjectionStore : IProjectionStore
         await using var command = connection.CreateCommand();
         var keys = groupBy.Select(SqliteValues.Quote).ToList();
 
-        // The rows counted: the table, filtered — and, when the documents behind each group are asked
-        // for, each row numbered within its group in the order it was accepted, so the documents are
+        // The rows counted: the table, filtered — and, when the records behind each group are asked
+        // for, each row numbered within its group in the order it was accepted, so the records are
         // read by the same statement as the count and the limit cuts the same ones every time.
         var source = new StringBuilder();
-        var documents = spec.DocumentsPerGroup;
-        if (documents is null)
+        var records = spec.RecordsPerGroup;
+        if (records is null)
         {
             source.Append(SqliteValues.Quote(tableName));
             AppendWhere(source, command, spec.Filters, types);
@@ -253,10 +253,12 @@ public sealed class SqliteProjectionStore : IProjectionStore
         }
 
         sql.Append("COUNT(*)");
-        if (documents is { } limit)
+        if (records is { } limit)
         {
-            sql.Append(", json_group_array(").Append(SqliteValues.Quote(ProjectionSystemColumns.DocumentId))
-                .Append(" ORDER BY ").Append(SqliteValues.Quote(ProjectionSystemColumns.Watermark))
+            // Each record as a [document, key] pair, so a null key keeps its place beside its document.
+            sql.Append(", json_group_array(json_array(").Append(SqliteValues.Quote(ProjectionSystemColumns.DocumentId))
+                .Append(", ").Append(SqliteValues.Quote(ProjectionSystemColumns.RecordKey))
+                .Append(") ORDER BY ").Append(SqliteValues.Quote(ProjectionSystemColumns.Watermark))
                 .Append(") FILTER (WHERE ").Append(SqliteValues.Quote(RowNumberColumn)).Append(" <= ")
                 .Append(limit.ToString(CultureInfo.InvariantCulture)).Append(')');
         }
@@ -279,20 +281,24 @@ public sealed class SqliteProjectionStore : IProjectionStore
                 key[groupBy[i]] = SqliteValues.FromStorage(reader.GetValue(i), types.GetValueOrDefault(groupBy[i], ColumnType.Text));
             }
 
-            var ids = documents is null ? null : ReadDocumentIds(reader.IsDBNull(groupBy.Count + 1) ? "[]" : reader.GetString(groupBy.Count + 1));
-            groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count), ids));
+            var evidence = records is null ? null : ReadRecords(reader.IsDBNull(groupBy.Count + 1) ? "[]" : reader.GetString(groupBy.Count + 1));
+            groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count), evidence));
         }
 
         return groups;
     }
 
-    /// <summary>The per-group row number the documents' limit reads; prefixed like the system columns so no declared column shares it.</summary>
+    /// <summary>The per-group row number the records' limit reads; prefixed like the system columns so no declared column shares it.</summary>
     private const string RowNumberColumn = "fb_group_row";
 
-    private static List<DocumentId> ReadDocumentIds(string json)
+    private static List<RecordRef> ReadRecords(string json)
     {
         using var array = JsonDocument.Parse(json);
-        return array.RootElement.EnumerateArray().Select(id => DocumentId.From(Guid.Parse(id.GetString()!))).ToList();
+        return array.RootElement.EnumerateArray()
+            .Select(pair => new RecordRef(
+                DocumentId.From(Guid.Parse(pair[0].GetString()!)),
+                pair[1].ValueKind == JsonValueKind.Null ? null : RecordKey.Create(pair[1].GetString()!)))
+            .ToList();
     }
 
     private static void AppendWhere(

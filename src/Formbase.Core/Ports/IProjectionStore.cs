@@ -40,7 +40,10 @@ public interface IProjectionStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Queries rows from a projected table. Rows carry both system and domain columns. Every
+    /// Queries rows from a projected table. Rows carry both system and domain columns: the caller reads
+    /// which record each row is from <see cref="Projection.ProjectionSystemColumns.DocumentId"/> (a
+    /// <see cref="Guid"/> or its text; required) and <see cref="Projection.ProjectionSystemColumns.RecordKey"/>
+    /// (text, or null or absent for a document that is a record of its own). Every
     /// <see cref="FieldFilter"/> applies; the caller has already checked that each operator applies to
     /// its column's type and coerced each value to it.
     /// </summary>
@@ -50,6 +53,9 @@ public interface IProjectionStore
     /// Counts the rows the spec's filters keep, one group per distinct combination of the grouping
     /// columns (one group, possibly counting zero, when there are none). Group order is unspecified —
     /// the caller orders them. Filters arrive checked and coerced, as for <see cref="QueryAsync"/>.
+    /// When <see cref="AggregateSpec.RecordsPerGroup"/> is set, each group carries
+    /// <see cref="AggregateGroup.Records"/>: each record's document with its key, in watermark order, cut
+    /// at that limit; otherwise <see cref="AggregateGroup.Records"/> is null.
     /// </summary>
     Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default);
 }

@@ -127,7 +127,7 @@ public sealed class MorphDbReferenceNullabilityLiveTests
 
             var all = await engine.QueryAsync(qc, QuerySpec.All, TestContext.Current.CancellationToken);
             all.Rows.Should().HaveCount(3);
-            all.Rows.Should().OnlyContain(r => r["unit_price"] == null,
+            all.Rows.Should().OnlyContain(r => r.Fields["unit_price"] == null,
                 "the document's own copy is not the referenced value, so the box stays empty");
         }
         finally

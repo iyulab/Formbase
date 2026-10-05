@@ -130,7 +130,7 @@ public class SchemaIntelligenceDiTests
 
         result.UnresolvedReferences.Should().Equal(["grade_now"],
             "a declared reference is unresolved whether or not intelligence proposed the rest");
-        var row = (await engine.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle().Subject;
+        var row = (await engine.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle().Subject.Fields;
         row["lot_label"].Should().Be("L-1", "the declared source key still reads the raw key it named");
         row["grade_now"].Should().BeNull();
         row["note"].Should().Be("n", "and the inferred column carries data like any other");
@@ -171,7 +171,7 @@ public class SchemaIntelligenceDiTests
 
         result.UnresolvedReferences.Should().Equal(["unit"],
             "the adapter maps a soft binding to Reference, which this stage does not resolve");
-        var row = (await engine.QueryAsync(inspection.Type, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle().Subject;
+        var row = (await engine.QueryAsync(inspection.Type, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Should().ContainSingle().Subject.Fields;
         row.Keys.Should().Equal(["lot_no", "qty", "unit", "approved_price", "remark"],
             "the declared columns keep their generated order and none is proposed twice");
         row["lot_no"].Should().Be("L-1");

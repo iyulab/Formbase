@@ -208,9 +208,11 @@ no row. `Idempotency-Key` works here as it does for intake.
   record and sent nothing would otherwise add a second one.
 - **A document without a key is a record of its own**, as every document was before keys existed.
   Keyed and unkeyed documents can share a form type.
-- Record reads return the declared fields only, as they always have — the key is not one of them. The
-  projected table keeps it in the `fb_record_key` bookkeeping column (null for unkeyed documents) for
-  whoever reads the table directly.
+- **A record read says which record each row is** — `record.key` is the key (null for a document sent
+  without one), `record.document` the document the record stands on now. After a correction the key is
+  the same and the document is the correcting one, so remember a record by its key; a document without
+  a key cannot be corrected, so its document is its identity. The key is not one of the row's `fields`.
+  See [Querying records](#querying-records).
 
 ---
 
@@ -573,11 +575,29 @@ GET /formtypes/orders/records?filter=total:42&orderBy=-total&limit=20&offset=0
 ```
 
 ```json
-{ "rows": [{ "total": 42 }], "stale": false }
+{
+  "rows": [
+    {
+      "record": { "document": "7c2e4b1a-9d3f-4e5a-8b6c-1d2e3f4a5b6c", "key": "order-1041" },
+      "fields": { "total": 42 }
+    }
+  ],
+  "stale": false
+}
 ```
 
-Each row carries **exactly the declared columns** — the projection's own bookkeeping is not part of
-what a caller reads, because an internal that leaked here would calcify into their contract.
+Each row is **which record it is** and **its declared fields**:
+
+- **`record`** — `key` is the record's key, or `null` for a document sent without one (always present,
+  never left out). `document` is the document the record's values come from now — the one
+  `GET /documents/{id}` reads back in full. A correction moves a keyed record to a new document and
+  keeps its key, so the key is what identifies a record across reads; a document without a key is a
+  record of its own, and its document is its identity.
+- **`fields`** — **exactly the declared columns**. The projection's own bookkeeping is not part of what
+  a caller reads, because an internal that leaked here would calcify into their contract; which record
+  a row is reaches the caller as `record` instead.
+
+The parameters:
 
 - **`filter`** — repeatable, `column:value`, equality only. The **first** colon separates the two, so
   a value may contain colons. Values are compared as the declared column's type, so `total:42`
@@ -596,8 +616,8 @@ for a mistyped column name, a caller would go looking at their data when what ne
 they sent.
 
 The projection's bookkeeping columns are not declared columns, so they cannot be filtered or ordered
-by either — rows never carry them, and a caller ordering by a name they can never read back would be
-depending on an internal.
+by either — rows never carry them as fields, and a caller ordering by a name they can never read back
+would be depending on an internal.
 - **`limit` / `offset`** — paging is deterministic whether or not the caller orders, because the
   projection's watermark is appended as a final tie-breaker.
 

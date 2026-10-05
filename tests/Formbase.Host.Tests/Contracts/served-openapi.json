@@ -1306,11 +1306,45 @@
           "rows": {
             "type": "array",
             "items": {
-              "type": "object"
+              "$ref": "#/components/schemas/RecordRowResponse"
             }
           },
           "stale": {
             "type": "boolean"
+          }
+        }
+      },
+      "RecordRefResponse": {
+        "required": [
+          "document",
+          "key"
+        ],
+        "type": "object",
+        "properties": {
+          "document": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RecordRowResponse": {
+        "required": [
+          "record",
+          "fields"
+        ],
+        "type": "object",
+        "properties": {
+          "record": {
+            "$ref": "#/components/schemas/RecordRefResponse"
+          },
+          "fields": {
+            "type": "object"
           }
         }
       },

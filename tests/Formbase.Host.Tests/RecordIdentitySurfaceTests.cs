@@ -36,8 +36,40 @@ public sealed class RecordIdentitySurfaceTests : IClassFixture<WebApplicationFac
         var rows = await ProjectAndReadRowsAsync(type);
 
         rows.Should().HaveCount(2);
-        rows.Select(r => r.GetProperty("total").GetInt64()).Should().BeEquivalentTo([2L, 7L],
+        rows.Select(r => r.GetProperty("fields").GetProperty("total").GetInt64()).Should().BeEquivalentTo([2L, 7L],
             "the key — non-ASCII, with a slash — arrived exactly as sent, or the two versions would be two rows");
+    }
+
+    [Fact]
+    public async Task A_row_says_which_record_it_is_and_keeps_its_key_through_a_correction()
+    {
+        var type = NewFormType();
+        Declare(type, ("total", ColumnType.Integer));
+        var original = await AcceptAsync(type, """{"total":1}""", "주문/1041");
+        var standalone = await AcceptAsync(type, """{"total":7}""");
+
+        var before = await ProjectAndReadRowsAsync(type);
+
+        before.Select(Identity).Should().Equal(
+            [(original, "주문/1041"), (standalone, null)],
+            "a row names the document it stands on, and its key when it was sent with one");
+        before[1].GetProperty("record").GetProperty("key").ValueKind.Should().Be(JsonValueKind.Null,
+            "a record of its own says so with an explicit null, not by leaving the key out");
+
+        var corrected = await AcceptAsync(type, """{"total":2}""", "주문/1041");
+
+        var after = await ProjectAndReadRowsAsync(type);
+
+        after.Select(Identity).Should().Equal(
+            [(standalone, null), (corrected, "주문/1041")],
+            "the corrected record keeps its key and now stands on the correcting document");
+        after[1].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(2);
+    }
+
+    private static (Guid Document, string? Key) Identity(JsonElement row)
+    {
+        var record = row.GetProperty("record");
+        return (record.GetProperty("document").GetGuid(), record.GetProperty("key").GetString());
     }
 
     [Fact]
@@ -90,7 +122,7 @@ public sealed class RecordIdentitySurfaceTests : IClassFixture<WebApplicationFac
                 type,
                 [.. fields.Select(f => new FieldHint(f.Name, f.Type))]));
 
-    private async Task AcceptAsync(string type, string body, string? recordKey = null)
+    private async Task<Guid> AcceptAsync(string type, string body, string? recordKey = null)
     {
         var query = recordKey is null ? "" : $"?recordKey={Uri.EscapeDataString(recordKey)}";
         var response = await _client.PostAsync(
@@ -98,6 +130,7 @@ public sealed class RecordIdentitySurfaceTests : IClassFixture<WebApplicationFac
             new StringContent(body, Encoding.UTF8, "application/json"),
             TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return (await ReadAsync(response)).GetProperty("documentId").GetGuid();
     }
 
     private async Task<List<JsonElement>> ProjectAndReadRowsAsync(string type)
