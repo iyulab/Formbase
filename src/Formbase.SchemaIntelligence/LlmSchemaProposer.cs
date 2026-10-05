@@ -26,8 +26,6 @@ public sealed class LlmSchemaProposer : ISchemaProposer
     /// </summary>
     public const int SampleLimit = 20;
 
-    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = false };
-
     private readonly IRawStore _rawStore;
     private readonly IChatClient _chatClient;
 
@@ -116,6 +114,18 @@ public sealed class LlmSchemaProposer : ISchemaProposer
         - List a property in "required" only when every sample carries a non-null value for it.
         """;
 
+    /// <summary>A sample as one line of JSON, written without the serializer's reflection path (Native AOT, trimmed hosts).</summary>
+    private static string Compact(JsonElement sample)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            sample.WriteTo(writer);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
     private static string BuildUserPrompt(FormTypeRef type, List<JsonElement> samples)
     {
         var prompt = new StringBuilder()
@@ -123,7 +133,7 @@ public sealed class LlmSchemaProposer : ISchemaProposer
             .Append("Sample documents (").Append(samples.Count).Append("):\n");
         foreach (var sample in samples)
         {
-            prompt.Append(JsonSerializer.Serialize(sample, IndentedJson)).Append('\n');
+            prompt.Append(Compact(sample)).Append('\n');
         }
 
         return prompt.ToString();

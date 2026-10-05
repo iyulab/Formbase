@@ -49,6 +49,30 @@ jobs:
       - name: Test
         run: dotnet test --solution Formbase.slnx --no-build --configuration Release --verbosity normal
 
+  # The packages declare IsAotCompatible, whose analyzers see Formbase's own code. Only a Native AOT
+  # publish sees the whole graph a host compiles -- dependencies included -- and only running the
+  # result proves the local single-file path (SQLite) works without reflection (TreatWarningsAsErrors
+  # makes any trim or AOT warning fail the publish).
+  aot-smoke:
+    name: Native AOT Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish as Native AOT
+        run: dotnet publish tests/Formbase.AotSmoke/Formbase.AotSmoke.csproj --configuration Release --runtime linux-x64 --output aot-smoke
+
+      - name: Run the AOT executable
+        run: ./aot-smoke/Formbase.AotSmoke
+
   postgres-live:
     name: Postgres Live Contract
     runs-on: ubuntu-latest

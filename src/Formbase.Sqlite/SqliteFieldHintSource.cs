@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -31,11 +29,6 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
             declaration_version INTEGER NOT NULL DEFAULT 1
         );
         """;
-
-    private static readonly JsonSerializerOptions FieldJson = new()
-    {
-        Converters = { new JsonStringEnumConverter() },
-    };
 
     private readonly SqliteDatabase _database;
 
@@ -79,7 +72,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
 
         DeclaredTableName.EnsureUnclaimed(hints, declared);
         DeclaredTargets.EnsureResolvable(hints, type => declaredFields.TryGetValue(type, out var json)
-            ? JsonSerializer.Deserialize<List<FieldHint>>(json, FieldJson)
+            ? DeclarationJson.DeserializeFields(json)
             : null);
 
         await using var command = connection.CreateCommand();
@@ -96,8 +89,8 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
             """;
         command.Parameters.AddWithValue("$type", hints.Type.Value);
         command.Parameters.AddWithValue("$table", hints.TableName);
-        command.Parameters.AddWithValue("$fields", JsonSerializer.Serialize(hints.Fields, FieldJson));
-        command.Parameters.AddWithValue("$relations", hints.Relations is null ? DBNull.Value : JsonSerializer.Serialize(hints.Relations, FieldJson));
+        command.Parameters.AddWithValue("$fields", DeclarationJson.SerializeFields(hints.Fields));
+        command.Parameters.AddWithValue("$relations", hints.Relations is null ? DBNull.Value : DeclarationJson.SerializeRelations(hints.Relations));
         command.Parameters.AddWithValue("$version", hints.DeclarationVersion);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -126,8 +119,8 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
             return null;
         }
 
-        var fields = JsonSerializer.Deserialize<List<FieldHint>>(reader.GetString(1), FieldJson) ?? [];
-        var relations = reader.IsDBNull(2) ? null : JsonSerializer.Deserialize<List<RelationHint>>(reader.GetString(2), FieldJson);
+        var fields = DeclarationJson.DeserializeFields(reader.GetString(1));
+        var relations = reader.IsDBNull(2) ? null : DeclarationJson.DeserializeRelations(reader.GetString(2));
         return new FormTypeHints(type, reader.GetString(0), fields, relations, reader.GetInt32(3));
     }
 

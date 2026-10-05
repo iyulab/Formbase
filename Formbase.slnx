@@ -10,6 +10,7 @@
     <Project Path="src/Formbase.Sqlite/Formbase.Sqlite.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Formbase.AotSmoke/Formbase.AotSmoke.csproj" />
     <Project Path="tests/Formbase.Core.Tests/Formbase.Core.Tests.csproj" />
     <Project Path="tests/Formbase.Host.Tests/Formbase.Host.Tests.csproj" />
   </Folder>

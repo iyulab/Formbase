@@ -15,6 +15,19 @@
   A non-positive `DocumentsPerGroup` is refused. `AggregateSpec` and `AggregateGroup` gain a trailing
   optional parameter each — a store implementing `IProjectionStore` outside this repository answers
   `DocumentsPerGroup` or leaves `Documents` null.
+- **`DeclarationJson`** — the format a durable `IFieldHintSource` stores a declaration's fields and
+  relations in, one for every store and usable by a store outside this repository; the SQLite and
+  PostgreSQL stores use it.
+
+### Fixed
+
+- **Every package runs under Native AOT and trimming.** All packages but the host declare
+  `IsAotCompatible`. The SQLite and PostgreSQL declaration stores wrote and read the stored fields and
+  relations through reflection-based serialization, which a Native AOT host does not have; they now use
+  compile-time metadata, and the schema proposer writes its sample documents without the serializer. The
+  stored format is unchanged — written byte for byte as before, and declarations already on disk read
+  back the same. CI publishes and runs a Native AOT executable over the SQLite path (intake, declaration,
+  projection, query, aggregate).
 
 ## 0.17.2
 

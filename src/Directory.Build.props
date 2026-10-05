@@ -14,4 +14,14 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+  <!--
+    Every package runs in Native AOT and trimmed hosts (a local single-device consumer is exactly the
+    kind that publishes that way): IsAotCompatible marks the assembly trimmable and turns on the trim and
+    AOT analyzers, so reflection that would only fail at run time in such a host fails this build
+    instead, under TreatWarningsAsErrors. The host is an application, not a package — it is published
+    as a container image and keeps ASP.NET Core's own reflection-based surfaces.
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Formbase.Host'">
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
 </Project>

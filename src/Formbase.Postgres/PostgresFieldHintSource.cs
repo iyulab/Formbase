@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -26,11 +24,6 @@ namespace Formbase.Postgres;
 /// </remarks>
 public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 {
-    private static readonly JsonSerializerOptions FieldJson = new()
-    {
-        Converters = { new JsonStringEnumConverter() },
-    };
-
     private readonly NpgsqlDataSource _dataSource;
     private readonly PostgresSchemaBootstrap _bootstrap;
     private readonly TimeProvider _clock;
@@ -125,7 +118,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 
         DeclaredTableName.EnsureUnclaimed(hints, declared);
         DeclaredTargets.EnsureResolvable(hints, type => declaredFields.TryGetValue(type, out var json)
-            ? JsonSerializer.Deserialize<List<FieldHint>>(json, FieldJson)
+            ? DeclarationJson.DeserializeFields(json)
             : null);
 
         await using var command = new NpgsqlCommand(
@@ -145,11 +138,11 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         command.Parameters.AddWithValue("table", hints.TableName);
         command.Parameters.Add(new NpgsqlParameter("fields", NpgsqlDbType.Jsonb)
         {
-            Value = JsonSerializer.Serialize(hints.Fields, FieldJson),
+            Value = DeclarationJson.SerializeFields(hints.Fields),
         });
         command.Parameters.Add(new NpgsqlParameter("relations", NpgsqlDbType.Jsonb)
         {
-            Value = hints.Relations is null ? DBNull.Value : JsonSerializer.Serialize(hints.Relations, FieldJson),
+            Value = hints.Relations is null ? DBNull.Value : DeclarationJson.SerializeRelations(hints.Relations),
         });
         command.Parameters.AddWithValue("version", hints.DeclarationVersion);
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
@@ -175,8 +168,8 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         }
 
         var tableName = reader.GetString(0);
-        var fields = JsonSerializer.Deserialize<List<FieldHint>>(reader.GetString(1), FieldJson) ?? [];
-        var relations = reader.IsDBNull(2) ? null : JsonSerializer.Deserialize<List<RelationHint>>(reader.GetString(2), FieldJson);
+        var fields = DeclarationJson.DeserializeFields(reader.GetString(1));
+        var relations = reader.IsDBNull(2) ? null : DeclarationJson.DeserializeRelations(reader.GetString(2));
         return new FormTypeHints(type, tableName, fields, relations, reader.GetInt32(3));
     }
 
