@@ -85,6 +85,11 @@ public sealed record EntityRef
 /// </summary>
 internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
 {
+    // The target's own converter, called directly: going back through JsonSerializer with the
+    // caller's options would need reflection metadata for FormTypeRef, which a Native AOT or trimmed
+    // host does not have.
+    private static readonly FormTypeRefJsonConverter EntityConverter = new();
+
     public override EntityRef Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType != JsonTokenType.StartObject)
@@ -101,7 +106,7 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
             switch (name)
             {
                 case nameof(EntityRef.Entity):
-                    entity = JsonSerializer.Deserialize<FormTypeRef>(ref reader, options);
+                    entity = EntityConverter.Read(ref reader, typeof(FormTypeRef), options);
                     break;
                 case nameof(EntityRef.ValueField):
                     valueField = reader.GetString();
@@ -133,7 +138,7 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
     {
         writer.WriteStartObject();
         writer.WritePropertyName(nameof(EntityRef.Entity));
-        JsonSerializer.Serialize(writer, value.Entity, options);
+        EntityConverter.Write(writer, value.Entity, options);
         writer.WriteString(nameof(EntityRef.ValueField), value.ValueField);
         if (value.LookupKey is not null)
         {

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`Formbase.Core` runs under Native AOT and trimming.** The package declares `IsAotCompatible`, and a
+  bound field's stored entity reference (`EntityRef`) reads and writes its target form type through that
+  type's own converter rather than back through the serializer, which needed reflection metadata a
+  Native AOT host does not have. Before, a Native AOT publish of anything referencing `Formbase.Core`
+  reported trim and AOT warnings from it. Stored shapes are unchanged.
+
 ## 0.17.1
 
 A patch. Pairs with MorphDB `0.14.x`, unchanged from 0.17.0. No contract change.

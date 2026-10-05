@@ -3,6 +3,12 @@
   <PropertyGroup>
     <RootNamespace>Formbase.Core</RootNamespace>
     <Description>formbase core engine — raw-first document intake and hint-driven projection over MorphDB.</Description>
+    <!--
+      The core runs in Native AOT and trimmed hosts (it is consumed in-process by libraries that are):
+      this marks the assembly trimmable and turns on the trim and AOT analyzers, so reflection that
+      would only fail at run time in such a host fails this build instead.
+    -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
 </Project>
