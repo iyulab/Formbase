@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.19.0
+
+A minor. Pairs with MorphDB `0.16.x` (was `0.15.x`). Breaking: a query row now says which record it is
+(`RecordRow` — `Record` and `Fields`), an aggregate's evidence is records (`Records`, `RecordsPerGroup`), and
+a record read over HTTP answers each row as `{ record, fields }` — see the migration paragraph below. The
+MorphDB store reads a query window from its offset in one request and runs under Native AOT.
 
 ### Changed
 
