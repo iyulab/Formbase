@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.18.0
+
+A minor. Pairs with MorphDB `0.15.x` (was `0.14.x`). An aggregate can say which documents each count is
+made of, read with the count, and every package but the host runs under Native AOT and trimming. Additive
+for callers; a store implementing `IProjectionStore` outside this repository sees `AggregateSpec` gain
+`DocumentsPerGroup` and answers it or leaves `AggregateGroup.Documents` null.
 
 ### Added
 
