@@ -7,7 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 // The local single-file path end to end under Native AOT: documents into SQLite, a declaration with a
 // bound field and a relation stored and read back, a projection, a query, and an aggregate with the
-// documents behind each count. A path that still needs reflection throws here, so the process exits
+// documents behind each count — then the MorphDB projection store against a stub server (MorphDbPath).
+// A path that still needs reflection throws here, so the process exits
 // non-zero and the publish-and-run step fails.
 
 var path = Path.Combine(Path.GetTempPath(), $"formbase-aot-{Guid.NewGuid():N}.db");
@@ -53,6 +54,8 @@ try
         var ok = counts.Groups.Single(g => Equals(g.Key["result"], "ok"));
         Check(ok.Count == 2 && ok.Documents is [var only] && only == first, "aggregate documents");
     }
+
+    await MorphDbPath.RunAsync();
 
     Console.WriteLine("Formbase AOT smoke: ok");
     return 0;

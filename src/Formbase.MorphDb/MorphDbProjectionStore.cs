@@ -21,7 +21,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     private const int InsertChunkSize = 500;
     private const int DefaultPageSize = 50;
 
-    /// <summary>MorphDB caps a page at this many rows, so a window wider than it spans several pages.</summary>
+    /// <summary>MorphDB returns at most this many rows per request, so a wider window takes several.</summary>
     private const int MaxPageSize = 1000;
 
     private readonly MorphDBClient _client;
@@ -222,14 +222,6 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             return [];
         }
 
-        // MorphDB pages instead of taking an offset, so an arbitrary offset has to be assembled from the
-        // pages that cover it. Sizing pages at the limit keeps that to two requests in the common case:
-        // the window is never longer than a page, so it straddles at most a page boundary.
-        var pageSize = Math.Min(limit, MaxPageSize);
-        var firstPage = (offset / pageSize) + 1;
-        var skip = offset % pageSize;
-        var needed = skip + limit;
-
         var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f), f.Value)).ToList();
 
         // Server-side ordering — the only way paging is deterministic (a client-side sort would order
@@ -238,15 +230,19 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             ? specOrder.Select(k => new OrderBy(k.Column, ascending: !k.Descending)).ToList()
             : [];
 
-        var window = new List<IReadOnlyDictionary<string, object?>>(needed);
-        for (var page = firstPage; window.Count < needed; page++)
+        // The window is read from where it starts: one request, unless it is wider than the most rows
+        // MorphDB returns at once, in which case each further request starts where the last one ended.
+        var window = new List<IReadOnlyDictionary<string, object?>>(Math.Min(limit, MaxPageSize));
+        var position = offset;
+        while (window.Count < limit)
         {
+            var take = Math.Min(limit - window.Count, MaxPageSize);
             var request = new QueryRequest
             {
                 Filters = filters,
                 OrderBy = orderBy,
-                PageSize = pageSize,
-                Page = page,
+                PageSize = take,
+                Offset = position,
             };
 
             var paged = await _client.Data
@@ -256,14 +252,16 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             window.AddRange(paged.Data
                 .Select(record => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(record.Data, StringComparer.Ordinal)));
 
-            // A short page is the last one — asking for more would loop forever on an exhausted table.
-            if (paged.Data.Count < pageSize)
+            // Fewer rows than asked for means the table ran out — asking again would only read nothing.
+            if (paged.Data.Count < take)
             {
                 break;
             }
+
+            position += take;
         }
 
-        return window.Skip(skip).Take(limit).ToList();
+        return window;
     }
 
     public async Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)

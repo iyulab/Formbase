@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`Formbase.MorphDb` pairs with MorphDB `0.16.x`** (was `0.15.x`), and reads a query window from where it
+  starts: one request with the window's offset, where it used to assemble an arbitrary offset from the
+  pages that covered it (two requests in the common case). A window wider than the most rows MorphDB
+  returns at once still takes several requests, each starting where the last ended. Needs a MorphDB server
+  of `0.16.0` or later — an older one does not read the offset and answers from the first row.
+- **`Formbase.MorphDb` runs under Native AOT and trimming.** Its MorphDB client is AOT-compatible from
+  `0.16.0`, so the claim that every package but the host runs under Native AOT now holds on the MorphDB
+  path too; the AOT publish smoke drives the MorphDB store (against a stub server) alongside SQLite.
+
 ## 0.18.0
 
 A minor. Pairs with MorphDB `0.15.x` (was `0.14.x`). An aggregate can say which documents each count is
