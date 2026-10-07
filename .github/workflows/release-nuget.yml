@@ -109,31 +109,13 @@ jobs:
         run: dotnet pack Formbase.slnx --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 
       # Most green CI runs carry a version that is already out; this is where they stop. Every
-      # package is asked, not one: a release that pushed some packages and then failed is finished
-      # by the next run, which a single sentinel package would report as done. It fails closed --
-      # nuget.org answering anything but "here is the list" or "no such package" is not taken to
-      # mean "not published".
+      # package is asked, and an index that cannot be asked fails the run rather than reading as
+      # "not published" (see the action).
       - name: Find the packages nuget.org does not have yet
         id: unpublished
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          MISSING=0
-          for nupkg in ./nupkgs/*.nupkg; do
-            file=$(basename "$nupkg" .nupkg)
-            id=$(echo "${file%."$VERSION"}" | tr '[:upper:]' '[:lower:]')
-            status=$(curl -s -o "$RUNNER_TEMP/versions.json" -w '%{http_code}' "https://api.nuget.org/v3-flatcontainer/$id/index.json")
-            case "$status" in
-              200) if jq -e --arg v "$VERSION" '.versions | index($v)' "$RUNNER_TEMP/versions.json" > /dev/null; then
-                     echo "$id $VERSION is published"
-                   else
-                     echo "$id $VERSION is not published"; MISSING=1
-                   fi ;;
-              404) echo "$id has never been published"; MISSING=1 ;;
-              *) echo "::error::nuget.org answered $status for $id; cannot tell whether $VERSION is published."; exit 1 ;;
-            esac
-          done
-          echo "any=$([ "$MISSING" = 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          [ "$MISSING" = 1 ] || echo "::notice::$VERSION is already published; nothing to release. Bump <Version> to publish."
+        uses: iyulab/dotnet-ci-actions/nuget-unpublished@92c282e839be5e4957fd68fe763b7acc3d088f06 # main, 2026-10-07
+        with:
+          version: ${{ steps.version.outputs.version }}
 
       # Everything from here writes something that cannot be taken back, so a manual run never gets
       # here. --skip-duplicate stays as idempotence for a run that resumes a partial release.
