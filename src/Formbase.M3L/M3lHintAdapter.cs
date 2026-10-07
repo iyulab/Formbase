@@ -130,6 +130,15 @@ public static class M3lHintAdapter
         {
             binding = field.Binding.IsHard ? FieldBinding.Snapshot : FieldBinding.Reference;
             target = new EntityRef(FormTypeRef.Create(ToSnake(field.Binding.Entity)), valueField: field.Binding.Column);
+            if (!field.Binding.IsHard)
+            {
+                // The vocabulary can compute a reference that says which target record it reads (a
+                // lookup and a via field); M3L's binding says only which column. Named here, at import,
+                // so the column that will read empty is known before the first projection reports it.
+                gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.ReferenceLookup,
+                    $"soft binding to {field.Binding.Entity}.{field.Binding.Column}",
+                    "No lookup pair in M3L: the reference is declared without one, stored and not computed. Add a lookup and a via field to the declaration to compute it."));
+            }
         }
 
         foreach (var attribute in field.Attributes)

@@ -163,13 +163,26 @@ public class M3lHintAdapterTests
         var result = M3lHintAdapter.Adapt(InspectionForm);
 
         // After the vocabulary absorbed relations and time-binding, what remains a gap is what the
-        // declaration vocabulary genuinely does not carry: human labels, derived fields, and
-        // declared value constraints.
+        // declaration vocabulary genuinely does not carry — human labels, derived fields, declared
+        // value constraints — and what M3L does not say: which target record a soft binding reads.
         result.Gaps.Select(g => g.Kind).Distinct().Should().OnlyContain(k =>
             k == VocabularyGapKind.IdentityDisplay
             || k == VocabularyGapKind.Derived
             || k == VocabularyGapKind.Constraint
-            || k == VocabularyGapKind.Unresolved);
+            || k == VocabularyGapKind.Unresolved
+            || k == VocabularyGapKind.ReferenceLookup);
+    }
+
+    [Fact]
+    public void A_soft_binding_is_named_at_import_as_a_reference_without_a_lookup()
+    {
+        var result = M3lHintAdapter.Adapt(InspectionForm);
+
+        var references = result.Hints.SelectMany(h => h.Fields).Where(f => f.Binding == FieldBinding.Reference).ToList();
+        references.Should().NotBeEmpty("the fixture has a soft binding");
+        references.Should().OnlyContain(f => f.Target!.Lookup == null, "M3L carries no lookup pair");
+        result.Gaps.Where(g => g.Kind == VocabularyGapKind.ReferenceLookup).Select(g => g.Field)
+            .Should().BeEquivalentTo(references.Select(f => f.Name), "each one is named before a projection reports it empty");
     }
 
     [Fact]

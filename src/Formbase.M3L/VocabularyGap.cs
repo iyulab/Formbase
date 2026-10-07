@@ -26,6 +26,12 @@ public enum VocabularyGapKind
 
     /// <summary>A construct the spike does not attempt to resolve (inheritance, views, imports).</summary>
     Unresolved,
+
+    /// <summary>
+    /// A soft (true-now) binding that names its target column but not which target record: M3L has no
+    /// lookup pair, so the reference is declared without one and is stored, not computed.
+    /// </summary>
+    ReferenceLookup,
 }
 
 /// <summary>

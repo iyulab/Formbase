@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **M3L import names a soft binding it cannot compute.** A true-now binding names its target column but
+  not which target record, and M3L has no lookup pair, so the reference is declared without one and is
+  stored, not computed. The import now reports each such field as a `VocabularyGapKind.ReferenceLookup`
+  gap, before the first projection names it in `UnresolvedReferences`.
+
 ## 0.20.0
 
 A minor. Pairs with MorphDB `0.18.x` (was `0.17.x`). A `reference` field is computed when it is read, in
