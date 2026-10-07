@@ -34,7 +34,7 @@ public sealed record ProjectionStatus(
             return new ProjectionStatus(ProjectionState.Unverified, stamp.Watermark, rawHead);
         }
 
-        var drifted = stamp.SchemaFingerprint != currentSchema.Fingerprint();
+        var drifted = stamp.SchemaFingerprint != ProjectedShape.Fingerprint(currentSchema);
         var state = drifted || rawHead > stamp.Watermark ? ProjectionState.Stale : ProjectionState.Projected;
         return new ProjectionStatus(state, stamp.Watermark, rawHead);
     }

@@ -446,7 +446,7 @@ public class ProjectorTests
     }
 
     [Fact]
-    public async Task The_recorded_stamp_fingerprints_the_declared_shape_not_the_augmented_table()
+    public async Task The_recorded_stamp_fingerprints_the_projected_shape_of_the_declaration()
     {
         var h = new Harness();
         h.DeclareQcHints();
@@ -462,8 +462,10 @@ public class ProjectorTests
         var stamp = await h.State.GetAsync(Qc, TestContext.Current.CancellationToken);
         stamp!.TableName.Should().Be(Table);
         // Status evaluation compares against the proposer's output, which never carries the system
-        // columns — a stamp fingerprinting the augmented physical shape would always read as drifted.
-        stamp.SchemaFingerprint.Should().Be(declared.Fingerprint());
+        // columns — so both sides fold them in through the same function, and a change to them reads
+        // as a shape change rather than as a permanent drift.
+        stamp.SchemaFingerprint.Should().Be(ProjectedShape.Fingerprint(declared));
+        stamp.SchemaFingerprint.Should().NotBe(declared.Fingerprint(), "the system columns are part of the projected shape");
     }
 
     /// <summary>

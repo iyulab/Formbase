@@ -27,6 +27,7 @@ internal static class DocumentMapper
             [ProjectionSystemColumns.DocumentId] = document.Id.Value,
             [ProjectionSystemColumns.Watermark] = document.Watermark.Value,
             [ProjectionSystemColumns.RecordKey] = document.Key?.Value,
+            [ProjectionSystemColumns.Record] = ProjectionSystemColumns.RecordOf(document.Id, document.Key),
         };
 
         List<string>? absent = null;

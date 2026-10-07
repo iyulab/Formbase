@@ -15,6 +15,14 @@
 - **A target can be found by its record.** `TargetLookup.Record` matches the target record's identity —
   its record key, or the document id of a record appended without one — so a field carrying a record key
   (stable across corrections) or a document id can be a reference. Over HTTP: `"lookupRecord": true`.
+  The identity is text and is matched exactly: a record key as written, a document id in its canonical
+  form (`RecordRef.Document.ToString()`, lower case with hyphens). The via field is declared `Text`; a
+  record lookup through a field of another type is refused when declared.
+- **Every projected row carries its record identity** in a new system column, `fb_record` — the record
+  key, else the document id in canonical form — the column a record lookup is matched against.
+- A reference whose target is projected but not in the shape the reference reads — the target redeclared
+  and not yet rebuilt, or built before `fb_record` existed — reads null, and the result is `Stale`, as
+  for a target never projected. It used to fail the read in the SQLite store.
 
 ### Changed
 
@@ -23,8 +31,10 @@
   `TargetLookup.Record`. A stored declaration keeps the form earlier releases wrote and reads back as
   `TargetLookup.Field`. Migrating: `new EntityRef(t, v, "key", via)` becomes
   `new EntityRef(t, v, TargetLookup.Field("key"), via)`.
-- A projection whose declaration has a reference with a lookup reads `Stale` once after upgrading: the
-  schema now carries how the reference is found, which changes its fingerprint. Project it again.
+- **Every projection reads `Stale` once after upgrading, and its next run rebuilds it.** A projection's
+  fingerprint now covers the system columns every row carries as well as the declaration, so the
+  `fb_record` column (above) reads as a shape change everywhere. Project each form type again; until a
+  reference's target is rebuilt, the reference reads null (above).
 
 ## 0.19.0
 

@@ -71,13 +71,18 @@ public sealed class MorphDbReferenceNullabilityLiveTests
         }
     }
 
-    private static Dictionary<string, object?> Row(string lot, decimal? unitPrice) => new()
+    private static Dictionary<string, object?> Row(string lot, decimal? unitPrice)
     {
-        [ProjectionSystemColumns.DocumentId] = Guid.NewGuid(),
-        [ProjectionSystemColumns.Watermark] = 1L,
-        ["lot"] = lot,
-        ["unit_price"] = unitPrice,
-    };
+        var document = Guid.NewGuid();
+        return new()
+        {
+            [ProjectionSystemColumns.DocumentId] = document,
+            [ProjectionSystemColumns.Watermark] = 1L,
+            [ProjectionSystemColumns.Record] = document.ToString("D"),
+            ["lot"] = lot,
+            ["unit_price"] = unitPrice,
+        };
+    }
 
     /// <summary>
     /// The other half, end to end: with the relaxation in place the same declaration projects

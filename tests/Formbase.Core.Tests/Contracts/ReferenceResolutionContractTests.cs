@@ -36,6 +36,12 @@ public abstract class ReferenceResolutionContractTests
     /// </summary>
     private (FormbaseEngine Engine, IProjectionStore Store) Engine(TargetLookup lookup)
     {
+        var (engine, store, _) = EngineWithHints(lookup);
+        return (engine, store);
+    }
+
+    private (FormbaseEngine Engine, IProjectionStore Store, InMemoryFieldHintSource Hints) EngineWithHints(TargetLookup lookup)
+    {
         var store = CreateStore();
         var raw = new InMemoryRawStore();
         var hints = new InMemoryFieldHintSource();
@@ -61,7 +67,7 @@ public abstract class ReferenceResolutionContractTests
             new FieldHint("grade_now", ColumnType.Text, Binding: FieldBinding.Reference,
                 Target: new EntityRef(Customers, "grade", lookup, "customer_ref")),
         ]));
-        return (engine, store);
+        return (engine, store, hints);
     }
 
     private static Task<DocumentId> Accept(FormbaseEngine engine, FormTypeRef type, string json, RecordKey? key = null) =>
@@ -182,6 +188,80 @@ public abstract class ReferenceResolutionContractTests
         result.Stale.Should().BeTrue("a reference into a projection that does not exist is not current");
 
         await store.DropTableAsync(Orders.Value, Ct);
+    }
+
+    /// <summary>
+    /// The target is redeclared with the field the reference now reads, and the source is rebuilt
+    /// first — projections run in no particular order. Until the target is rebuilt its table has no
+    /// such column: the reference reads null and the result is stale, as for a target never projected,
+    /// rather than the read failing.
+    /// </summary>
+    [Fact]
+    public async Task A_target_not_yet_rebuilt_into_its_redeclared_shape_reads_null_and_the_result_is_stale()
+    {
+        var (engine, store, hints) = EngineWithHints(TargetLookup.Field("code"));
+        await Accept(engine, Customers, """{"code":"C-1","grade":"A","tier":"gold"}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-1","qty":1}""");
+        await ProjectBothAsync(engine);
+
+        hints.Declare(new FormTypeHints(Customers, Customers.Value,
+        [
+            new FieldHint("code", ColumnType.Text),
+            new FieldHint("grade", ColumnType.Text),
+            new FieldHint("tier", ColumnType.Text),
+        ]));
+        hints.Declare(new FormTypeHints(Orders, Orders.Value,
+        [
+            new FieldHint("customer_ref", ColumnType.Text),
+            new FieldHint("qty", ColumnType.Integer),
+            new FieldHint("grade_now", ColumnType.Text, Binding: FieldBinding.Reference,
+                Target: new EntityRef(Customers, "tier", TargetLookup.Field("code"), "customer_ref")),
+        ]));
+        await engine.ProjectAsync(Orders, Ct);
+
+        var before = await engine.QueryAsync(Orders, QuerySpec.All, Ct);
+        before.Rows.Single().Fields["grade_now"].Should().BeNull();
+        before.Stale.Should().BeTrue("the target's projection is not in its declared shape yet");
+
+        await engine.ProjectAsync(Customers, Ct);
+        (await GradesAsync(engine)).Should().Equal(["gold"]);
+
+        await DropAsync(store);
+    }
+
+    /// <summary>
+    /// A target projected before rows carried their record identity column — the table an upgrade
+    /// finds — cannot answer a lookup by record until it is rebuilt: the reference reads null.
+    /// </summary>
+    [Fact]
+    public async Task A_record_lookup_into_a_table_built_without_the_record_column_reads_null()
+    {
+        var (engine, store) = Engine(TargetLookup.Record);
+        await store.CreateTableAsync(new TableSchema(Customers.Value,
+        [
+            new ColumnDef(ProjectionSystemColumns.DocumentId, ColumnType.Uuid, Nullable: false),
+            new ColumnDef(ProjectionSystemColumns.Watermark, ColumnType.Integer, Nullable: false),
+            new ColumnDef(ProjectionSystemColumns.RecordKey, ColumnType.Text, Nullable: true),
+            new ColumnDef("code", ColumnType.Text),
+            new ColumnDef("grade", ColumnType.Text),
+        ]), Ct);
+        await store.BulkInsertAsync(Customers.Value,
+        [
+            new Dictionary<string, object?>
+            {
+                [ProjectionSystemColumns.DocumentId] = Guid.NewGuid(),
+                [ProjectionSystemColumns.Watermark] = 1L,
+                [ProjectionSystemColumns.RecordKey] = "cust-1",
+                ["code"] = "C-1",
+                ["grade"] = "old layout",
+            },
+        ], Ct);
+        await Accept(engine, Orders, """{"customer_ref":"cust-1","qty":1}""");
+        await engine.ProjectAsync(Orders, Ct);
+
+        (await GradesAsync(engine)).Should().Equal([null]);
+
+        await DropAsync(store);
     }
 }
 

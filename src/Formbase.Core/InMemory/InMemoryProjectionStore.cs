@@ -203,16 +203,15 @@ public sealed class InMemoryProjectionStore : IProjectionStore
 
     /// <summary>
     /// Whether <paramref name="row"/> is the target row <paramref name="via"/> identifies: by the
-    /// lookup field's value, or by record identity — the record key when the row has one, else its
-    /// document id.
+    /// lookup field's value, or by record identity — <see cref="ProjectionSystemColumns.Record"/>,
+    /// compared as the other stores compare it, one text equality. A row without the column (built
+    /// before it existed) identifies nothing, as a target that cannot answer.
     /// </summary>
     private static bool Identifies(Dictionary<string, object?> row, TargetLookup lookup, object via) => lookup switch
     {
         TargetLookup.FieldLookup field => Equals(row.GetValueOrDefault(field.Name), via),
-        _ => row.GetValueOrDefault(ProjectionSystemColumns.RecordKey) is string key
-            ? string.Equals(key, via as string, StringComparison.Ordinal)
-            : row.GetValueOrDefault(ProjectionSystemColumns.DocumentId) is Guid id
-                && (via is Guid g ? g == id : via is string text && Guid.TryParse(text, out var parsed) && parsed == id),
+        _ => row.GetValueOrDefault(ProjectionSystemColumns.Record) is string record
+            && string.Equals(record, via as string, StringComparison.Ordinal),
     };
 
     /// <summary>The first <paramref name="limit"/> rows' records in the order they were accepted, or null when none were asked for.</summary>

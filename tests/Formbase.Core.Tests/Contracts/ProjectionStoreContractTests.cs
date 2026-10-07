@@ -304,6 +304,7 @@ public abstract class ProjectionStoreContractTests
             [ProjectionSystemColumns.DocumentId] = Id(id),
             [ProjectionSystemColumns.Watermark] = watermark,
             [ProjectionSystemColumns.RecordKey] = key,
+            [ProjectionSystemColumns.Record] = ProjectionSystemColumns.RecordOf(DocumentId.From(Id(id)), key is null ? null : RecordKey.Create(key)),
             ["k"] = k,
         };
         RecordRef Ref(char id, string? key) => new(DocumentId.From(Id(id)), key is null ? null : RecordKey.Create(key));
@@ -515,6 +516,7 @@ public abstract class ProjectionStoreContractTests
             [ProjectionSystemColumns.DocumentId] = document.Value,
             [ProjectionSystemColumns.Watermark] = v,
             [ProjectionSystemColumns.RecordKey] = key,
+            [ProjectionSystemColumns.Record] = ProjectionSystemColumns.RecordOf(document, key is null ? null : RecordKey.Create(key)),
             ["v"] = v,
         };
 

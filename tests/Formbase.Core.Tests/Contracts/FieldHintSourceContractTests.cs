@@ -321,6 +321,28 @@ public abstract class FieldHintSourceContractTests
     }
 
     /// <summary>
+    /// A record is identified by text — its key, or its document id written out — and every store
+    /// matches it as text, so the field carrying it is Text.
+    /// </summary>
+    [Fact]
+    public async Task A_record_lookup_through_a_field_that_is_not_text_is_refused()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, Equipment());
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("equipment_document", ColumnType.Uuid),
+            new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Reference,
+                Target: new EntityRef(Work, "name", TargetLookup.Record, "equipment_document")),
+        ]);
+
+        var act = () => DeclareAsync(source, hints);
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*equipment_document*Text*");
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    /// <summary>
     /// A target nobody has declared yet cannot be checked, and refusing it would make declaration
     /// order matter — the projection already falls back to the form-type name for its table.
     /// </summary>

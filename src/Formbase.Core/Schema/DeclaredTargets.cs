@@ -51,6 +51,18 @@ public static class DeclaredTargets
                     nameof(hints));
             }
 
+            // A record identity is text — a record key, or a document id written out — and every store
+            // matches it as text; a via field of another type would match in one store and not another.
+            if (target.Lookup is TargetLookup.RecordLookup
+                && target.ViaField is { } recordVia
+                && hints.Fields.First(f => f.Name == recordVia).Type != ColumnType.Text)
+            {
+                throw new ArgumentException(
+                    $"Field '{field.Name}' looks its target record up through '{recordVia}', which is not Text. " +
+                    "A record is identified by text — its key, or its document id — so declare the via field as Text.",
+                    nameof(hints));
+            }
+
             var targetFields = target.Entity == hints.Type
                 ? hints.Fields
                 : declaredFields(target.Entity);

@@ -107,7 +107,7 @@ public sealed class Projector : IProjector
         stamp.Verified
         && stamp.SkipsKeyed
         && stamp.TableName == schema.TableName
-        && stamp.SchemaFingerprint == schema.Fingerprint()
+        && stamp.SchemaFingerprint == ProjectedShape.Fingerprint(schema)
         && stamp.Watermark <= rawHead
         && await _projectionStore.TableExistsAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
 
@@ -217,12 +217,13 @@ public sealed class Projector : IProjector
     };
 
     /// <summary>
-    /// The stamp fingerprints the *proposed* schema (declared columns), not the physical one: status
-    /// evaluation compares it against the proposer's current output, which never carries the system
-    /// columns. Its skips always carry their record keys now, so a later run can bring it forward.
+    /// The stamp fingerprints the projected shape of the *proposed* schema (<see cref="ProjectedShape"/>):
+    /// status evaluation compares it against the proposer's current output, which never carries the
+    /// system columns, so they are folded in by the same function on both sides. Its skips always
+    /// carry their record keys now, so a later run can bring it forward.
     /// </summary>
     private static ProjectionStamp StampFor(TableSchema schema, Watermark rawHead) =>
-        new(rawHead, schema.TableName, schema.Fingerprint(), Verified: true, SkipsKeyed: true);
+        new(rawHead, schema.TableName, ProjectedShape.Fingerprint(schema), Verified: true, SkipsKeyed: true);
 
     /// <summary>The documents after <paramref name="after"/> up to this run's snapshot of the head.</summary>
     private async Task<List<StoredDocument>> ReadAsync(FormTypeRef type, Watermark after, Watermark rawHead, CancellationToken cancellationToken)

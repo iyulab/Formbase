@@ -10,7 +10,7 @@ public class ProjectionStatusTests
         => new("quality_checks", columns.Length > 0 ? columns : [new ColumnDef("lot", ColumnType.Text, Nullable: false)]);
 
     private static ProjectionStamp StampOf(TableSchema schema, long watermark)
-        => new(new Watermark(watermark), schema.TableName, schema.Fingerprint());
+        => new(new Watermark(watermark), schema.TableName, ProjectedShape.Fingerprint(schema));
 
     [Fact]
     public void No_stamp_is_not_projected()

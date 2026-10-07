@@ -54,7 +54,7 @@ public sealed class WatermarkLagTrigger : IProjectionTrigger
 
             // Stale covers two different urgencies. Shape drift means every already-projected row is
             // shaped wrong — no threshold applies. Data lag is quantitative and waits for the knob.
-            ProjectionState.Stale when stamp!.SchemaFingerprint != schema!.Fingerprint()
+            ProjectionState.Stale when stamp!.SchemaFingerprint != ProjectedShape.Fingerprint(schema!)
                 => ProjectionTriggerReason.ShapeDrift,
             ProjectionState.Stale when await IsBehindAsync(type, status.ProjectedWatermark, rawHead, cancellationToken).ConfigureAwait(false)
                 => ProjectionTriggerReason.DataLag,

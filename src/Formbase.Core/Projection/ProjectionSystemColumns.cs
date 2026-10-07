@@ -22,11 +22,26 @@ public static class ProjectionSystemColumns
     /// </summary>
     public const string RecordKey = "fb_record_key";
 
+    /// <summary>
+    /// Column holding the row's record identity as text — the value a
+    /// <see cref="Schema.TargetLookup.Record"/> reference is matched against: the
+    /// <see cref="Primitives.RecordKey"/> when the document has one, else its
+    /// <see cref="Primitives.DocumentId"/> in canonical form (<c>D</c>, lower case). Stored rather than
+    /// computed so every store matches a reference against one column with one equality — a store
+    /// whose lookups compare a column to a column (MorphDB) cannot fold the two identities itself.
+    /// </summary>
+    public const string Record = "fb_record";
+
     /// <summary>The system columns, prepended to every projected table's domain columns.</summary>
     public static IReadOnlyList<ColumnDef> All { get; } =
     [
         new ColumnDef(DocumentId, ColumnType.Uuid, Nullable: false),
         new ColumnDef(Watermark, ColumnType.Integer, Nullable: false),
         new ColumnDef(RecordKey, ColumnType.Text, Nullable: true),
+        new ColumnDef(Record, ColumnType.Text, Nullable: false),
     ];
+
+    /// <summary>The <see cref="Record"/> value of a document: its key, else its document id in canonical form.</summary>
+    public static string RecordOf(Primitives.DocumentId document, Primitives.RecordKey? key) =>
+        key?.Value ?? document.Value.ToString("D");
 }
