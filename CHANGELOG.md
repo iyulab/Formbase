@@ -18,6 +18,10 @@
   The identity is text and is matched exactly: a record key as written, a document id in its canonical
   form (`RecordRef.Document.ToString()`, lower case with hyphens). The via field is declared `Text`; a
   record lookup through a field of another type is refused when declared.
+- A reference with a lookup is refused when declared if its pairs differ in type — the reference and the
+  target field it reads, or the via field and the target field it is matched against — once the target
+  form type is declared. The stores would otherwise answer it differently (one compares by type, one
+  does not).
 - **Every projected row carries its record identity** in a new system column, `fb_record` — the record
   key, else the document id in canonical form — the column a record lookup is matched against.
 - A reference whose target is projected but not in the shape the reference reads — the target redeclared

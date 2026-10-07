@@ -321,6 +321,31 @@ public abstract class FieldHintSourceContractTests
     }
 
     /// <summary>
+    /// A computed reference compares the via field with the lookup field and reads the value field as
+    /// it is, so each pair is one type — a store that compares by type and one that does not would
+    /// otherwise answer the same declaration differently.
+    /// </summary>
+    [Theory]
+    [InlineData(ColumnType.Integer, ColumnType.Text, "equipment_name")]
+    [InlineData(ColumnType.Text, ColumnType.Integer, "equipment_number")]
+    public async Task A_reference_whose_pairs_differ_in_type_is_refused(ColumnType referenceType, ColumnType viaType, string named)
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, Equipment());
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("equipment_number", viaType),
+            new FieldHint("equipment_name", referenceType, Binding: FieldBinding.Reference,
+                Target: new EntityRef(Work, "name", TargetLookup.Field("number"), "equipment_number")),
+        ]);
+
+        var act = () => DeclareAsync(source, hints);
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage($"*{named}*type*");
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    /// <summary>
     /// A record is identified by text — its key, or its document id written out — and every store
     /// matches it as text, so the field carrying it is Text.
     /// </summary>

@@ -82,6 +82,36 @@ public static class DeclaredTargets
                         nameof(hints));
                 }
             }
+
+            // A reference that is computed compares and reads across two declarations, and a store
+            // that compares by type (MorphDB) and one that does not (SQLite) would otherwise answer the
+            // same declaration differently: the via field is compared with the lookup field, and the
+            // value read is the target's field as it is — so each pair is one type.
+            if (field.Binding != FieldBinding.Reference || target.Lookup is null)
+            {
+                continue;
+            }
+
+            var typeOf = targetFields.ToDictionary(f => f.Name, f => f.Type, StringComparer.Ordinal);
+            if (typeOf[target.ValueField] != field.Type)
+            {
+                throw new ArgumentException(
+                    $"Field '{field.Name}' is {field.Type} but reads '{target.ValueField}' on '{target.Entity}', which is {typeOf[target.ValueField]}. " +
+                    "A reference reads the target's field as it is — declare it with the same type.",
+                    nameof(hints));
+            }
+
+            if (target.Lookup is TargetLookup.FieldLookup lookupField && target.ViaField is { } fieldVia)
+            {
+                var viaType = hints.Fields.First(f => f.Name == fieldVia).Type;
+                if (typeOf[lookupField.Name] != viaType)
+                {
+                    throw new ArgumentException(
+                        $"Field '{field.Name}' matches '{fieldVia}' ({viaType}) against '{lookupField.Name}' on '{target.Entity}' ({typeOf[lookupField.Name]}). " +
+                        "The two are compared, so declare them with the same type.",
+                        nameof(hints));
+                }
+            }
         }
     }
 }
