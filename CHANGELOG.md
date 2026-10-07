@@ -8,8 +8,9 @@
   the record — `EntityRef(target, ValueField, Lookup, ViaField)` — is computed when it is read: the
   value of `ValueField` on the target record that `ViaField`'s value identifies, the latest accepted
   when several match, null when none does. It filters, orders and groups like any declared field, and a
-  result is `Stale` when a target it reads is not current. The in-memory store computes it; the SQLite
-  and MorphDB stores do not yet, and leave the column empty as before. A reference declared without a
+  result is `Stale` when a target it reads is not current. The in-memory and SQLite stores compute it
+  (SQLite keeps each reference's definition beside the table's columns); the MorphDB store does not yet,
+  and leaves the column empty as before. A reference declared without a
   lookup is still stored and still reported in `UnresolvedReferences`.
 - **A target can be found by its record.** `TargetLookup.Record` matches the target record's identity —
   its record key, or the document id of a record appended without one — so a field carrying a record key

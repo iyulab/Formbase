@@ -37,6 +37,16 @@ public sealed class SqliteProjectionStore : IProjectionStore
             column_type TEXT    NOT NULL,
             PRIMARY KEY (table_name, ordinal)
         );
+        CREATE TABLE IF NOT EXISTS fb_projection_references (
+            table_name    TEXT    NOT NULL,
+            column_name   TEXT    NOT NULL,
+            target_table  TEXT    NOT NULL,
+            value_column  TEXT    NOT NULL,
+            lookup_field  TEXT,
+            lookup_record INTEGER NOT NULL,
+            via_column    TEXT    NOT NULL,
+            PRIMARY KEY (table_name, column_name)
+        );
         """;
 
     private readonly SqliteDatabase _database;
@@ -63,7 +73,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"DROP TABLE IF EXISTS {SqliteValues.Quote(tableName)}; DELETE FROM fb_projection_columns WHERE table_name = $name;";
+        command.CommandText = $"DROP TABLE IF EXISTS {SqliteValues.Quote(tableName)}; DELETE FROM fb_projection_columns WHERE table_name = $name; DELETE FROM fb_projection_references WHERE table_name = $name;";
         command.Parameters.AddWithValue("$name", tableName);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -96,6 +106,25 @@ public sealed class SqliteProjectionStore : IProjectionStore
             record.Parameters.AddWithValue("$ordinal", ordinal);
             record.Parameters.AddWithValue("$name", schema.Columns[ordinal].Name);
             record.Parameters.AddWithValue("$type", schema.Columns[ordinal].Type.ToString());
+            await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // A reference column is computed when it is read; how is kept beside the columns.
+        foreach (var column in schema.Columns.Where(c => c.Reference is not null))
+        {
+            var reference = column.Reference!;
+            await using var record = connection.CreateCommand();
+            record.Transaction = transaction;
+            record.CommandText =
+                "INSERT INTO fb_projection_references (table_name, column_name, target_table, value_column, lookup_field, lookup_record, via_column) " +
+                "VALUES ($table, $column, $target, $value, $field, $record, $via)";
+            record.Parameters.AddWithValue("$table", schema.TableName);
+            record.Parameters.AddWithValue("$column", column.Name);
+            record.Parameters.AddWithValue("$target", reference.TargetTable);
+            record.Parameters.AddWithValue("$value", reference.ValueColumn);
+            record.Parameters.AddWithValue("$field", (object?)(reference.Lookup as TargetLookup.FieldLookup)?.Name ?? DBNull.Value);
+            record.Parameters.AddWithValue("$record", reference.Lookup is TargetLookup.RecordLookup ? 1 : 0);
+            record.Parameters.AddWithValue("$via", reference.ViaColumn);
             await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -180,7 +209,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
         var types = columns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
 
         await using var command = connection.CreateCommand();
-        var sql = new StringBuilder($"SELECT * FROM {SqliteValues.Quote(tableName)}");
+        var sql = new StringBuilder($"SELECT * FROM {await SourceAsync(connection, tableName, columns, cancellationToken).ConfigureAwait(false)}");
         AppendWhere(sql, command, spec.Filters, types);
 
         if (spec.OrderBy is { Count: > 0 } orderBy)
@@ -224,6 +253,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
 
         await using var command = connection.CreateCommand();
         var keys = groupBy.Select(SqliteValues.Quote).ToList();
+        var table = await SourceAsync(connection, tableName, columns, cancellationToken).ConfigureAwait(false);
 
         // The rows counted: the table, filtered — and, when the records behind each group are asked
         // for, each row numbered within its group in the order it was accepted, so the records are
@@ -232,7 +262,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
         var records = spec.RecordsPerGroup;
         if (records is null)
         {
-            source.Append(SqliteValues.Quote(tableName));
+            source.Append(table);
             AppendWhere(source, command, spec.Filters, types);
         }
         else
@@ -241,7 +271,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
             source.Append("(SELECT *, ROW_NUMBER() OVER (")
                 .Append(keys.Count > 0 ? "PARTITION BY " + string.Join(", ", keys) + " " : string.Empty)
                 .Append("ORDER BY ").Append(watermark).Append(") AS ").Append(SqliteValues.Quote(RowNumberColumn))
-                .Append(" FROM ").Append(SqliteValues.Quote(tableName));
+                .Append(" FROM ").Append(table);
             AppendWhere(source, command, spec.Filters, types);
             source.Append(')');
         }
@@ -286,6 +316,68 @@ public sealed class SqliteProjectionStore : IProjectionStore
         }
 
         return groups;
+    }
+
+    /// <summary>
+    /// What a read selects from: the table itself, or — when it has reference columns — the table with
+    /// each reference computed from its target as it stands now, under the table's own name, so every
+    /// clause reads a reference like any other column. A reference reads the row its via column
+    /// identifies on the target, the latest accepted when several match, and null when none does or
+    /// the target table does not exist.
+    /// </summary>
+    private static async Task<string> SourceAsync(SqliteConnection connection, string tableName, List<ColumnDef> columns, CancellationToken cancellationToken)
+    {
+        var references = new Dictionary<string, (string Target, string Value, string? Field, bool Record, string Via)>(StringComparer.Ordinal);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT column_name, target_table, value_column, lookup_field, lookup_record, via_column FROM fb_projection_references WHERE table_name = $name";
+            command.Parameters.AddWithValue("$name", tableName);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                references[reader.GetString(0)] = (
+                    reader.GetString(1), reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3), reader.GetInt64(4) == 1, reader.GetString(5));
+            }
+        }
+
+        var quoted = SqliteValues.Quote(tableName);
+        if (references.Count == 0)
+        {
+            return quoted;
+        }
+
+        var selected = new List<string>(columns.Count);
+        foreach (var column in columns)
+        {
+            if (!references.TryGetValue(column.Name, out var reference))
+            {
+                selected.Add($"base.{SqliteValues.Quote(column.Name)}");
+                continue;
+            }
+
+            var exists = await TableExistsAsync(connection, reference.Target, cancellationToken).ConfigureAwait(false);
+            var via = $"base.{SqliteValues.Quote(reference.Via)}";
+            var match = reference.Record
+                // The record identity: its key when it has one, else the document it is.
+                ? $"(target.{SqliteValues.Quote(ProjectionSystemColumns.RecordKey)} = {via} OR " +
+                  $"(target.{SqliteValues.Quote(ProjectionSystemColumns.RecordKey)} IS NULL AND lower(target.{SqliteValues.Quote(ProjectionSystemColumns.DocumentId)}) = lower({via})))"
+                : $"target.{SqliteValues.Quote(reference.Field!)} = {via}";
+            selected.Add(exists
+                ? $"(SELECT target.{SqliteValues.Quote(reference.Value)} FROM {SqliteValues.Quote(reference.Target)} AS target WHERE {match} " +
+                  $"ORDER BY target.{SqliteValues.Quote(ProjectionSystemColumns.Watermark)} DESC LIMIT 1) AS {SqliteValues.Quote(column.Name)}"
+                : $"NULL AS {SqliteValues.Quote(column.Name)}");
+        }
+
+        return $"(SELECT {string.Join(", ", selected)} FROM {quoted} AS base) AS {quoted}";
+    }
+
+    private static async Task<bool> TableExistsAsync(SqliteConnection connection, string tableName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM fb_projection_columns WHERE table_name = $name LIMIT 1";
+        command.Parameters.AddWithValue("$name", tableName);
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
     }
 
     /// <summary>The per-group row number the records' limit reads; prefixed like the system columns so no declared column shares it.</summary>
