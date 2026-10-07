@@ -48,7 +48,8 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         // Only the generic column shape crosses into MorphDB — projected tables are generic by
         // design (FormType never reaches MorphDB). The declaration axes stay formbase-internal:
         // SourceKey is an extraction concern (the projected column is just Name), and Binding is
-        // declaration semantics MorphDB has no notion of.
+        // declaration semantics MorphDB has no notion of. A reference is the exception that proves it:
+        // what crosses is not the binding but how to compute the column, as a lookup.
         var request = new CreateTableRequest
         {
             Name = schema.TableName,
@@ -58,6 +59,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                     Name = c.Name,
                     Type = MorphDbTypeMap.ToMorphType(c.Type),
                     Nullable = c.Nullable,
+                    Lookup = c.Reference is { } reference ? Lookup(reference) : null,
                 })
                 .ToList(),
         };
@@ -71,6 +73,44 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 await MaterializeRelationAsync(schema.TableName, relation, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    /// A reference computed by MorphDB when it is read: the target row whose matched column equals the
+    /// via column's value — the lookup field, or the record identity every projected row carries — the
+    /// latest accepted when several match, null when none does.
+    /// <para>
+    /// <c>whenTargetMissing: null</c> because the target is another projection with a life of its own:
+    /// projections run in no particular order and rebuild by dropping and recreating their table, so the
+    /// target may not exist yet, may be mid-rebuild, or may not yet carry the column a redeclaration
+    /// names. Each of those reads as no match — and the result as stale, which the core decides from
+    /// the target's projection state — rather than refusing this table or failing its reads.
+    /// </para>
+    /// </summary>
+    private static LookupConfig Lookup(ReferenceDef reference) => new()
+    {
+        RelationColumn = reference.ViaColumn,
+        TargetTable = reference.TargetTable,
+        TargetColumn = reference.ValueColumn,
+        MatchColumn = reference.Lookup is TargetLookup.FieldLookup field ? field.Name : ProjectionSystemColumns.Record,
+        OrderBy = $"{ProjectionSystemColumns.Watermark} desc",
+        WhenTargetMissing = "null",
+    };
+
+    /// <summary>
+    /// The rows as MorphDB takes them: without the columns it computes. A projected row carries every
+    /// declared column, a reference's empty, and MorphDB refuses a value for a column it computes.
+    /// </summary>
+    private async Task<List<IDictionary<string, object?>>> WritableAsync(
+        string tableName, IEnumerable<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken)
+    {
+        var table = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+        var computed = (table?.Columns ?? []).Where(c => c.IsDerived).Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
+        return rows
+            .Select(r => (IDictionary<string, object?>)r
+                .Where(field => !computed.Contains(field.Key))
+                .ToDictionary(field => field.Key, field => field.Value, StringComparer.Ordinal))
+            .ToList();
     }
 
     /// <summary>
@@ -139,11 +179,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         }
 
         var inserted = 0;
-        foreach (var chunk in rows.Chunk(InsertChunkSize))
+        foreach (var chunk in (await WritableAsync(tableName, rows, cancellationToken).ConfigureAwait(false)).Chunk(InsertChunkSize))
         {
-            var records = chunk
-                .Select(r => (IDictionary<string, object?>)new Dictionary<string, object?>(r, StringComparer.Ordinal))
-                .ToList();
+            var records = chunk.ToList();
 
             var response = await _client.Batch.InsertManyAsync(tableName, records, cancellationToken).ConfigureAwait(false);
 

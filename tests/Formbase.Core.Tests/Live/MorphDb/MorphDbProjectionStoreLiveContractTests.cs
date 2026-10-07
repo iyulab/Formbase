@@ -18,3 +18,18 @@ public sealed class MorphDbProjectionStoreLiveContractTests : ProjectionStoreCon
 
     protected override IProjectionStore CreateStore() => new MorphDbProjectionStore(_fixture.CreateClient());
 }
+
+/// <summary>
+/// Runs the reference-resolution contract against a real MorphDB service, where a reference is a
+/// lookup column MorphDB computes when it is read. Requires Docker (category: Live).
+/// </summary>
+[Collection(MorphDbCollection.Name)]
+[Trait("Category", "Live.MorphDb")]
+public sealed class MorphDbReferenceResolutionLiveContractTests : ReferenceResolutionContractTests
+{
+    private readonly MorphDbFixture _fixture;
+
+    public MorphDbReferenceResolutionLiveContractTests(MorphDbFixture fixture) => _fixture = fixture;
+
+    protected override IProjectionStore CreateStore() => new MorphDbProjectionStore(_fixture.CreateClient());
+}

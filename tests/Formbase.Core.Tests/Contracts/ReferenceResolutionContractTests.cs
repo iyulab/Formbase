@@ -166,6 +166,10 @@ public abstract class ReferenceResolutionContractTests
         await ProjectBothAsync(engine);
 
         (await GradesAsync(engine)).Should().Equal("keyed", "keyless");
+        (await engine.QueryAsync(Orders, new QuerySpec(Filters: [new FieldFilter("grade_now", FilterOperator.Equal, "keyless")]), Ct))
+            .Rows.Single().Fields["qty"].Should().Be(2L, "a reference found by record filters like any declared field");
+        (await GradesAsync(engine, new QuerySpec(OrderBy: [new OrderKey("grade_now", Descending: true)])))
+            .Should().Equal("keyless", "keyed");
 
         // A correction keeps the record key, so the reference follows the record to its new document.
         await Accept(engine, Customers, """{"code":"C-1","grade":"corrected"}""", RecordKey.Create("cust-1"));
