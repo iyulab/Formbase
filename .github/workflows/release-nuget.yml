@@ -1,22 +1,20 @@
 name: Release NuGet Packages
 
-# File-version trigger: bumping <Version> in Directory.Build.props and pushing to main
-# publishes that version. --skip-duplicate makes re-runs and no-op bumps safe.
+# A release runs on a commit CI has already passed, and only then: CI is the gate, whole. This
+# workflow used to fire on the push that changed Directory.Build.props, beside CI rather than after
+# it, and test with a subset of what CI checks -- a sibling repository published a version from a
+# commit whose formatting and Native AOT checks were red that way. Now every green CI run on main
+# asks one question: does the version Directory.Build.props holds still need publishing? Usually
+# not, and the run ends there. The bump commit answers yes; so does a later fix of a bump whose CI
+# was red, which is how a failed release recovers without a manual step.
+#
+# A manual run is a dry run: it builds, tests and packs the checked-out commit and publishes nothing.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'Directory.Build.props'
   workflow_dispatch:
-    inputs:
-      # Off by default: a manual run builds, tests and packs, and publishes nothing. On, it publishes
-      # the version Directory.Build.props holds -- the recovery path for a release push whose run
-      # failed before publishing (a red test on the bump commit, fixed in a commit that does not touch
-      # Directory.Build.props and so does not fire this workflow again).
-      publish:
-        description: "Publish the version Directory.Build.props holds (recovers a failed release push)"
-        type: boolean
-        default: false
 
 concurrency:
   group: release-nuget
@@ -30,15 +28,23 @@ env:
 jobs:
   publish:
     name: Pack & Publish
+    # A CI run for a pull request, or one that did not pass, releases nothing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: write   # needed to push the release tag
       packages: write
 
     steps:
+      # The commit CI passed, not whatever the branch points at by now.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Read version from Directory.Build.props
         id: version
@@ -91,8 +97,10 @@ jobs:
       - name: Build
         run: dotnet build Formbase.slnx --no-restore --configuration Release
 
-      # Gate the release on a green suite — never publish an unverified package.
+      # A release run is on a commit CI passed (see the trigger), so it does not test again. A manual
+      # run has no such commit behind it, and tests.
       - name: Test
+        if: github.event_name == 'workflow_dispatch'
         run: dotnet test --solution Formbase.slnx --no-build --configuration Release --verbosity normal
 
       # Packs every IsPackable project in the solution: Formbase.Core, Formbase.MorphDb,
@@ -100,29 +108,51 @@ jobs:
       - name: Pack
         run: dotnet pack Formbase.slnx --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 
-      # A manual run stops publishing here unless it asks to (`publish`, the recovery path above): it
-      # builds, tests and packs, but pushes nothing. Every
-      # step from here on writes something that cannot be taken back, against whatever version the
-      # file happens to hold, so without this condition "try it once" and "release it" are the same
-      # act. What otherwise holds a manual run back is --skip-duplicate, and that is idempotence,
-      # not a guard: it means "do not publish the same thing twice", not "do not publish". The day
-      # a new package joins the solution, idempotence has nothing to say about it.
+      # Most green CI runs carry a version that is already out; this is where they stop. Every
+      # package is asked, not one: a release that pushed some packages and then failed is finished
+      # by the next run, which a single sentinel package would report as done. It fails closed --
+      # nuget.org answering anything but "here is the list" or "no such package" is not taken to
+      # mean "not published".
+      - name: Find the packages nuget.org does not have yet
+        id: unpublished
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          MISSING=0
+          for nupkg in ./nupkgs/*.nupkg; do
+            file=$(basename "$nupkg" .nupkg)
+            id=$(echo "${file%."$VERSION"}" | tr '[:upper:]' '[:lower:]')
+            status=$(curl -s -o "$RUNNER_TEMP/versions.json" -w '%{http_code}' "https://api.nuget.org/v3-flatcontainer/$id/index.json")
+            case "$status" in
+              200) if jq -e --arg v "$VERSION" '.versions | index($v)' "$RUNNER_TEMP/versions.json" > /dev/null; then
+                     echo "$id $VERSION is published"
+                   else
+                     echo "$id $VERSION is not published"; MISSING=1
+                   fi ;;
+              404) echo "$id has never been published"; MISSING=1 ;;
+              *) echo "::error::nuget.org answered $status for $id; cannot tell whether $VERSION is published."; exit 1 ;;
+            esac
+          done
+          echo "any=$([ "$MISSING" = 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          [ "$MISSING" = 1 ] || echo "::notice::$VERSION is already published; nothing to release. Bump <Version> to publish."
+
+      # Everything from here writes something that cannot be taken back, so a manual run never gets
+      # here. --skip-duplicate stays as idempotence for a run that resumes a partial release.
       #
       # Pushing a .nupkg also uploads the co-located .snupkg, so symbols need no separate step.
       - name: Push to NuGet.org
-        if: github.event_name == 'push' || inputs.publish
+        if: github.event_name == 'workflow_run' && steps.unpublished.outputs.any == 'true'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       # GitHub Packages rejects snupkg, so only the .nupkg glob is pushed here.
       - name: Push to GitHub Packages
-        if: github.event_name == 'push' || inputs.publish
+        if: github.event_name == 'workflow_run' && steps.unpublished.outputs.any == 'true'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
 
       # Without this the repository keeps no record of what was released. MorphDB had the same gap
       # and it cost a consumer real time: packages had reached 0.5.1 while the newest tag was still
       # v0.2.1, so reading the repo to pick a version to pin produced one four minors old.
       - name: Tag the released version
-        if: github.event_name == 'push' || inputs.publish
+        if: github.event_name == 'workflow_run'
         run: |
           TAG="v${{ steps.version.outputs.version }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
@@ -139,7 +169,7 @@ jobs:
       # have a release, 0.6.0 shipped without one and nobody noticed for ten days. Automating it
       # here means the three can no longer drift apart.
       - name: Publish the GitHub Release
-        if: github.event_name == 'push' || inputs.publish
+        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

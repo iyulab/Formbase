@@ -1,26 +1,19 @@
 name: Release Docker Image
 
-# Same file-version trigger as the NuGet release: bumping <Version> in Directory.Build.props and
-# pushing to main publishes that version. One number covers the packages, the tag, the release and
+# Same trigger as the NuGet release: the version Directory.Build.props holds is published once CI
+# passes on main. One number covers the packages, the tag, the release and
 # this image, so a consumer pins the host the same way it pins everything else in the tree.
 #
 # The host is not a packable project, so nothing it ships reaches NuGet — this workflow is the only
 # way it becomes something a consumer can pull.
+# A manual run is a dry run: it tests the checked-out commit, builds and probes the image, and
+# publishes nothing.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    paths:
-      - 'Directory.Build.props'
   workflow_dispatch:
-    inputs:
-      # Off by default: a manual run builds and probes the image, and publishes nothing. On, it publishes
-      # the version Directory.Build.props holds -- the recovery path for a release push whose run
-      # failed before publishing (a red test on the bump commit, fixed in a commit that does not touch
-      # Directory.Build.props and so does not fire this workflow again).
-      publish:
-        description: "Publish the version Directory.Build.props holds (recovers a failed release push)"
-        type: boolean
-        default: false
 
 concurrency:
   group: release-docker
@@ -33,7 +26,12 @@ env:
 jobs:
   gate:
     name: Version not yet published
+    # A CI run for a pull request, or one that did not pass, releases nothing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     permissions:
       contents: read
@@ -46,8 +44,11 @@ jobs:
       already: ${{ steps.published.outputs.already }}
 
     steps:
+      # The commit CI passed, not whatever the branch points at by now.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Read version and prepare image name
         id: version
@@ -63,10 +64,9 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION, image: $IMAGE"
 
-      # A push that changes Directory.Build.props without changing <Version> — a comment, a build
-      # property — fires this workflow too, and the job below would rebuild the version already
-      # published from the current commit and move its tags onto code that was never released under
-      # that number. The NuGet release is idempotent by construction (--skip-duplicate, and its tag
+      # Every green CI run reaches this workflow, and most carry a version that is already out —
+      # without this the job below would rebuild that version from the current commit and move its
+      # tags onto code that was never released under that number. The NuGet release is idempotent by construction (--skip-duplicate, and its tag
       # and release steps leave an existing one alone); this is the same guard for the image. It fails
       # closed: a registry that cannot be asked is not taken to mean "not published".
       - name: Check whether this version is already published
@@ -94,14 +94,18 @@ jobs:
     if: needs.gate.outputs.already != 'true' || github.event_name == 'workflow_dispatch'
     name: Build & Publish Image
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     permissions:
       contents: read
       packages: write
 
     steps:
+      # The commit CI passed, not whatever the branch points at by now.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # The NuGet release refuses to publish a version the changelog does not record. This workflow
       # fires on the same version bump, and what it publishes cannot be withdrawn — an image tag
@@ -123,16 +127,17 @@ jobs:
           fi
           echo "Changelog records $VERSION: $(wc -l < "$RUNNER_TEMP/release-notes.md") lines"
 
-      # Two gates guard this publish, one per kind of defect: dotnet test catches code that is
-      # wrong, the start-up probe below catches an image that is wrong. Neither implies the other,
-      # and a green suite in a sibling workflow is not a gate on this one — the two runs succeed
-      # and fail independently, so each publishes only what it verified itself.
+      # Two gates guard this publish, one per kind of defect: CI catches code that is wrong (a release
+      # run is on a commit it passed; a manual run tests here instead), the start-up probe below
+      # catches an image that is wrong. Neither implies the other.
       - name: Setup .NET
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
       - name: Test
+        if: github.event_name == 'workflow_dispatch'
         run: dotnet test --solution Formbase.slnx --configuration Release --verbosity normal
 
       - name: Set up Docker Buildx
@@ -191,16 +196,13 @@ jobs:
           docker logs verify-host || true
           exit 1
 
-      # A manual run stops here unless it asks to publish: it builds the image and probes it, but
-      # publishes nothing. Without
-      # this condition there is no way to exercise the workflow at all — every step from here on
-      # writes tags that cannot be taken back, so "try it once" and "release it" would be the same
-      # act, against whatever version the file happens to hold. A version bump that failed after
-      # this point is recovered by re-running that run, which keeps this condition true; one that
-      # failed before it and was fixed in a later commit, by a manual run with `publish`. Either way an
-      # image already published under this version is never pushed over.
+      # A manual run stops here: it builds the image and probes it, but publishes nothing. Every step
+      # from here on writes tags that cannot be taken back. A release that failed after this point is
+      # recovered by re-running that run; one that failed before it and was fixed in a later commit,
+      # by that commit's green CI. Either way an image already published under this version is never
+      # pushed over.
       - name: Build and push Docker image
-        if: (github.event_name == 'push' || inputs.publish) && needs.gate.outputs.already != 'true'
+        if: github.event_name == 'workflow_run' && needs.gate.outputs.already != 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
