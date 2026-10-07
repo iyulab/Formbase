@@ -1,7 +1,7 @@
 # HTTP API
 
-> The released version is **0.19.0**, and the documents that describe it are the tree at its tag —
-> open a file at `v0.19.0` to read the reference for what you can install today.
+> The released version is **0.20.0**, and the documents that describe it are the tree at its tag —
+> open a file at `v0.20.0` to read the reference for what you can install today.
 >
 > A `Since x.y.z` marker names a **Formbase** version. Statements about the MorphDB a deployment
 > runs against are written in prose, because that version moves on its own line.
@@ -330,18 +330,28 @@ This is the shape the next projection run will build. A form type with no declar
 - **`sourceKey`** — the document key the field reads when it differs from the column name. A rename
   that keeps already-stored documents readable.
 - **`binding`** — `stored` (the document's own value), `snapshot` (copied and fixed at write time),
-  or `reference` (reads the target's current value). **A `reference` column is declared but not
-  resolved by the engine today:** a run names it among `unresolvedReferences` and leaves it empty
-  rather than filling it with the document's own fixed-then copy, which would be a different answer
-  wearing the same column name.
+  or `reference` (reads the target's current value). A `reference` whose target says which record it
+  belongs to (`lookupKey` or `lookupRecord`, with `viaField`) is **computed when it is read**: the
+  target record's `valueField` as it is now — the latest accepted when several match, `null` when none
+  does — and it filters, orders and groups like any other field. A result is `stale` while a target it
+  reads is not current, including a target not yet projected or not yet rebuilt into its declared shape
+  (its references read `null` meanwhile). A `reference` without that is named among
+  `unresolvedReferences` and left empty rather than filled with the document's own fixed-then copy,
+  which would be a different answer wearing the same column name.
 - **`target`** on a bound field — `formType` is where the value comes from, and `valueField` is the
   field on that form type whose value this field carries: the column a `snapshot` was copied from, or
   the one a `reference` reads (`customers.name` above). It is not a lookup key. **`lookupKey`** and
   **`viaField`** say which record the value belongs to: the field on the target that identifies a
   record (`customers.id`), and the field of this declaration whose value is that record's key
-  (`customerId`). They are optional and come as a pair — one without the other is refused.
+  (`customerId`). **`lookupRecord: true`** in place of `lookupKey` matches the target record itself:
+  `viaField` then carries its record key, or — for a record appended without one — its document id as
+  the API writes it (lower case, with hyphens); prefer the key for a record that is corrected, since
+  each correction is a new document. A lookup comes with `viaField` — one without the other is refused,
+  as are `lookupKey` and `lookupRecord` together.
   A declaration is refused (`400` `/problems/invalid-declaration`) when `viaField` is not one of its
-  own fields, or when `valueField` or `lookupKey` is not a field of the target form type's declaration.
+  own fields, when `valueField` or `lookupKey` is not a field of the target form type's declaration,
+  when a `lookupRecord` `viaField` is not `text`, or when a computed `reference` and the `valueField` it
+  reads, or its `viaField` and the `lookupKey` it is matched against, differ in `type`.
   A target form type that is not declared yet is accepted unchecked, and a target redeclared later
   without the column is not re-checked.
 - **`kind`** on a relation — `child` (an owned entity whose key field points back here) or
@@ -477,7 +487,7 @@ Two fields exist so that silence stays visible:
   not carry the field at all. An explicit `null` in a document is an answer and is not counted here.
   The projected NULL conflates the two; this is what makes the conflation visible.
 - **`unresolvedReferences`** — declared columns left empty because their binding could not be
-  resolved. Named rather than silently blank: an empty column with no explanation reads as absent
+  resolved: a `reference` declared without a lookup. Named rather than silently blank: an empty column with no explanation reads as absent
   data.
 
 `skipped` carries documents that could not be mapped into the declared shape — a required field

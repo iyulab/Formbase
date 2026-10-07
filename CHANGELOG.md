@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.20.0
+
+A minor. Pairs with MorphDB `0.18.x` (was `0.17.x`). A `reference` field is computed when it is read, in
+every store: the target record's current value, found by a target field or by the record itself, and it
+filters, orders and groups like any declared field. Every projected row now carries its record identity
+(`fb_record`), so **every projection reads `Stale` once after upgrading and rebuilds on its next run**.
+Breaking: `EntityRef`'s lookup is typed (`TargetLookup`) — see Changed for the one-line migration; a
+stored declaration reads back unchanged.
 
 ### Added
 
