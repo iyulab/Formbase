@@ -1007,6 +1007,10 @@
               "null",
               "string"
             ]
+          },
+          "lookupRecord": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

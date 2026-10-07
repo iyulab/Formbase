@@ -156,7 +156,7 @@ public class DeclarationVocabularyTests
             new FieldHint("lot", ColumnType.Text, Nullable: false),
             new FieldHint("unit_price", ColumnType.Decimal,
                 Binding: FieldBinding.Reference,
-                Target: new EntityRef(FormTypeRef.Create("items"), "price")),
+                Target: new EntityRef(FormTypeRef.Create("items"), "price", TargetLookup.Field("key"), "lot")),
         ]));
         // The document carries a copy of the referenced value — forms routinely do.
         await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
@@ -176,6 +176,7 @@ public class DeclarationVocabularyTests
         h.Hints.Declare(new FormTypeHints(Qc, "qc",
         [
             new FieldHint("lot", ColumnType.Text, Nullable: false),
+            // No lookup: nothing can find the item, so nothing can compute the value.
             new FieldHint("unit_price", ColumnType.Decimal,
                 Binding: FieldBinding.Reference,
                 Target: new EntityRef(FormTypeRef.Create("items"), "price")),
@@ -197,7 +198,7 @@ public class DeclarationVocabularyTests
             new FieldHint("lot", ColumnType.Text, Nullable: false),
             new FieldHint("unit_price", ColumnType.Decimal, Nullable: false,
                 Binding: FieldBinding.Reference,
-                Target: new EntityRef(FormTypeRef.Create("items"), "price")),
+                Target: new EntityRef(FormTypeRef.Create("items"), "price", TargetLookup.Field("key"), "lot")),
         ]));
         await h.Intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -205,9 +206,9 @@ public class DeclarationVocabularyTests
 
         var created = h.Store.CreatedSchemas.Single(s => s.TableName == "qc");
         created.Columns.Single(c => c.Name == "unit_price").Nullable.Should().BeTrue(
-            "the engine leaves an unresolved reference empty, so declaring the column NOT NULL "
-            + "would make the store reject every row the engine itself emptied");
-        result.Inserted.Should().Be(1, "the document is fine — it is the reference the engine cannot resolve");
+            "projection leaves a reference empty — the store computes it when read — so declaring the column "
+            + "NOT NULL would make the store reject every row the engine itself emptied");
+        result.Inserted.Should().Be(1, "the document is fine — the reference is the store's to compute");
     }
 
     [Fact]

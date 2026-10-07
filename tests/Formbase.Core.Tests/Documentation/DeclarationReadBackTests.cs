@@ -25,9 +25,10 @@ public sealed class DeclarationReadBackTests
         new FieldHint("lot", ColumnType.Text, Nullable: false),
         // Identity split from display: the raw documents carry "qty", the table shows "quantity".
         new FieldHint("quantity", ColumnType.Integer, SourceKey: "qty"),
+        new FieldHint("item_key", ColumnType.Text),
         new FieldHint("unit_price", ColumnType.Decimal,
             Binding: FieldBinding.Reference,
-            Target: new EntityRef(FormTypeRef.Create("items"), "price")),
+            Target: new EntityRef(FormTypeRef.Create("items"), "price", TargetLookup.Field("key"), "item_key")),
     ],
         Relations: [new RelationHint("items", RelationKind.Reference, FormTypeRef.Create("items"), "unit_price")],
         DeclarationVersion: version);
@@ -97,7 +98,7 @@ public sealed class DeclarationReadBackTests
     /// reports it unresolved rather than filling it.
     /// </summary>
     [Fact]
-    public async Task A_declared_reference_reads_back_declared_and_projects_unresolved()
+    public async Task A_declared_reference_reads_back_declared_and_is_computed_when_read()
     {
         await using var provider = BuildProvider();
         provider.GetRequiredService<InMemoryFieldHintSource>().Declare(Declaration());
@@ -106,6 +107,6 @@ public sealed class DeclarationReadBackTests
         await engine.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","qty":10,"unit_price":12.5}"""), cancellationToken: TestContext.Current.CancellationToken);
         var result = await engine.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
-        result.UnresolvedReferences.Should().Equal(["unit_price"]);
+        result.UnresolvedReferences.Should().BeEmpty("a reference that says how to find its record is computed by the store when read");
     }
 }

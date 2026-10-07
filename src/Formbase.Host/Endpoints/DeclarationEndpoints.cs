@@ -243,12 +243,20 @@ internal static class DeclarationEndpoints
                 f.Binding.ToEngine(),
                 f.Target is null
                     ? null
-                    : new EntityRef(FormTypeRef.Create(f.Target.FormType), f.Target.ValueField, f.Target.LookupKey, f.Target.ViaField)))],
+                    : new EntityRef(FormTypeRef.Create(f.Target.FormType), f.Target.ValueField, LookupOf(f.Target), f.Target.ViaField)))],
             request.Relations is null
                 ? null
                 : [.. request.Relations.Select(r => new RelationHint(
                     r.Name, r.Kind.ToEngine(), FormTypeRef.Create(r.Target), r.KeyField))],
             request.DeclarationVersion);
+
+    /// <summary>The engine lookup a wire target names: a field, the record identity, or none.</summary>
+    private static TargetLookup? LookupOf(DeclaredTargetResponse target) =>
+        target.LookupRecord
+            ? target.LookupKey is null
+                ? TargetLookup.Record
+                : throw new ArgumentException($"The target on '{target.FormType}' names both a lookup field and a lookup by record; give one.")
+            : target.LookupKey is null ? null : TargetLookup.Field(target.LookupKey);
 
     private static DeclarationResponse Describe(FormTypeHints declaration) =>
         new(
@@ -263,7 +271,12 @@ internal static class DeclarationEndpoints
                 f.Binding.ToWire(),
                 f.Target is null
                     ? null
-                    : new DeclaredTargetResponse(f.Target.Entity.Value, f.Target.ValueField, f.Target.LookupKey, f.Target.ViaField)))],
+                    : new DeclaredTargetResponse(
+                        f.Target.Entity.Value,
+                        f.Target.ValueField,
+                        (f.Target.Lookup as TargetLookup.FieldLookup)?.Name,
+                        f.Target.ViaField,
+                        f.Target.Lookup is TargetLookup.RecordLookup)))],
             [.. (declaration.Relations ?? []).Select(r => new DeclaredRelationResponse(
                 r.Name,
                 r.Kind.ToWire(),

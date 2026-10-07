@@ -12,15 +12,15 @@ namespace Formbase.Core.Schema;
 /// <remarks>
 /// <para>Three columns, three questions. <see cref="ValueField"/> answers <i>which value</i> — the
 /// column a <c>snapshot</c> was copied from, or the column a <c>reference</c> reads.
-/// <see cref="LookupKey"/> and <see cref="ViaField"/> together answer <i>whose value</i>: the column
-/// on <see cref="Entity"/> that identifies a record, and the field of this declaration whose value is
-/// that record's key. A snapshot of an equipment name taken by equipment number is
-/// <c>(equipment, ValueField: name, LookupKey: number, ViaField: equipment_number)</c>.</para>
+/// <see cref="Lookup"/> and <see cref="ViaField"/> together answer <i>whose value</i>: how a record of
+/// <see cref="Entity"/> is identified — by one of its fields, or by its record identity — and the field
+/// of this declaration whose value identifies it. A snapshot of an equipment name taken by equipment
+/// number is <c>(equipment, ValueField: name, Lookup: TargetLookup.Field("number"), ViaField: equipment_number)</c>.</para>
 /// <para>The lookup pair is optional and comes whole: a declaration may say only where a value came
 /// from, but a lookup key with no local field carrying it (or the reverse) names half a join.</para>
 /// <para>Declaration writers refuse a column that does not exist (<see cref="DeclaredTargets"/>):
-/// <see cref="ViaField"/> must be a field of the same declaration; <see cref="ValueField"/> and
-/// <see cref="LookupKey"/> must be fields of <see cref="Entity"/> when it is declared. A target
+/// <see cref="ViaField"/> must be a field of the same declaration; <see cref="ValueField"/> and a
+/// <see cref="TargetLookup.Field"/> lookup must be fields of <see cref="Entity"/> when it is declared. A target
 /// declared later, or redeclared without the column, is not re-checked.</para>
 /// </remarks>
 [JsonConverter(typeof(EntityRefJsonConverter))]
@@ -28,19 +28,14 @@ public sealed record EntityRef
 {
     /// <param name="entity">The form type the bound value comes from.</param>
     /// <param name="valueField">The field on <paramref name="entity"/> whose value the bound field carries.</param>
-    /// <param name="lookupKey">The field on <paramref name="entity"/> that identifies a record; given with <paramref name="viaField"/> or not at all.</param>
-    /// <param name="viaField">The field of this declaration carrying the lookup key's value; given with <paramref name="lookupKey"/> or not at all.</param>
+    /// <param name="lookup">How a record of <paramref name="entity"/> is identified; given with <paramref name="viaField"/> or not at all.</param>
+    /// <param name="viaField">The field of this declaration carrying the identifying value; given with <paramref name="lookup"/> or not at all.</param>
     /// <exception cref="ArgumentException">A field name is blank, or only one of the lookup pair is given.</exception>
-    public EntityRef(FormTypeRef entity, string valueField, string? lookupKey = null, string? viaField = null)
+    public EntityRef(FormTypeRef entity, string valueField, TargetLookup? lookup = null, string? viaField = null)
     {
         if (string.IsNullOrWhiteSpace(valueField))
         {
             throw new ArgumentException($"A target on '{entity}' must name the field its value comes from.", nameof(valueField));
-        }
-
-        if (lookupKey is not null && string.IsNullOrWhiteSpace(lookupKey))
-        {
-            throw new ArgumentException("A lookup key, when given, must name a field.", nameof(lookupKey));
         }
 
         if (viaField is not null && string.IsNullOrWhiteSpace(viaField))
@@ -48,17 +43,17 @@ public sealed record EntityRef
             throw new ArgumentException("A via field, when given, must name a field.", nameof(viaField));
         }
 
-        if ((lookupKey is null) != (viaField is null))
+        if ((lookup is null) != (viaField is null))
         {
             throw new ArgumentException(
-                $"A target on '{entity}' names {(lookupKey is null ? "a via field but no lookup key" : "a lookup key but no via field")}. " +
-                "The two are one join — the key column on the target and the field here that carries its value — so give both or neither.",
-                lookupKey is null ? nameof(lookupKey) : nameof(viaField));
+                $"A target on '{entity}' names {(lookup is null ? "a via field but no lookup" : "a lookup but no via field")}. " +
+                "The two are one join — how the target record is identified and the field here that carries the identifying value — so give both or neither.",
+                lookup is null ? nameof(lookup) : nameof(viaField));
         }
 
         Entity = entity;
         ValueField = valueField;
-        LookupKey = lookupKey;
+        Lookup = lookup;
         ViaField = viaField;
     }
 
@@ -71,10 +66,10 @@ public sealed record EntityRef
     /// </summary>
     public string ValueField { get; }
 
-    /// <summary>The field on <see cref="Entity"/> that identifies the record the value belongs to, when declared.</summary>
-    public string? LookupKey { get; }
+    /// <summary>How the record the value belongs to is identified on <see cref="Entity"/>, when declared.</summary>
+    public TargetLookup? Lookup { get; }
 
-    /// <summary>The field of this declaration whose value is <see cref="LookupKey"/>'s, when declared.</summary>
+    /// <summary>The field of this declaration whose value identifies the record <see cref="Lookup"/> finds, when declared.</summary>
     public string? ViaField { get; }
 }
 
@@ -82,6 +77,9 @@ public sealed record EntityRef
 /// Stores an <see cref="EntityRef"/> by its member names, and reads the shape releases before 0.17.0
 /// stored — <c>{"Entity": …, "KeyField": …}</c>, where <c>KeyField</c> already meant the value column —
 /// so a declaration on disk keeps its target across the upgrade instead of reading back without one.
+/// A lookup by field is stored as <c>"LookupKey": "&lt;field&gt;"</c> — the form releases before 0.20.0
+/// wrote, so their declarations read back as <see cref="TargetLookup.Field"/> — and a lookup by
+/// record as <c>"LookupRecord": true</c>.
 /// </summary>
 internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
 {
@@ -99,6 +97,7 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
 
         FormTypeRef? entity = null;
         string? valueField = null, legacyKeyField = null, lookupKey = null, viaField = null;
+        var lookupRecord = false;
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
             var name = reader.GetString();
@@ -114,8 +113,11 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
                 case "KeyField":
                     legacyKeyField = reader.GetString();
                     break;
-                case nameof(EntityRef.LookupKey):
+                case "LookupKey":
                     lookupKey = reader.GetString();
+                    break;
+                case "LookupRecord":
+                    lookupRecord = reader.GetBoolean();
                     break;
                 case nameof(EntityRef.ViaField):
                     viaField = reader.GetString();
@@ -131,7 +133,13 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
             throw new JsonException("A stored entity reference names no form type.");
         }
 
-        return new EntityRef(entity.Value, valueField ?? legacyKeyField ?? throw new JsonException("A stored entity reference names no value field."), lookupKey, viaField);
+        if (lookupRecord && lookupKey is not null)
+        {
+            throw new JsonException("A stored entity reference names both a lookup field and a lookup by record.");
+        }
+
+        var lookup = lookupRecord ? TargetLookup.Record : lookupKey is not null ? TargetLookup.Field(lookupKey) : null;
+        return new EntityRef(entity.Value, valueField ?? legacyKeyField ?? throw new JsonException("A stored entity reference names no value field."), lookup, viaField);
     }
 
     public override void Write(Utf8JsonWriter writer, EntityRef value, JsonSerializerOptions options)
@@ -140,10 +148,16 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
         writer.WritePropertyName(nameof(EntityRef.Entity));
         EntityConverter.Write(writer, value.Entity, options);
         writer.WriteString(nameof(EntityRef.ValueField), value.ValueField);
-        if (value.LookupKey is not null)
+        switch (value.Lookup)
         {
-            writer.WriteString(nameof(EntityRef.LookupKey), value.LookupKey);
-            writer.WriteString(nameof(EntityRef.ViaField), value.ViaField);
+            case TargetLookup.FieldLookup field:
+                writer.WriteString("LookupKey", field.Name);
+                writer.WriteString(nameof(EntityRef.ViaField), value.ViaField);
+                break;
+            case TargetLookup.RecordLookup:
+                writer.WriteBoolean("LookupRecord", true);
+                writer.WriteString(nameof(EntityRef.ViaField), value.ViaField);
+                break;
         }
 
         writer.WriteEndObject();

@@ -1,4 +1,5 @@
 using Formbase.Core.Primitives;
+using Formbase.Core.Schema;
 
 namespace Formbase.Core.Schema;
 
@@ -19,8 +20,8 @@ public static class DeclaredTargets
     /// <summary>
     /// Refuses <paramref name="hints"/> when a bound field's target names a field that does not exist:
     /// a <see cref="EntityRef.ViaField"/> that is not a field of <paramref name="hints"/> itself, or a
-    /// <see cref="EntityRef.ValueField"/> / <see cref="EntityRef.LookupKey"/> that is not a field of the
-    /// target form type when <paramref name="declaredFields"/> knows it.
+    /// <see cref="EntityRef.ValueField"/> / <see cref="TargetLookup.Field"/> lookup that is not a field of
+    /// the target form type when <paramref name="declaredFields"/> knows it.
     /// </summary>
     /// <param name="hints">The declaration about to be stored.</param>
     /// <param name="declaredFields">
@@ -59,7 +60,7 @@ public static class DeclaredTargets
             }
 
             var theirs = targetFields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
-            foreach (var (role, name) in new[] { ("value field", target.ValueField), ("lookup key", target.LookupKey) })
+            foreach (var (role, name) in new[] { ("value field", target.ValueField), ("lookup key", (target.Lookup as TargetLookup.FieldLookup)?.Name) })
             {
                 if (name is not null && !theirs.Contains(name))
                 {

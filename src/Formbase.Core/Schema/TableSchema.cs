@@ -39,6 +39,15 @@ public sealed record TableSchema(
                 .Append(Sep).Append(column.SourceKey ?? string.Empty)
                 .Append(Sep).Append(column.Binding)
                 .Append(Sep).Append(column.BindingTarget ?? string.Empty);
+            if (column.Reference is { } reference)
+            {
+                // Appended only when present, so a schema without resolved references keeps the
+                // fingerprint it had before references were resolved.
+                canonical.Append(Sep).Append(reference.TargetTable)
+                    .Append(Sep).Append(reference.ValueColumn)
+                    .Append(Sep).Append(reference.Lookup)
+                    .Append(Sep).Append(reference.ViaColumn);
+            }
         }
 
         foreach (var relation in Relations ?? [])

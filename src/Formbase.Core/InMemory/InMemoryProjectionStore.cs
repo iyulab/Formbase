@@ -90,7 +90,7 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         lock (_gate)
         {
             var table = Require(tableName);
-            IEnumerable<Dictionary<string, object?>> query = table.Rows;
+            IEnumerable<Dictionary<string, object?>> query = Resolved(table);
 
             if (spec.Filters is { Count: > 0 } filters)
             {
@@ -126,9 +126,10 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         {
             var table = Require(tableName);
             var groupBy = spec.GroupBy ?? [];
+            var rows = Resolved(table);
             var kept = spec.Filters is { Count: > 0 } filters
-                ? table.Rows.Where(row => filters.All(f => Matches(row, f))).ToList()
-                : table.Rows;
+                ? rows.Where(row => filters.All(f => Matches(row, f))).ToList()
+                : rows;
 
             if (groupBy.Count == 0)
             {
@@ -151,6 +152,68 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             return Task.FromResult(groups);
         }
     }
+
+    /// <summary>
+    /// The table's rows with each reference column computed from its target table as it stands now —
+    /// the row the via column identifies, the latest accepted when several match, null when none does
+    /// or the target table does not exist. Filters, orders and groups then read the computed value
+    /// like any other.
+    /// </summary>
+    private List<Dictionary<string, object?>> Resolved(Table table)
+    {
+        var references = table.Schema.Columns.Where(c => c.Reference is not null).ToList();
+        if (references.Count == 0)
+        {
+            return table.Rows;
+        }
+
+        var rows = table.Rows.Select(row => new Dictionary<string, object?>(row, StringComparer.Ordinal)).ToList();
+        foreach (var column in references)
+        {
+            var reference = column.Reference!;
+            _tables.TryGetValue(reference.TargetTable, out var target);
+            foreach (var row in rows)
+            {
+                row[column.Name] = target is null ? null : Read(target, reference, row.GetValueOrDefault(reference.ViaColumn));
+            }
+        }
+
+        return rows;
+    }
+
+    private static object? Read(Table target, ReferenceDef reference, object? via)
+    {
+        if (via is null)
+        {
+            return null;
+        }
+
+        Dictionary<string, object?>? latest = null;
+        foreach (var candidate in target.Rows)
+        {
+            if (Identifies(candidate, reference.Lookup, via)
+                && (latest is null || ValueOrder.Compare(candidate.GetValueOrDefault(ProjectionSystemColumns.Watermark), latest.GetValueOrDefault(ProjectionSystemColumns.Watermark)) > 0))
+            {
+                latest = candidate;
+            }
+        }
+
+        return latest?.GetValueOrDefault(reference.ValueColumn);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="row"/> is the target row <paramref name="via"/> identifies: by the
+    /// lookup field's value, or by record identity — the record key when the row has one, else its
+    /// document id.
+    /// </summary>
+    private static bool Identifies(Dictionary<string, object?> row, TargetLookup lookup, object via) => lookup switch
+    {
+        TargetLookup.FieldLookup field => Equals(row.GetValueOrDefault(field.Name), via),
+        _ => row.GetValueOrDefault(ProjectionSystemColumns.RecordKey) is string key
+            ? string.Equals(key, via as string, StringComparison.Ordinal)
+            : row.GetValueOrDefault(ProjectionSystemColumns.DocumentId) is Guid id
+                && (via is Guid g ? g == id : via is string text && Guid.TryParse(text, out var parsed) && parsed == id),
+    };
 
     /// <summary>The first <paramref name="limit"/> rows' records in the order they were accepted, or null when none were asked for.</summary>
     private static List<RecordRef>? RecordsOf(IEnumerable<Dictionary<string, object?>> rows, int? limit) =>

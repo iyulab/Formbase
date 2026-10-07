@@ -29,10 +29,17 @@ public sealed class HintSchemaProposer : ISchemaProposer
         var columns = new List<ColumnDef>(hints.Fields.Count);
         foreach (var field in hints.Fields)
         {
-            var bindingTarget = field.Target is null
+            var targetTable = field.Target is null
                 ? null
-                : $"{await ResolveTableAsync(field.Target.Entity, cancellationToken).ConfigureAwait(false)}.{field.Target.ValueField}";
-            columns.Add(new ColumnDef(field.Name, field.Type, field.Nullable, field.SourceKey, field.Binding, bindingTarget));
+                : await ResolveTableAsync(field.Target.Entity, cancellationToken).ConfigureAwait(false);
+            var bindingTarget = field.Target is null ? null : $"{targetTable}.{field.Target.ValueField}";
+
+            // A reference that says how to find its target record is computed by the store at read
+            // time; one stored before lookups were required stays unresolved and is reported so.
+            var reference = field.Binding == FieldBinding.Reference && field.Target is { Lookup: { } lookup, ViaField: { } via }
+                ? new ReferenceDef(field.Target.Entity, targetTable!, field.Target.ValueField, lookup, via)
+                : null;
+            columns.Add(new ColumnDef(field.Name, field.Type, field.Nullable, field.SourceKey, field.Binding, bindingTarget, reference));
         }
 
         List<RelationDef>? relations = null;

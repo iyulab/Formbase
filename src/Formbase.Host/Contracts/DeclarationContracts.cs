@@ -49,13 +49,17 @@ public sealed record DeclaredFieldResponse(
 /// </param>
 /// <param name="LookupKey">
 /// The field on that form type that identifies the record the value belongs to. Given together with
-/// <paramref name="ViaField"/> or not at all.
+/// <paramref name="ViaField"/>, or replaced by <paramref name="LookupRecord"/>, or not at all.
 /// </param>
 /// <param name="ViaField">
-/// The field of this declaration whose value is that record's key. Given together with
-/// <paramref name="LookupKey"/> or not at all.
+/// The field of this declaration whose value identifies that record. Given together with
+/// <paramref name="LookupKey"/> or <paramref name="LookupRecord"/>, or not at all.
 /// </param>
-public sealed record DeclaredTargetResponse(string FormType, string ValueField, string? LookupKey = null, string? ViaField = null);
+/// <param name="LookupRecord">
+/// True when the record is identified by its record identity — its record key, or the document id of
+/// a record appended without one — instead of by a field. Not given together with <paramref name="LookupKey"/>.
+/// </param>
+public sealed record DeclaredTargetResponse(string FormType, string ValueField, string? LookupKey = null, string? ViaField = null, bool LookupRecord = false);
 
 /// <param name="Name">The relation's declared name.</param>
 /// <param name="Kind">Whether the target is owned or merely referenced.</param>

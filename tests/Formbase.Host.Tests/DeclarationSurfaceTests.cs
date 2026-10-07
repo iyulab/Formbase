@@ -88,7 +88,8 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
                     "customerName",
                     ColumnType.Text,
                     Binding: FieldBinding.Reference,
-                    Target: new EntityRef(FormTypeRef.Create("customers"), "name")),
+                    Target: new EntityRef(FormTypeRef.Create("customers"), "name", TargetLookup.Record, "customerRef")),
+                new FieldHint("customerRef", ColumnType.Text),
             ]));
 
         var field = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)))
@@ -97,6 +98,8 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
         field.GetProperty("binding").GetString().Should().Be("reference");
         field.GetProperty("target").GetProperty("formType").GetString().Should().Be("customers");
         field.GetProperty("target").GetProperty("valueField").GetString().Should().Be("name");
+        field.GetProperty("target").GetProperty("lookupRecord").GetBoolean().Should().BeTrue("the customer is found by its record identity");
+        field.GetProperty("target").GetProperty("viaField").GetString().Should().Be("customerRef");
     }
 
     [Fact]

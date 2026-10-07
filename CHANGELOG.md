@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A reference reads its target's current value.** A `reference` field whose target declares how to find
+  the record — `EntityRef(target, ValueField, Lookup, ViaField)` — is computed when it is read: the
+  value of `ValueField` on the target record that `ViaField`'s value identifies, the latest accepted
+  when several match, null when none does. It filters, orders and groups like any declared field, and a
+  result is `Stale` when a target it reads is not current. The in-memory store computes it; the SQLite
+  and MorphDB stores do not yet, and leave the column empty as before. A reference declared without a
+  lookup is still stored and still reported in `UnresolvedReferences`.
+- **A target can be found by its record.** `TargetLookup.Record` matches the target record's identity —
+  its record key, or the document id of a record appended without one — so a field carrying a record key
+  (stable across corrections) or a document id can be a reference. Over HTTP: `"lookupRecord": true`.
+
+### Changed
+
+- **Breaking: `EntityRef`'s lookup is typed.** `EntityRef.LookupKey` (a field name) is now
+  `EntityRef.Lookup`, a `TargetLookup` — `TargetLookup.Field(name)` for the former meaning or
+  `TargetLookup.Record`. A stored declaration keeps the form earlier releases wrote and reads back as
+  `TargetLookup.Field`. Migrating: `new EntityRef(t, v, "key", via)` becomes
+  `new EntityRef(t, v, TargetLookup.Field("key"), via)`.
+- A projection whose declaration has a reference with a lookup reads `Stale` once after upgrading: the
+  schema now carries how the reference is found, which changes its fingerprint. Project it again.
+
 ## 0.19.0
 
 A minor. Pairs with MorphDB `0.16.x` (was `0.15.x`). Breaking: a query row now says which record it is

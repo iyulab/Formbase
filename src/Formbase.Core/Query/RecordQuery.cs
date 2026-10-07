@@ -130,7 +130,33 @@ public sealed class RecordQuery : IRecordQuery
             throw new ProjectionUnverifiedException(type);
         }
 
-        return (schema, status.State == ProjectionState.Stale);
+        return (schema, status.State == ProjectionState.Stale || await ReferencesStaleAsync(type, schema, cancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Whether a reference column of <paramref name="schema"/> reads a target that is not current: a
+    /// reference is the target's value now, so the result is only as fresh as the targets it reads —
+    /// and a target with no usable projection leaves its references empty, which is not current either.
+    /// </summary>
+    private async Task<bool> ReferencesStaleAsync(FormTypeRef type, TableSchema schema, CancellationToken cancellationToken)
+    {
+        foreach (var target in schema.Columns.Select(c => c.Reference?.TargetType).OfType<FormTypeRef>().Where(t => t != type).Distinct())
+        {
+            var stamp = await _projectionState.GetAsync(target, cancellationToken).ConfigureAwait(false);
+            var targetSchema = await _proposer.ProposeAsync(target, cancellationToken).ConfigureAwait(false);
+            if (stamp is null || targetSchema is null)
+            {
+                return true;
+            }
+
+            var head = await _rawStore.HeadAsync(target, cancellationToken).ConfigureAwait(false);
+            if (ProjectionStatus.Evaluate(stamp, head, targetSchema).State != ProjectionState.Projected)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

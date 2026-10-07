@@ -277,10 +277,12 @@ public sealed class Projector : IProjector
 
     private static ProjectionResult Completed(TableSchema schema, Mapped mapped, int inserted, Watermark rawHead, ProjectionMode mode)
     {
-        // A declaration-level fact, not a per-row one: every row leaves the same columns empty, so this
-        // is read off the schema rather than accumulated while mapping.
+        // A declaration-level fact, not a per-row one: a reference with no way to find its target
+        // record (declared before lookups were required) is empty in every row, so this is read off
+        // the schema rather than accumulated while mapping. A reference with a lookup is computed by
+        // the store when it is read.
         var unresolvedReferences = schema.Columns
-            .Where(c => c.Binding == FieldBinding.Reference)
+            .Where(c => c.Binding == FieldBinding.Reference && c.Reference is null)
             .Select(c => c.Name)
             .ToArray();
         return ProjectionResult.Completed(inserted, mapped.Skips, mapped.FieldSkips, mapped.AbsentCounts, unresolvedReferences, rawHead) with { Mode = mode };

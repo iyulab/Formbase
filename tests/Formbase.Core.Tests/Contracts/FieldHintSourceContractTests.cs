@@ -228,7 +228,7 @@ public abstract class FieldHintSourceContractTests
         var hints = new FormTypeHints(Qc, "qc_table",
         [
             new FieldHint("serial", ColumnType.Text, Nullable: false, SourceKey: "Serial No"),
-            new FieldHint("equipment", ColumnType.Text, Binding: FieldBinding.Reference, Target: new EntityRef(Work, "code")),
+            new FieldHint("equipment", ColumnType.Text, Binding: FieldBinding.Reference, Target: new EntityRef(Work, "code", TargetLookup.Record, "serial")),
             new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot, Target: new EntityRef(Work, "name")),
         ],
         [
@@ -276,13 +276,13 @@ public abstract class FieldHintSourceContractTests
         [
             new FieldHint("equipment_number", ColumnType.Text),
             new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot,
-                Target: new EntityRef(Work, "name", lookupKey: "number", viaField: "equipment_number")),
+                Target: new EntityRef(Work, "name", lookup: TargetLookup.Field("number"), viaField: "equipment_number")),
         ]);
 
         await DeclareAsync(source, hints);
 
         (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken))!.Fields[1].Target
-            .Should().Be(new EntityRef(Work, "name", "number", "equipment_number"));
+            .Should().Be(new EntityRef(Work, "name", TargetLookup.Field("number"), "equipment_number"));
     }
 
     [Theory]
@@ -296,7 +296,7 @@ public abstract class FieldHintSourceContractTests
         [
             new FieldHint("equipment_number", ColumnType.Text),
             new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot,
-                Target: new EntityRef(Work, valueField, lookupKey, lookupKey is null ? null : "equipment_number")),
+                Target: new EntityRef(Work, valueField, lookupKey is null ? null : TargetLookup.Field(lookupKey), lookupKey is null ? null : "equipment_number")),
         ]);
 
         var act = () => DeclareAsync(source, hints);
@@ -312,7 +312,7 @@ public abstract class FieldHintSourceContractTests
         var hints = new FormTypeHints(Qc, "qc_table",
         [
             new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot,
-                Target: new EntityRef(Work, "name", "number", "equipment_number")),
+                Target: new EntityRef(Work, "name", TargetLookup.Field("number"), "equipment_number")),
         ]);
 
         var act = () => DeclareAsync(source, hints);

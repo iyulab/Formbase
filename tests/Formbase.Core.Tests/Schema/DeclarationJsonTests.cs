@@ -20,7 +20,7 @@ public class DeclarationJsonTests
         new FieldHint("lot", ColumnType.Text, Nullable: false, SourceKey: "LOT"),
         new FieldHint("qty", ColumnType.Integer),
         new FieldHint("machine", ColumnType.Text, Binding: FieldBinding.Snapshot,
-            Target: new EntityRef(FormTypeRef.Create("machine"), "name", lookupKey: "no", viaField: "machine_no")),
+            Target: new EntityRef(FormTypeRef.Create("machine"), "name", lookup: TargetLookup.Field("no"), viaField: "machine_no")),
         new FieldHint("site", ColumnType.Text, Binding: FieldBinding.Reference, Target: new EntityRef(FormTypeRef.Create("site"), "name")),
     ];
 
