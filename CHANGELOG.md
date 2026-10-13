@@ -16,12 +16,27 @@
   Formbase's own database is not touched:
 
   ```bash
-  docker compose exec -T postgres psql -U morph -d morphdb \n    -v service_role=morphdb_service -v service_password='<password>' \n    < migrate-to-service-role.sql
+  docker compose exec -T postgres psql -U morph -d morphdb \
+    -v service_role=morphdb_service -v service_password='<password>' \
+    < migrate-to-service-role.sql
   ```
 
   then set `MORPHDB_CONNECTION_STRING` (new — `.env`) to that role's connection string. The volume
   keeps the superuser it was created with (`morph`), and that is still the account you administer it
   with: the compose file's `POSTGRES_PASSWORD` is read only when a volume is first created.
+
+### Documentation
+
+- The README's second example runs the engine over `Formbase.Sqlite` and shows a keyed record, a
+  reference with its lookup pair, and a correction to the target reaching the row that reads it. It is
+  compiled against the packed packages like the first. "Reading a declaration back" no longer says
+  every reference projects empty: one with a lookup pair is computed, one without is not.
+
+### Dependencies
+
+- `Formbase.M3L` builds on `M3L.Native` 0.20.0 (was 0.19.0). What the import reads from a model is
+  unchanged; 0.20.0 moves an index directive's keyword arguments and a computed field's platform
+  expressions to fields of their own, neither of which the import maps.
 
 ### Added
 

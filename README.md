@@ -179,6 +179,71 @@ var traced = await engine.AggregateAsync(qc, new AggregateSpec(GroupBy: ["lot"],
 // (fewer than Count when cut at 50)
 ```
 
+### Records and references, in one file
+
+The same engine over `Formbase.Sqlite` — raw documents, projected tables, projection state and
+declarations in one SQLite file — with the two things the first example leaves out: a record that is
+corrected, and a column whose value is read from another record.
+
+<!-- snippet: compile packages="Formbase.Core Formbase.DependencyInjection Formbase.Sqlite Microsoft.Extensions.DependencyInjection" -->
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Formbase.Core;
+using Formbase.Core.Primitives;
+using Formbase.Core.Query;
+using Formbase.Core.Schema;
+using Formbase.Sqlite;
+
+var services = new ServiceCollection();
+services.AddFormbaseCore();                              // the engine, with no store chosen
+services.AddSqliteRawStore("Data Source=formbase.db");   // raw documents ...
+services.AddSqliteProjection("Data Source=formbase.db"); // ... tables, state and declarations: one file
+await using var provider = services.BuildServiceProvider();
+
+var engine = provider.GetRequiredService<FormbaseEngine>();
+var hints  = provider.GetRequiredService<SqliteFieldHintSource>();
+
+var suppliers   = FormTypeRef.Create("supplier");
+var inspections = FormTypeRef.Create("inspection");
+
+// 1) A record key names the record a document is a version of.
+await engine.AcceptAsync(suppliers, DocumentBody.Parse("""{"name":"Acme"}"""),
+    recordKey: RecordKey.Create("S-1"));
+await engine.AcceptAsync(inspections, DocumentBody.Parse("""{"lot":"L-1","supplierId":"S-1"}"""));
+
+// 2) A reference says where its value lives and how to find the record: supplierName is the
+//    name of the supplier whose record key is this row's supplierId.
+await hints.DeclareAsync(new FormTypeHints(suppliers, "suppliers",
+[
+    new FieldHint("name", ColumnType.Text),
+]));
+await hints.DeclareAsync(new FormTypeHints(inspections, "inspections",
+[
+    new FieldHint("lot", ColumnType.Text, Nullable: false),
+    new FieldHint("supplierId", ColumnType.Text),
+    new FieldHint("supplierName", ColumnType.Text, Binding: FieldBinding.Reference,
+        Target: new EntityRef(suppliers, "name", TargetLookup.Record, "supplierId")),
+]));
+await engine.ProjectAsync(suppliers);
+await engine.ProjectAsync(inspections);
+
+var before = await engine.QueryAsync(inspections, new QuerySpec());
+// before.Rows[0].Fields["supplierName"] -> "Acme"
+
+// 3) Correct the supplier: a new document under the same key, and only the supplier projected again.
+await engine.AcceptAsync(suppliers, DocumentBody.Parse("""{"name":"Acme Ltd"}"""),
+    recordKey: RecordKey.Create("S-1"));
+// Until then the inspections read Stale: a record they compute from has a version not yet projected.
+await engine.ProjectAsync(suppliers);
+
+var after = await engine.QueryAsync(inspections, new QuerySpec());
+// after.Rows[0].Fields["supplierName"] -> "Acme Ltd"; the supplier is still one record, its latest version
+```
+
+`TargetLookup.Field("code")` finds the target by one of its declared fields instead of its record key.
+A reference declared without the lookup pair cannot be computed and projects empty (see
+[Reading a declaration back](#reading-a-declaration-back)).
+
 ## Architecture
 
 Nine ports define the engine; everything else composes them.
@@ -239,8 +304,10 @@ What that call does and does not answer:
 - With `Formbase.SchemaIntelligence` registered the same call returns declaration and inference
   composed — declared axes carried through unchanged, undeclared columns answered by the model,
   the declaration winning on conflict. The read-back is the same call either way.
-- A `FieldBinding.Reference` column is declared but **not yet resolved**: it projects empty, and
-  each `ProjectAsync` names those columns in `ProjectionResult.UnresolvedReferences`.
+- A `FieldBinding.Reference` column whose target carries a lookup pair (`EntityRef` with a lookup
+  and a via field) is computed when it is read. One declared **without the pair cannot be
+  resolved**: it projects empty, and each `ProjectAsync` names those columns in
+  `ProjectionResult.UnresolvedReferences`.
 
 Declaring is deliberately not on this port — it belongs to whichever `IFieldHintSource` you
 registered (see the durable composition below).
