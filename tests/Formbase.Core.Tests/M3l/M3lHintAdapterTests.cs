@@ -1,5 +1,9 @@
+using Formbase.Core.InMemory;
+using Formbase.Core.Primitives;
+using Formbase.Core.Query;
 using Formbase.Core.Schema;
 using Formbase.M3L;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Formbase.Core.Tests.M3l;
 
@@ -129,14 +133,122 @@ public class M3lHintAdapterTests
     }
 
     [Fact]
-    public void Derived_fields_are_excluded_from_hints_and_measured()
+    public void A_lookup_whose_target_model_is_not_in_the_document_stays_a_gap_that_says_so()
     {
         var result = M3lHintAdapter.Adapt(InspectionForm);
 
         result.Hints[0].Fields.Should().NotContain(f => f.Name == "inspector_name",
-            "a lookup is not a raw extraction key");
+            "Employee is not declared here, so the field its records are identified by is unknown");
         result.Gaps.Should().Contain(g =>
-            g.Field == "inspector_name" && g.Kind == VocabularyGapKind.Derived);
+            g.Field == "inspector_name" && g.Kind == VocabularyGapKind.Derived
+            && g.Construct == "lookup inspector_id.name" && g.Detail.Contains("Employee"));
+    }
+
+    private const string StaffedInspectionForm =
+        """
+        ## Employee
+
+        - id: identifier @pk @generated
+        - name: string(100)
+        - dept_code: string(10) @reference(Department)
+
+        ## Department
+
+        - code: string(10) @pk
+        - title: string
+
+        ## Shift
+
+        - site: string(10) @pk
+        - no: integer @pk
+        - lead: string
+
+        ## Inspection
+
+        - id: identifier @pk @generated
+        - lot_no: string(50)
+        - inspector_id: identifier @reference(Employee)
+        - shift_site: string(10) @reference(Shift)
+
+        ### Lookup
+        - inspector_name: string @lookup(inspector_id.name)
+        - inspector_dept: string @lookup(inspector_id.dept_code.title)
+        - lot_owner: string @lookup(lot_no.name)
+        - shift_lead: string @lookup(shift_site.lead)
+        - inspector_badge: string @lookup(inspector_id.badge)
+        """;
+
+    [Fact]
+    public void A_lookup_over_a_reference_is_declared_as_a_computed_reference()
+    {
+        var result = M3lHintAdapter.Adapt(StaffedInspectionForm);
+
+        var inspection = result.Hints.Single(h => h.Type.Value == "inspection");
+        var field = inspection.Fields.Single(f => f.Name == "inspector_name");
+        field.Type.Should().Be(ColumnType.Text);
+        field.Binding.Should().Be(FieldBinding.Reference);
+        field.Target.Should().Be(new EntityRef(
+            FormTypeRef.Create("employee"), "name", TargetLookup.Field("id"), "inspector_id"),
+            "the path names the field here that carries the key and the target's field to read; the target's @pk is what the key is matched against");
+        result.Gaps.Should().NotContain(g => g.Field == "inspector_name");
+    }
+
+    [Theory]
+    [InlineData("inspector_dept", "path of any other length")]
+    [InlineData("lot_owner", "not a stored field of Inspection declared @reference")]
+    [InlineData("shift_lead", "declares 2 @pk fields")]
+    [InlineData("inspector_badge", "'badge' is not a stored field of Employee")]
+    public void A_lookup_the_document_does_not_say_enough_to_compute_is_a_gap_with_its_reason(string name, string reason)
+    {
+        var result = M3lHintAdapter.Adapt(StaffedInspectionForm);
+
+        result.Hints.Single(h => h.Type.Value == "inspection").Fields.Should().NotContain(f => f.Name == name);
+        result.Gaps.Should().ContainSingle(g => g.Field == name)
+            .Which.Should().Match<VocabularyGap>(g => g.Kind == VocabularyGapKind.Derived && g.Detail.Contains(reason));
+    }
+
+    [Fact]
+    public async Task A_lookup_imported_from_m3l_reads_the_targets_value_when_projected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var services = new ServiceCollection();
+        services.AddFormbaseInMemory();
+        await using var provider = services.BuildServiceProvider();
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        var hints = provider.GetRequiredService<InMemoryFieldHintSource>();
+
+        // Declared in the document's order: the target before the form type that reads it.
+        var adapted = M3lHintAdapter.Adapt(
+            """
+            ## Employee
+
+            - id: identifier @pk
+            - name: string(100)
+
+            ## Inspection
+
+            - lot_no: string(50)
+            - inspector_id: identifier @reference(Employee)
+
+            ### Lookup
+            - inspector_name: string @lookup(inspector_id.name)
+            """);
+        foreach (var declared in adapted.Hints)
+        {
+            hints.Declare(declared);
+        }
+
+        var employee = FormTypeRef.Create("employee");
+        var inspection = FormTypeRef.Create("inspection");
+        var kim = Guid.NewGuid();
+        await engine.AcceptAsync(employee, DocumentBody.Parse($$"""{"id":"{{kim}}","name":"Kim"}"""), cancellationToken: ct);
+        await engine.AcceptAsync(inspection, DocumentBody.Parse($$"""{"lot_no":"L-1","inspector_id":"{{kim}}"}"""), cancellationToken: ct);
+        await engine.ProjectAsync(employee, ct);
+        var projected = await engine.ProjectAsync(inspection, ct);
+
+        projected.UnresolvedReferences.Should().BeEmpty("the lookup carries its pair");
+        var rows = (await engine.QueryAsync(inspection, new QuerySpec(), ct)).Rows;
+        rows.Should().ContainSingle().Which.Fields["inspector_name"].Should().Be("Kim");
     }
 
     [Fact]
@@ -164,7 +276,8 @@ public class M3lHintAdapterTests
 
         // After the vocabulary absorbed relations and time-binding, what remains a gap is what the
         // declaration vocabulary genuinely does not carry — human labels, derived fields, declared
-        // value constraints — and what M3L does not say: which target record a soft binding reads.
+        // value constraints — and what the document does not say: which target record a soft binding
+        // reads, or a lookup whose target model is declared elsewhere.
         result.Gaps.Select(g => g.Kind).Distinct().Should().OnlyContain(k =>
             k == VocabularyGapKind.IdentityDisplay
             || k == VocabularyGapKind.Derived
@@ -180,7 +293,7 @@ public class M3lHintAdapterTests
 
         var references = result.Hints.SelectMany(h => h.Fields).Where(f => f.Binding == FieldBinding.Reference).ToList();
         references.Should().NotBeEmpty("the fixture has a soft binding");
-        references.Should().OnlyContain(f => f.Target!.Lookup == null, "M3L carries no lookup pair");
+        references.Should().OnlyContain(f => f.Target!.Lookup == null, "a soft binding names a column, not a record; none of these is a lookup field");
         result.Gaps.Where(g => g.Kind == VocabularyGapKind.ReferenceLookup).Select(g => g.Field)
             .Should().BeEquivalentTo(references.Select(f => f.Name), "each one is named before a projection reports it empty");
     }

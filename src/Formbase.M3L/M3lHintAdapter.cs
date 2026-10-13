@@ -31,15 +31,21 @@ public static class M3lHintAdapter
 
         var hints = new List<FormTypeHints>();
         var gaps = new List<VocabularyGap>();
-        foreach (var model in parsed.Data.Models.Where(m => m.Type == ModelType.Model))
+        var models = parsed.Data.Models.Where(m => m.Type == ModelType.Model).ToList();
+        // A lookup reads across a reference, so a field is adapted knowing the document's other models.
+        // A name declared twice resolves to neither: which one a reference means is not this adapter's call.
+        var byName = models.GroupBy(m => m.Name, StringComparer.Ordinal)
+            .Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.Single(), StringComparer.Ordinal);
+        foreach (var model in models)
         {
-            hints.Add(AdaptModel(model, gaps));
+            hints.Add(AdaptModel(model, byName, gaps));
         }
 
         return new Result(hints, gaps);
     }
 
-    private static FormTypeHints AdaptModel(ModelNode model, List<VocabularyGap> gaps)
+    private static FormTypeHints AdaptModel(ModelNode model, IReadOnlyDictionary<string, ModelNode> models, List<VocabularyGap> gaps)
     {
         if (model.Inherits.Count > 0)
         {
@@ -81,7 +87,7 @@ public static class M3lHintAdapter
         var relations = new List<RelationHint>();
         foreach (var field in model.Fields)
         {
-            AdaptField(model, field, fields, relations, gaps);
+            AdaptField(model, field, models, fields, relations, gaps);
         }
 
         return new FormTypeHints(
@@ -91,16 +97,36 @@ public static class M3lHintAdapter
             relations.Count > 0 ? relations : null);
     }
 
-    private static void AdaptField(ModelNode model, FieldNode field, List<FieldHint> fields, List<RelationHint> relations, List<VocabularyGap> gaps)
+    private static void AdaptField(ModelNode model, FieldNode field, IReadOnlyDictionary<string, ModelNode> models, List<FieldHint> fields, List<RelationHint> relations, List<VocabularyGap> gaps)
     {
-        if (field.Kind is FieldKind.Lookup or FieldKind.Rollup or FieldKind.Computed)
+        if (field.Kind is FieldKind.Rollup or FieldKind.Computed)
         {
-            // Derived fields are not raw extraction keys: a lookup is "true now" across a
-            // relation, a rollup aggregates children. These are a query-layer concern the
-            // declaration vocabulary deliberately does not carry — a genuine remaining gap.
+            // Neither is a raw extraction key: a rollup aggregates children and a computed field
+            // evaluates an expression. Both are a query-layer concern the declaration vocabulary
+            // deliberately does not carry — a genuine remaining gap.
             gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Derived,
                 field.Kind.ToString().ToLowerInvariant(),
                 "Derived fields are query-layer, not stored declarations; the vocabulary does not carry them."));
+            return;
+        }
+
+        if (field.Kind is FieldKind.Lookup)
+        {
+            // A lookup is "true now" across a relation, and it says both halves of the join: the field
+            // here that carries the key, and the target's field to read. That is a computed reference —
+            // FILLED when the document says enough to name the target record, a gap that says what is
+            // missing when it does not.
+            if (TryResolveLookup(model, field, models, out var lookupTarget, out var unresolved))
+            {
+                fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable,
+                    Binding: FieldBinding.Reference, Target: lookupTarget));
+            }
+            else
+            {
+                gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.Derived,
+                    $"lookup {field.Lookup?.Path ?? "(no path)"}", unresolved));
+            }
+
             return;
         }
 
@@ -133,11 +159,11 @@ public static class M3lHintAdapter
             if (!field.Binding.IsHard)
             {
                 // The vocabulary can compute a reference that says which target record it reads (a
-                // lookup and a via field); M3L's binding says only which column. Named here, at import,
+                // lookup and a via field); a soft binding says only which column. Named here, at import,
                 // so the column that will read empty is known before the first projection reports it.
                 gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.ReferenceLookup,
                     $"soft binding to {field.Binding.Entity}.{field.Binding.Column}",
-                    "No lookup pair in M3L: the reference is declared without one, stored and not computed. Add a lookup and a via field to the declaration to compute it."));
+                    "A soft binding names the target's column but not which target record, so the reference is declared without a lookup pair: stored, not computed. Written as a lookup field over a reference — @lookup(fk.column) — it is computed."));
             }
         }
 
@@ -170,6 +196,58 @@ public static class M3lHintAdapter
         }
 
         fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable, Binding: binding, Target: target));
+    }
+
+    /// <summary>
+    /// Reads a lookup's path as the join a computed reference needs: <c>fk.column</c>, where <c>fk</c> is
+    /// a field of this model declared <c>@reference(Target)</c>. The target record is the one whose
+    /// primary key is the value <c>fk</c> carries, so the target model has to be in the document for its
+    /// key field to be known.
+    /// </summary>
+    private static bool TryResolveLookup(
+        ModelNode model, FieldNode field, IReadOnlyDictionary<string, ModelNode> models,
+        out EntityRef? target, out string unresolved)
+    {
+        target = null;
+        var segments = field.Lookup?.Path?.Split('.') ?? [];
+        if (segments.Length != 2 || segments.Any(string.IsNullOrWhiteSpace))
+        {
+            unresolved = "A computed reference reads one target record through one field of this model; a path of any other length is not carried.";
+            return false;
+        }
+
+        var (viaName, valueName) = (segments[0], segments[1]);
+        var via = model.Fields.FirstOrDefault(f => f.Name == viaName && f.Kind == FieldKind.Stored);
+        var reference = via?.Attributes.FirstOrDefault(a => a.Name == "reference");
+        if (via is null || reference is null)
+        {
+            unresolved = $"'{viaName}' is not a stored field of {model.Name} declared @reference, so the lookup names no target.";
+            return false;
+        }
+
+        var targetName = RefTarget(reference);
+        if (!models.TryGetValue(targetName, out var targetModel))
+        {
+            unresolved = $"{targetName} is not declared (once) in this document, so the field its records are identified by is unknown.";
+            return false;
+        }
+
+        var keys = targetModel.Fields.Where(f => f.Kind == FieldKind.Stored && f.Attributes.Any(a => a.Name == "pk")).ToList();
+        if (keys.Count != 1)
+        {
+            unresolved = $"{targetName} declares {keys.Count} @pk fields; a computed reference matches one field of this model against one field of the target.";
+            return false;
+        }
+
+        if (!targetModel.Fields.Any(f => f.Name == valueName && f.Kind == FieldKind.Stored))
+        {
+            unresolved = $"'{valueName}' is not a stored field of {targetName}.";
+            return false;
+        }
+
+        unresolved = string.Empty;
+        target = new EntityRef(FormTypeRef.Create(ToSnake(targetName)), valueName, TargetLookup.Field(keys[0].Name), viaName);
+        return true;
     }
 
     private static ColumnType MapType(ModelNode model, FieldNode field, List<VocabularyGap> gaps)

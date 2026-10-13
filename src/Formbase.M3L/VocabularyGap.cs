@@ -18,7 +18,10 @@ public enum VocabularyGapKind
     /// <summary>A display label distinct from the extraction name (identity/display split).</summary>
     IdentityDisplay,
 
-    /// <summary>A lookup/rollup/computed field — derived over a relation, not stored raw.</summary>
+    /// <summary>
+    /// A rollup or computed field — derived, not stored raw, and not carried — or a lookup the document
+    /// does not say enough to declare as a computed reference (the reason says what is missing).
+    /// </summary>
     Derived,
 
     /// <summary>A declared value constraint (enum membership, range, uniqueness) with no hint slot.</summary>
@@ -28,8 +31,9 @@ public enum VocabularyGapKind
     Unresolved,
 
     /// <summary>
-    /// A soft (true-now) binding that names its target column but not which target record: M3L has no
-    /// lookup pair, so the reference is declared without one and is stored, not computed.
+    /// A soft (true-now) binding: it names its target column but not which target record, so the
+    /// reference is declared without a lookup pair and is stored, not computed. A lookup field over a
+    /// reference says both and is computed.
     /// </summary>
     ReferenceLookup,
 }

@@ -40,10 +40,20 @@
 
 ### Added
 
+- **M3L import declares a lookup field as a computed reference.** `- inspector_name: string
+  @lookup(inspector_id.name)` says both halves of the join — the field here that carries the key, and
+  the target's field to read — so it is now imported as a `reference` field whose target carries the
+  lookup pair (matched against the target model's `@pk`), and is computed when read. Before, every
+  lookup was dropped as a `VocabularyGapKind.Derived` gap and no column was declared. A lookup the
+  document does not say enough to compute stays a `Derived` gap whose detail says what is missing: a
+  path that is not `fk.column`, a first segment that is not a `@reference` field, a target model that
+  is not in the document or has no single `@pk`, a column the target does not store. Rollup and
+  computed fields are still not carried.
 - **M3L import names a soft binding it cannot compute.** A true-now binding names its target column but
-  not which target record, and M3L has no lookup pair, so the reference is declared without one and is
-  stored, not computed. The import now reports each such field as a `VocabularyGapKind.ReferenceLookup`
-  gap, before the first projection names it in `UnresolvedReferences`.
+  not which target record, so the reference is declared without a lookup pair and is stored, not
+  computed. The import now reports each such field as a `VocabularyGapKind.ReferenceLookup` gap, before
+  the first projection names it in `UnresolvedReferences`; the gap's detail points at the lookup form
+  above, which is computed.
 
 ## 0.20.0
 
