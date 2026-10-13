@@ -25,7 +25,6 @@ namespace Formbase.Core.Tests.Live.MorphDb;
 [Trait("Category", "Live.MorphDb")]
 public sealed class MorphDbRelationLiveTests : IAsyncLifetime
 {
-    private const string PostgresAlias = "postgres";
     private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
     private INetwork _network = null!;
@@ -40,19 +39,13 @@ public sealed class MorphDbRelationLiveTests : IAsyncLifetime
         _network = new NetworkBuilder().Build();
         await _network.CreateAsync();
 
-        _postgres = new PostgreSqlBuilder("postgres:16-alpine")
-            .WithNetwork(_network)
-            .WithNetworkAliases(PostgresAlias)
-            .WithDatabase("morphdb")
-            .WithUsername("morph")
-            .WithPassword("morph")
-            .Build();
+        _postgres = MorphDbPostgres.Build(_network);
         await _postgres.StartAsync();
 
         _morphdb = new ContainerBuilder(
                 Environment.GetEnvironmentVariable("FORMBASE_MORPHDB_IMAGE") ?? "ghcr.io/iyulab/morphdb:0.18.0")
             .WithNetwork(_network)
-            .WithEnvironment("ConnectionStrings__MorphDB", $"Host={PostgresAlias};Port=5432;Database=morphdb;Username=morph;Password=morph")
+            .WithEnvironment("ConnectionStrings__MorphDB", MorphDbPostgres.ServiceConnectionString)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
             .WithPortBinding(8080, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer()

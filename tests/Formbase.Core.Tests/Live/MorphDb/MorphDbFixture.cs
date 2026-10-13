@@ -24,8 +24,6 @@ public sealed class MorphDbFixture : IAsyncLifetime
     /// <summary>Points the live suite at an external MorphDB instead of starting one.</summary>
     public const string BaseUrlVariable = "FORMBASE_MORPHDB_URL";
 
-    private const string PostgresAlias = "postgres";
-
     /// <summary>Bounds the readiness wait so an unreachable service fails the run instead of stalling it.</summary>
     private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
@@ -60,13 +58,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
     {
         await network.CreateAsync();
 
-        _postgres = new PostgreSqlBuilder("postgres:16-alpine")
-            .WithNetwork(network)
-            .WithNetworkAliases(PostgresAlias)
-            .WithDatabase("morphdb")
-            .WithUsername("morph")
-            .WithPassword("morph")
-            .Build();
+        _postgres = MorphDbPostgres.Build(network);
         await _postgres.StartAsync();
 
         // Pinned to the compatibility pair (Formbase.* 0.9.x ↔ MorphDB 0.11.x): CI must test the
@@ -76,7 +68,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
         _morphdb = new ContainerBuilder(
                 Environment.GetEnvironmentVariable("FORMBASE_MORPHDB_IMAGE") ?? "ghcr.io/iyulab/morphdb:0.18.0")
             .WithNetwork(network)
-            .WithEnvironment("ConnectionStrings__MorphDB", $"Host={PostgresAlias};Port=5432;Database=morphdb;Username=morph;Password=morph")
+            .WithEnvironment("ConnectionStrings__MorphDB", MorphDbPostgres.ServiceConnectionString)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
             .WithPortBinding(8080, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer()

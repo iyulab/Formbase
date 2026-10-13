@@ -16,19 +16,21 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: morph
-      POSTGRES_PASSWORD: morph
+      # The bootstrap superuser (POSTGRES_USER defaults to postgres) is for administration only;
+      # each service logs in as its own role, which the script below creates.
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: morphdb
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Creates the second database and its owner. Only read on an empty data directory: changing
-      # this file does not reach a volume that already exists.
+      # Creates MorphDB's service role, the second database and its owner. Only read on an empty
+      # data directory: changing this file does not reach a volume that already exists (see the
+      # changelog for moving a volume created before this change).
       - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
     healthcheck:
       # Over TCP on purpose. While the image runs its init scripts it serves only the Unix socket and
       # then restarts, and a socket probe answers ready during that window -- so a dependent service
       # started on this health check would reach a server that is about to go away.
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d morphdb"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -45,7 +47,9 @@ services:
     image: ${MORPHDB_IMAGE:-ghcr.io/iyulab/morphdb:0.18.0}
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
+      # MorphDB's own role from scripts/init-databases.sql. Overridable only for a volume created before
+      # that role existed and since moved onto another one (see the changelog).
+      ConnectionStrings__MorphDB: ${MORPHDB_CONNECTION_STRING:-Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph}
     depends_on:
       postgres:
         condition: service_healthy

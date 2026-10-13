@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Changed
+
+- **The bundle's MorphDB logs in as a role of its own.** `docker-compose.yml` no longer makes the
+  PostgreSQL image's bootstrap superuser (`POSTGRES_USER: morph`) MorphDB's login:
+  `scripts/init-databases.sql` creates `morph` as a `NOSUPERUSER NOBYPASSRLS` role that owns the
+  `morphdb` database, and the bootstrap superuser keeps the image default, `postgres`. MorphDB `0.19.0`
+  refuses a superuser login, because PostgreSQL applies no row-level security to one.
+
+  A bundle volume created before this change still starts as it is with the MorphDB this bundle pins
+  today (`0.18.x`). Before moving it to a MorphDB that refuses a superuser, hand MorphDB's database to a
+  service role with MorphDB's `scripts/migrate-to-service-role.sql` — it changes ownership only, and
+  Formbase's own database is not touched:
+
+  ```bash
+  docker compose exec -T postgres psql -U morph -d morphdb \n    -v service_role=morphdb_service -v service_password='<password>' \n    < migrate-to-service-role.sql
+  ```
+
+  then set `MORPHDB_CONNECTION_STRING` (new — `.env`) to that role's connection string. The volume
+  keeps the superuser it was created with (`morph`), and that is still the account you administer it
+  with: the compose file's `POSTGRES_PASSWORD` is read only when a volume is first created.
+
 ### Added
 
 - **M3L import names a soft binding it cannot compute.** A true-now binding names its target column but
