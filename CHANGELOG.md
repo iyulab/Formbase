@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.22.0
+
+A minor. Pairs with MorphDB `0.19.x` (was `0.18.x`): MorphDB enforces row-level security in
+PostgreSQL now, and its database roles change with it. The bundle runs MorphDB `0.19.0` and creates
+the second role MorphDB needs; **a bundle volume from an earlier release needs two statements before
+it starts** (see Changed). Formbase's own behaviour and API are unchanged.
+
+### Dependencies
+
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.19.0** (was 0.18.1). The client's wire is
+  unchanged; the new pairing is the server's. A `Formbase.MorphDb` host pointed at a MorphDB `0.18.x`
+  server keeps working.
 
 ### Changed
 
