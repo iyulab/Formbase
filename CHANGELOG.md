@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.21.0
+
+A minor. Pairs with MorphDB `0.18.x`, now `0.18.1`. Restores again under audit warnings as errors:
+`Formbase.MorphDb` 0.20.0 brought in a package with a high-severity advisory through
+`MorphDB.Client` 0.18.0 (see Dependencies). M3L import declares a `@lookup` field as a computed
+reference. The bundle's MorphDB logs in as a role of its own, ahead of MorphDB `0.19.0` refusing a
+superuser — an existing bundle volume keeps working unchanged with `0.18.x`.
 
 ### Changed
 
@@ -34,6 +40,12 @@
 
 ### Dependencies
 
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.18.1** (was 0.18.0), and the Microsoft packages
+  move from `10.0.12` to `10.0.13`. `MorphDB.Client` 0.18.0 brought in
+  `Microsoft.AspNetCore.SignalR.Common` 10.0.12, which carries a high-severity denial-of-service
+  advisory (CVE-2026-70159); a project that treats audit warnings as errors could no longer restore
+  `Formbase.MorphDb` 0.20.0. The bundle runs the MorphDB `0.18.1` image, which also fixes two
+  security defects of `0.18.0` (see MorphDB's changelog).
 - `Formbase.M3L` builds on `M3L.Native` 0.20.0 (was 0.19.0). What the import reads from a model is
   unchanged; 0.20.0 moves an index directive's keyword arguments and a computed field's platform
   expressions to fields of their own, neither of which the import maps.
