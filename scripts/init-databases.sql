@@ -13,6 +13,11 @@
 
 CREATE ROLE morph WITH LOGIN PASSWORD 'morph' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
 ALTER DATABASE morphdb OWNER TO morph;
+-- The role MorphDB switches a request to when it bypasses row-level security (the master secret).
+-- It logs in to nothing and needs no special attribute; MorphDB 0.19+ refuses to start without
+-- the membership, and MorphDB 0.18 ignores it.
+CREATE ROLE morphdb_bypass NOLOGIN;
+GRANT morphdb_bypass TO morph;
 
 CREATE ROLE formbase WITH LOGIN PASSWORD 'formbase';
 CREATE DATABASE formbase OWNER formbase;

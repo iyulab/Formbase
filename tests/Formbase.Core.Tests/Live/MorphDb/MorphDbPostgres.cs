@@ -22,6 +22,8 @@ internal static class MorphDbPostgres
     private const string ServiceRoleSql = """
         CREATE ROLE morph LOGIN PASSWORD 'morph' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
         ALTER DATABASE morphdb OWNER TO morph;
+        CREATE ROLE morphdb_bypass NOLOGIN;
+        GRANT morphdb_bypass TO morph;
         """;
 
     public static PostgreSqlContainer Build(INetwork network) =>

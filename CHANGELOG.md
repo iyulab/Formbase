@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The bundle's MorphDB login is a member of `morphdb_bypass`.** `scripts/init-databases.sql` creates
+  that role (`NOLOGIN`, nothing else) and grants it to `morph`. MorphDB switches a request that
+  bypasses row-level security — one made with its master secret — to it, and MorphDB `0.19.0`
+  refuses to start without the membership; `0.18.x` ignores it. A bundle volume created before this
+  change needs the two statements once, as the bootstrap superuser, before it is moved to a MorphDB
+  that requires them:
+
+  ```bash
+  docker compose exec -T postgres psql -U postgres -d morphdb \
+    -c "CREATE ROLE morphdb_bypass NOLOGIN" -c "GRANT morphdb_bypass TO morph"
+  ```
+
+  (A volume still on the superuser login `morph` from before 0.21.0 runs MorphDB's
+  `scripts/migrate-to-service-role.sql` instead, which creates the role as well.)
+
 ## 0.21.0
 
 A minor. Pairs with MorphDB `0.18.x`, now `0.18.1`. Restores again under audit warnings as errors:
