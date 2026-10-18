@@ -21,7 +21,7 @@
 
 - **The API docs no longer say a reference is not resolved.** `FieldBinding`, `FieldBinding.Reference`,
   `ProjectionResult.UnresolvedReferences` and the HTTP projection contract still described the
-  `Reference` binding as declared but not executed. Since 0.21.0 every projection store computes a
+  `Reference` binding as declared but not executed. Since 0.20.0 every projection store computes a
   reference when the row is read — in query rows, filters, ordering and aggregate groups — provided
   its `EntityRef` carries a lookup and a via field; `UnresolvedReferences` names only the reference
   columns declared without that pair. The docs now say so. Behaviour is unchanged.
