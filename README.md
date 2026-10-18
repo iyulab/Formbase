@@ -45,7 +45,7 @@ A document's life:
 2. **Projection** — when a form type has declared field hints, `ProjectAsync(formType)` drops any existing table, recreates it from the proposed schema, streams the raw documents through deterministic value mapping (recording — never discarding — any that can't be mapped, and counting per column how many documents never carried the field at all, as opposed to answering `null`), and records the watermark it reached. Because raw is the source of truth, a schema change needs no `ALTER` diffing: the table is simply rebuilt. When to re-project is a pluggable policy (`IProjectionTrigger`): the built-in trigger fires immediately on a shape change and at a configurable document-lag threshold for new data; drive `ProjectionSupervisor.RunOnceAsync` from whatever cadence your host owns.
 3. **Reading** — there are two questions with two paths:
    - *"Show me this document"* → the raw store, always available.
-   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); Each row says which record it is (`RecordRow.Record`: the document it stands on now, and its record key when it has one — the key is what stays the same across corrections) beside its declared fields (`RecordRow.Fields`). `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees — and, when asked (`RecordsPerGroup`), each group carries the records its count is made of, as the same identities the rows carry, read with the count so the two cannot disagree; `AggregateSpec.RecordsOf(group)` is the query for all of a group's records.
+   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); Each row says which record it is (`RecordRow.Record`: the document it stands on now, and its record key when it has one — the key is what stays the same across corrections) beside its declared fields (`RecordRow.Fields`). `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees — and, when asked (`RecordsPerGroup`), each group carries the records its count is made of, as the same identities the rows carry, read with the count so the two cannot disagree; `AggregateSpec.RecordsOf(group)` is the query for all of a group's records. `AggregateSpec.Measures` adds a sum, average, minimum or maximum of a numeric column (minimum and maximum also of a timestamp, a reference column included) to each group, with how many of its records had a value there — a record with the column empty takes no part, and a group with no values gets no value rather than a zero.
 
 ## Install
 
@@ -177,6 +177,13 @@ var counts = await engine.AggregateAsync(qc, new AggregateSpec(
 var traced = await engine.AggregateAsync(qc, new AggregateSpec(GroupBy: ["lot"], RecordsPerGroup: 50));
 // traced.Groups[i].Records -> the records behind Count, as a query row's Record names them
 // (fewer than Count when cut at 50)
+
+// 6) Or measure a column per group — the total and the largest qty of each lot.
+var totals = await engine.AggregateAsync(qc, new AggregateSpec(
+    GroupBy: ["lot"],
+    Measures: [AggregateMeasure.Sum("qty"), AggregateMeasure.Max("qty")]));
+// totals.Groups[i].Measures -> one MeasureValue per measure, in that order: its Value (a decimal for
+// a sum or an average, null when no record has a qty) and ValueCount, the records it was computed from
 ```
 
 ### Records and references, in one file

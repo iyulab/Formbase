@@ -49,8 +49,24 @@ public sealed class SqliteDatabase : IDisposable
             SqliteValues.DecimalCollation,
             static (x, y) => decimal.Parse(x, NumberStyles.Number, CultureInfo.InvariantCulture)
                 .CompareTo(decimal.Parse(y, NumberStyles.Number, CultureInfo.InvariantCulture)));
+        connection.CreateAggregate<string?, (decimal Sum, long Count), string?>(
+            SqliteValues.DecimalSum,
+            (0m, 0L),
+            static (total, value) => Add(total, value),
+            static total => total.Count == 0 ? null : total.Sum.ToString(CultureInfo.InvariantCulture),
+            isDeterministic: true);
+        connection.CreateAggregate<string?, (decimal Sum, long Count), string?>(
+            SqliteValues.DecimalAverage,
+            (0m, 0L),
+            static (total, value) => Add(total, value),
+            static total => total.Count == 0 ? null : (total.Sum / total.Count).ToString(CultureInfo.InvariantCulture),
+            isDeterministic: true);
 
         return connection;
+
+        // A value reaches the aggregate as its text — an integer as its digits, a decimal as stored.
+        static (decimal Sum, long Count) Add((decimal Sum, long Count) total, string? value) =>
+            value is null ? total : (total.Sum + decimal.Parse(value, NumberStyles.Number | NumberStyles.AllowExponent, CultureInfo.InvariantCulture), total.Count + 1);
     }
 
     /// <summary>Runs <paramref name="ddl"/> once per process for <paramref name="component"/>.</summary>

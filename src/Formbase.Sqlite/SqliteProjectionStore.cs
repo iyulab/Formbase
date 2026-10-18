@@ -293,6 +293,22 @@ public sealed class SqliteProjectionStore : IProjectionStore
                 .Append(limit.ToString(CultureInfo.InvariantCulture)).Append(')');
         }
 
+        // Each measure as its value and how many rows had one — COUNT of a column skips its nulls.
+        var measures = spec.Measures ?? [];
+        foreach (var measure in measures)
+        {
+            var column = SqliteValues.Quote(measure.Column);
+            var function = measure.Function switch
+            {
+                MeasureFunction.Sum => SqliteValues.DecimalSum,
+                MeasureFunction.Average => SqliteValues.DecimalAverage,
+                MeasureFunction.Min => "MIN",
+                MeasureFunction.Max => "MAX",
+                _ => throw new ArgumentOutOfRangeException(nameof(spec), measure.Function, "Unmapped measure function."),
+            };
+            sql.Append(", ").Append(function).Append('(').Append(column).Append("), COUNT(").Append(column).Append(')');
+        }
+
         sql.Append(" FROM ").Append(source);
         if (keys.Count > 0)
         {
@@ -312,7 +328,16 @@ public sealed class SqliteProjectionStore : IProjectionStore
             }
 
             var evidence = records is null ? null : ReadRecords(reader.IsDBNull(groupBy.Count + 1) ? "[]" : reader.GetString(groupBy.Count + 1));
-            groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count), evidence));
+            var first = groupBy.Count + (records is null ? 1 : 2);
+            var values = measures
+                .Select((measure, i) => new MeasureValue(
+                    measure,
+                    SqliteValues.FromStorage(
+                        reader.GetValue(first + (2 * i)),
+                        measure.Function is MeasureFunction.Sum or MeasureFunction.Average ? ColumnType.Decimal : types.GetValueOrDefault(measure.Column, ColumnType.Text)),
+                    reader.GetInt64(first + (2 * i) + 1)))
+                .ToList();
+            groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count), evidence, values));
         }
 
         return groups;

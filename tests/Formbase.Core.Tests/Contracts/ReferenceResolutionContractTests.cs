@@ -59,6 +59,7 @@ public abstract class ReferenceResolutionContractTests
         [
             new FieldHint("code", ColumnType.Text),
             new FieldHint("grade", ColumnType.Text),
+            new FieldHint("rate", ColumnType.Decimal),
         ]));
         hints.Declare(new FormTypeHints(Orders, Orders.Value,
         [
@@ -66,6 +67,8 @@ public abstract class ReferenceResolutionContractTests
             new FieldHint("qty", ColumnType.Integer),
             new FieldHint("grade_now", ColumnType.Text, Binding: FieldBinding.Reference,
                 Target: new EntityRef(Customers, "grade", lookup, "customer_ref")),
+            new FieldHint("rate_now", ColumnType.Decimal, Binding: FieldBinding.Reference,
+                Target: new EntityRef(Customers, "rate", lookup, "customer_ref")),
         ]));
         return (engine, store, hints);
     }
@@ -113,6 +116,38 @@ public abstract class ReferenceResolutionContractTests
         var now = await engine.QueryAsync(Orders, new QuerySpec(OrderBy: [new OrderKey("qty")]), Ct);
         now.Stale.Should().BeFalse();
         now.Rows.Select(r => r.Fields["grade_now"]).Should().Equal(new object?[] { "B", null, null });
+
+        await DropAsync(store);
+    }
+
+    // A measure reads a reference as it reads any column: the target's value as it is now. An order
+    // whose reference finds no customer takes no part, and a corrected rate reaches the sum without
+    // re-projecting the orders.
+    [Fact]
+    public async Task An_aggregate_measures_a_reference_as_its_targets_value_now()
+    {
+        var (engine, store) = Engine(TargetLookup.Field("code"));
+        await Accept(engine, Customers, """{"code":"C-1","grade":"A","rate":1.5}""", RecordKey.Create("cust-1"));
+        await Accept(engine, Customers, """{"code":"C-2","grade":"A","rate":2.25}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-1","qty":1}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-1","qty":2}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-2","qty":3}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-9","qty":4}""");
+        await ProjectBothAsync(engine);
+
+        var spec = new AggregateSpec(GroupBy: ["grade_now"], Measures: [AggregateMeasure.Sum("rate_now"), AggregateMeasure.Max("rate_now")]);
+        var groups = (await engine.AggregateAsync(Orders, spec, Ct)).Groups;
+        var a = groups.Single(g => Equals(g.Key["grade_now"], "A"));
+        a.Count.Should().Be(3);
+        a.Measures.Select(m => m.Value).Should().Equal(5.25m, 2.25m);
+        a.Measures.Select(m => m.ValueCount).Should().AllBeEquivalentTo(3L);
+        var orphan = groups.Single(g => g.Key["grade_now"] is null);
+        orphan.Measures.Should().AllSatisfy(m => m.ValueCount.Should().Be(0, "the order whose customer is not there has no rate to add"));
+
+        await Accept(engine, Customers, """{"code":"C-1","grade":"A","rate":2}""", RecordKey.Create("cust-1"));
+        await engine.ProjectAsync(Customers, Ct);
+        var corrected = (await engine.AggregateAsync(Orders, spec, Ct)).Groups.Single(g => Equals(g.Key["grade_now"], "A"));
+        corrected.Measures[0].Value.Should().Be(6.25m, "the corrected rate is read, the orders not re-projected");
 
         await DropAsync(store);
     }

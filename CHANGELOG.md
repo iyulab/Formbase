@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- **An aggregate measures columns, not only counts.** `AggregateSpec.Measures` takes
+  `AggregateMeasure.Sum`/`Average`/`Min`/`Max` of a declared column — `Integer` or `Decimal`, and for
+  `Min`/`Max` also `Timestamp`; a reference column is measured as its computed value. Each group
+  carries one `MeasureValue` per measure, in the order asked: the value and `ValueCount`, how many of
+  the group's records had a value in the column (an empty one takes no part). A sum or an average is a
+  `decimal` from every store and exact — SQLite adds decimals as decimals, not as floating point; a
+  group with no values gets `null`, not `0`. Read in the same read as the count, so the records behind
+  a group (`RecordsPerGroup`, `RecordsOf`) are the records its measures are computed from.
+- **`InvalidQueryException.InapplicableMeasures`.** A measure of a column its function does not apply
+  to — a sum of text, a bound of a boolean — is refused with the measures named; an undeclared
+  measured column is in `UnknownColumns`, as for filters. Text bounds are left out for the reason text
+  ranges are: the stores order strings by different collations.
+
 ### Documentation
 
 - **The API docs no longer say a reference is not resolved.** `FieldBinding`, `FieldBinding.Reference`,

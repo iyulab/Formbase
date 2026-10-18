@@ -2,8 +2,9 @@ namespace Formbase.Core.Query;
 
 /// <summary>
 /// An aggregate over a form type's projected records: the rows the <see cref="Filters"/> keep, counted
-/// per distinct combination of the <see cref="GroupBy"/> columns. Without grouping the answer is one
-/// group — the count of every kept row, zero included.
+/// — and, for each of the <see cref="Measures"/>, summed, averaged or bounded — per distinct combination
+/// of the <see cref="GroupBy"/> columns. Without grouping the answer is one group — every kept row, zero
+/// included.
 /// </summary>
 /// <param name="GroupBy">The columns whose distinct combinations are the groups.</param>
 /// <param name="Filters">The rows counted.</param>
@@ -12,10 +13,16 @@ namespace Formbase.Core.Query;
 /// (<see cref="AggregateGroup.Records"/>) — at most this many, in the order their documents were
 /// accepted, read in the same read as the count so the two cannot disagree. Must be positive.
 /// </param>
+/// <param name="Measures">
+/// What each group measures besides its count (<see cref="AggregateGroup.Measures"/>, in this order),
+/// read in the same read as the count. A measure of an undeclared column, or of a column whose type its
+/// function does not apply to, is refused rather than answered empty.
+/// </param>
 public sealed record AggregateSpec(
     IReadOnlyList<string>? GroupBy = null,
     IReadOnlyList<FieldFilter>? Filters = null,
-    int? RecordsPerGroup = null)
+    int? RecordsPerGroup = null,
+    IReadOnlyList<AggregateMeasure>? Measures = null)
 {
     /// <summary>The count of every record.</summary>
     public static AggregateSpec CountAll { get; } = new();

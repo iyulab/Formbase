@@ -65,8 +65,9 @@ public sealed class RecordQuery : IRecordQuery
         var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
 
         var groupBy = spec.GroupBy ?? [];
-        RefuseUnanswerable(type, spec.Filters, groupBy, schema);
-        var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema) };
+        var measures = spec.Measures ?? [];
+        RefuseUnanswerable(type, spec.Filters, groupBy, schema, measures);
+        var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema), Measures = measures };
 
         IReadOnlyList<AggregateGroup> groups;
         try
@@ -82,9 +83,10 @@ public sealed class RecordQuery : IRecordQuery
     }
 
     /// <summary>
-    /// Group keys as the declared column types, whatever the store's wire gave back — a timestamp read
-    /// over JSON arrives as text. Grouping is what a caller filters by next, so a key must be a value
-    /// the same column's filter accepts as itself.
+    /// Group keys and measures as the declared column types, whatever the store's wire gave back — a
+    /// timestamp read over JSON arrives as text, a sum as whatever number type the backend computes in.
+    /// Grouping is what a caller filters by next, so a key must be a value the same column's filter
+    /// accepts as itself; a measure follows the rule <see cref="MeasureValue.Value"/> states.
     /// </summary>
     private static List<AggregateGroup> Typed(IReadOnlyList<AggregateGroup> groups, TableSchema schema) =>
         groups
@@ -94,8 +96,18 @@ public sealed class RecordQuery : IRecordQuery
                     pair => pair.Key,
                     pair => schema.Columns.FirstOrDefault(c => c.Name == pair.Key)?.Type is { } type ? CoerceValue(pair.Value, type) : pair.Value,
                     StringComparer.Ordinal),
+                Measures = group.Measures
+                    .Select(measure => measure with { Value = MeasureType(measure.Measure, schema) is { } type ? CoerceValue(measure.Value, type) : measure.Value })
+                    .ToList(),
             })
             .ToList();
+
+    /// <summary>The type a measure's value is read as: decimal for a sum or an average, the column's own type otherwise.</summary>
+    private static ColumnType? MeasureType(AggregateMeasure measure, TableSchema schema) => measure.Function switch
+    {
+        MeasureFunction.Sum or MeasureFunction.Average => ColumnType.Decimal,
+        _ => schema.Columns.FirstOrDefault(c => c.Name == measure.Column)?.Type,
+    };
 
     /// <summary>
     /// The projection a read may be answered from, or the reason it may not. Shared by every read so
@@ -252,12 +264,16 @@ public sealed class RecordQuery : IRecordQuery
     /// </para>
     /// </summary>
     private static void RefuseUnanswerable(
-        FormTypeRef type, IReadOnlyList<FieldFilter>? filters, IEnumerable<string> otherColumns, TableSchema schema)
+        FormTypeRef type,
+        IReadOnlyList<FieldFilter>? filters,
+        IEnumerable<string> otherColumns,
+        TableSchema schema,
+        IReadOnlyList<AggregateMeasure>? measures = null)
     {
         var declared = schema.Columns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
 
         List<string>? unknown = null;
-        foreach (var name in (filters ?? []).Select(f => f.Column).Concat(otherColumns))
+        foreach (var name in (filters ?? []).Select(f => f.Column).Concat(otherColumns).Concat((measures ?? []).Select(m => m.Column)))
         {
             if (!declared.ContainsKey(name))
             {
@@ -274,11 +290,31 @@ public sealed class RecordQuery : IRecordQuery
             }
         }
 
-        if (unknown is not null || inapplicable is not null)
+        List<AggregateMeasure>? inapplicableMeasures = null;
+        foreach (var measure in measures ?? [])
         {
-            throw new InvalidQueryException(type, unknown ?? [], inapplicable ?? []);
+            if (declared.TryGetValue(measure.Column, out var columnType) && !Applies(measure.Function, columnType))
+            {
+                (inapplicableMeasures ??= []).Add(measure);
+            }
+        }
+
+        if (unknown is not null || inapplicable is not null || inapplicableMeasures is not null)
+        {
+            throw new InvalidQueryException(type, unknown ?? [], inapplicable ?? [], inapplicableMeasures ?? []);
         }
     }
+
+    /// <summary>
+    /// Whether a measure is a question the column can answer: sums and averages add numbers; bounds also
+    /// order instants. Text bounds are left out for the reason text ranges are (<see cref="Applies(FieldFilter, ColumnType)"/>).
+    /// </summary>
+    private static bool Applies(MeasureFunction function, ColumnType columnType) => function switch
+    {
+        MeasureFunction.Sum or MeasureFunction.Average => columnType is ColumnType.Integer or ColumnType.Decimal,
+        MeasureFunction.Min or MeasureFunction.Max => columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
+        _ => false,
+    };
 
     /// <summary>
     /// Whether a filter is a question the column can answer. Ranges compare numbers and instants;

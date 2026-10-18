@@ -1,4 +1,5 @@
 using System.Globalization;
+using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -429,6 +430,123 @@ public abstract class ProjectionStoreContractTests
         var cut = (await engine.AggregateAsync(type, spec with { RecordsPerGroup = 2 }, ct)).Groups.Single(g => Equals(g.Key["lot"], "A"));
         cut.Count.Should().Be(4, "the limit cuts the list, not the count");
         cut.Records.Should().Equal(a.Records!.Take(2));
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
+    private TableSchema MeasuredSchema() =>
+        new(TableName,
+        [
+            new ColumnDef("k", ColumnType.Text),
+            new ColumnDef("n", ColumnType.Integer),
+            new ColumnDef("d", ColumnType.Decimal),
+            new ColumnDef("t", ColumnType.Timestamp),
+        ]);
+
+    private static IReadOnlyDictionary<string, object?> MeasuredRow(string k, long? n, decimal? d, string? t) =>
+        new Dictionary<string, object?>
+        {
+            ["k"] = k,
+            ["n"] = n,
+            ["d"] = d,
+            ["t"] = t is null ? null : DateTimeOffset.Parse(t, CultureInfo.InvariantCulture),
+        };
+
+    // A store answers with the number type its backend computes in; the engine types it (the test after
+    // this one). Here only the values and the counts are the contract.
+    private static decimal? Number(object? value) => value is null ? null : Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset? Instant(object? value) => value switch
+    {
+        null => null,
+        DateTimeOffset instant => instant,
+        DateTime instant => new DateTimeOffset(DateTime.SpecifyKind(instant, DateTimeKind.Utc)),
+        _ => DateTimeOffset.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!, CultureInfo.InvariantCulture),
+    };
+
+    // Each measure is computed over the values the group has, and says how many that was: the row with
+    // nothing in the columns is counted in the group but takes no part. Decimals are chosen so that
+    // their text order (10.5 before 9.25) and their numeric order disagree, and the sum of a decimal
+    // column is exact (0.1 + 0.2 is 0.3, not 0.30000000000000004).
+    [Fact]
+    public async Task Aggregate_measures_each_group_over_the_values_it_has()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        await store.CreateTableAsync(MeasuredSchema(), ct);
+        await store.BulkInsertAsync(TableName,
+        [
+            MeasuredRow("a", 1, 10.5m, "2026-01-02T00:00:00Z"),
+            MeasuredRow("a", 3, 9.25m, "2026-01-01T00:00:00Z"),
+            MeasuredRow("a", null, null, null),
+            MeasuredRow("b", 5, 0.1m, "2026-03-01T00:00:00Z"),
+            MeasuredRow("b", 7, 0.2m, "2026-03-01T00:00:00Z"),
+            MeasuredRow("c", null, null, null),
+        ], ct);
+
+        AggregateMeasure[] measures =
+        [
+            AggregateMeasure.Sum("n"), AggregateMeasure.Average("n"), AggregateMeasure.Sum("d"),
+            AggregateMeasure.Min("d"), AggregateMeasure.Max("d"), AggregateMeasure.Min("t"), AggregateMeasure.Max("t"),
+        ];
+        var groups = (await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], Measures: measures), ct))
+            .ToDictionary(g => (string)g.Key["k"]!);
+
+        var a = groups["a"];
+        a.Count.Should().Be(3);
+        a.Measures.Select(m => m.Measure).Should().Equal(measures, "one value per measure, in the order asked");
+        a.Measures.Select(m => m.ValueCount).Should().AllBeEquivalentTo(2L, "the empty row takes no part");
+        a.Measures.Take(5).Select(m => Number(m.Value)).Should().Equal(4m, 2m, 19.75m, 9.25m, 10.5m);
+        a.Measures.Skip(5).Select(m => Instant(m.Value)).Should().Equal(
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z", CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse("2026-01-02T00:00:00Z", CultureInfo.InvariantCulture));
+
+        var b = groups["b"];
+        Number(b.Measures[0].Value).Should().Be(12m);
+        Number(b.Measures[1].Value).Should().Be(6m);
+        Number(b.Measures[2].Value).Should().Be(0.3m, "a decimal sum is exact");
+
+        var c = groups["c"];
+        c.Count.Should().Be(1);
+        c.Measures.Should().AllSatisfy(m =>
+        {
+            m.Value.Should().BeNull("a group with no values has no sum — not a zero");
+            m.ValueCount.Should().Be(0);
+        });
+
+        var none = await store.AggregateAsync(TableName, new AggregateSpec(Filters: [FieldFilter.Equal("k", "zzz")], Measures: [AggregateMeasure.Sum("n")]), ct);
+        none.Should().ContainSingle().Which.Measures.Should().ContainSingle()
+            .Which.Should().Be(new MeasureValue(AggregateMeasure.Sum("n"), null, 0));
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
+    // Through the engine a sum or an average is a decimal and a bound is the column's own type, whatever
+    // number type the store computed in; a measure a column cannot answer is refused, not answered empty.
+    [Fact]
+    public async Task An_aggregates_measures_are_typed_and_a_measure_the_column_cannot_answer_is_refused()
+    {
+        var store = CreateStore();
+        var (engine, type) = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":2}"""), cancellationToken: ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A","qty":5}"""), cancellationToken: ct);
+        await engine.AcceptAsync(type, DocumentBody.Parse("""{"lot":"A"}"""), cancellationToken: ct);
+        await engine.ProjectAsync(type, ct);
+
+        var group = (await engine.AggregateAsync(type, new AggregateSpec(
+            GroupBy: ["lot"],
+            Measures: [AggregateMeasure.Sum("qty"), AggregateMeasure.Average("qty"), AggregateMeasure.Max("qty")]), ct)).Groups.Single();
+
+        group.Count.Should().Be(3);
+        group.Measures.Select(m => m.Value).Should().Equal(7m, 3.5m, 5L);
+        group.Measures.Select(m => m.ValueCount).Should().AllBeEquivalentTo(2L, "the document without a qty took no part");
+
+        var refused = () => engine.AggregateAsync(type, new AggregateSpec(Measures: [AggregateMeasure.Sum("lot"), AggregateMeasure.Min("lot"), AggregateMeasure.Sum("missing")]), ct);
+        var thrown = (await refused.Should().ThrowAsync<InvalidQueryException>()).Which;
+        thrown.InapplicableMeasures.Should().Equal(AggregateMeasure.Sum("lot"), AggregateMeasure.Min("lot"));
+        thrown.UnknownColumns.Should().Equal("missing");
 
         await store.DropTableAsync(TableName, ct);
     }

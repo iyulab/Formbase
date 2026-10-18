@@ -15,6 +15,16 @@ internal static class SqliteValues
 {
     public const string DecimalCollation = "fb_decimal";
 
+    /// <summary>
+    /// The exact sum of a column's values as decimal invariant text, null over no values. SQLite's own
+    /// <c>SUM</c> reads decimal text as floating point and throws on integer overflow; this adds every
+    /// numeric column as <see cref="decimal"/>, as a numeric sum does on the server stores.
+    /// </summary>
+    public const string DecimalSum = "fb_decimal_sum";
+
+    /// <summary>The exact average of a column's values, as <see cref="DecimalSum"/> divided by their count.</summary>
+    public const string DecimalAverage = "fb_decimal_avg";
+
     private const string InstantFormat = "yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'";
 
     /// <summary>The column's SQLite declaration: storage class plus, for decimals, its collation.</summary>

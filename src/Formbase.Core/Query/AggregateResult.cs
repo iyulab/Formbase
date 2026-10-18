@@ -10,8 +10,8 @@ namespace Formbase.Core.Query;
 public sealed record AggregateResult(IReadOnlyList<AggregateGroup> Groups, bool Stale);
 
 /// <summary>
-/// One group: the value of each grouping column (empty when the aggregate is ungrouped) and how many
-/// records carry it.
+/// One group: the value of each grouping column (empty when the aggregate is ungrouped), how many
+/// records carry it, and what the aggregate measured over them.
 /// </summary>
 /// <param name="Key">The value of each grouping column.</param>
 /// <param name="Count">How many records the group has.</param>
@@ -23,4 +23,17 @@ public sealed record AggregateResult(IReadOnlyList<AggregateGroup> Groups, bool 
 /// count can be matched to the rows that make it up. Fewer than <paramref name="Count"/> means the list
 /// stopped at that limit; <see cref="AggregateSpec.RecordsOf"/> reads the rest.
 /// </param>
-public sealed record AggregateGroup(IReadOnlyDictionary<string, object?> Key, long Count, IReadOnlyList<RecordRef>? Records = null);
+/// <param name="Measures">
+/// One value per <see cref="AggregateSpec.Measures"/> entry, in the order the aggregate asked for them;
+/// empty when it asked for none. The records the values are computed from are the group's records —
+/// <see cref="Records"/> when asked for, <see cref="AggregateSpec.RecordsOf"/> otherwise.
+/// </param>
+public sealed record AggregateGroup(
+    IReadOnlyDictionary<string, object?> Key,
+    long Count,
+    IReadOnlyList<RecordRef>? Records = null,
+    IReadOnlyList<MeasureValue>? Measures = null)
+{
+    /// <summary>The measures, empty rather than null when the aggregate asked for none.</summary>
+    public IReadOnlyList<MeasureValue> Measures { get; init; } = Measures ?? [];
+}

@@ -305,20 +305,36 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     public async Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
     {
         var groupBy = spec.GroupBy ?? [];
+        var measures = spec.Measures ?? [];
         // The records behind each group ride the same request as its count: two ARRAY_AGGs — the document
         // ids and the record keys — both in the order the documents were accepted and cut at the same
         // limit by the server. ARRAY_AGG keeps nulls, so a document that is a record of its own keeps its
         // place in the keys and the two arrays pair up index by index.
+        // Each measure rides it too, as its value and COUNT(column) — the rows that had one.
+        List<AggregationColumn> aggregations = [AggregationColumn.Count(CountAlias)];
+        if (spec.RecordsPerGroup is { } limit)
+        {
+            aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
+            aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.RecordKey, KeysAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
+        }
+
+        for (var i = 0; i < measures.Count; i++)
+        {
+            var column = measures[i].Column;
+            aggregations.Add(measures[i].Function switch
+            {
+                MeasureFunction.Sum => AggregationColumn.Sum(column, MeasureAlias(i)),
+                MeasureFunction.Average => AggregationColumn.Avg(column, MeasureAlias(i)),
+                MeasureFunction.Min => AggregationColumn.Min(column, MeasureAlias(i)),
+                MeasureFunction.Max => AggregationColumn.Max(column, MeasureAlias(i)),
+                _ => throw new ArgumentOutOfRangeException(nameof(spec), measures[i].Function, "Unmapped measure function."),
+            });
+            aggregations.Add(AggregationColumn.Count(column, MeasureCountAlias(i)));
+        }
+
         var request = new AggregationRequest
         {
-            Aggregations = spec.RecordsPerGroup is { } limit
-                ?
-                [
-                    AggregationColumn.Count(CountAlias),
-                    AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark),
-                    AggregationColumn.ArrayAgg(ProjectionSystemColumns.RecordKey, KeysAlias, limit, orderBy: ProjectionSystemColumns.Watermark),
-                ]
-                : [AggregationColumn.Count(CountAlias)],
+            Aggregations = aggregations,
             GroupBy = groupBy,
             Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f), f.Value)).ToList(),
         };
@@ -331,9 +347,21 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 Convert.ToInt64(row[CountAlias], CultureInfo.InvariantCulture),
                 spec.RecordsPerGroup is null
                     ? null
-                    : Records(row.TryGetValue(DocumentsAlias, out var documents) ? documents : null, row.TryGetValue(KeysAlias, out var keys) ? keys : null)))
+                    : Records(row.TryGetValue(DocumentsAlias, out var documents) ? documents : null, row.TryGetValue(KeysAlias, out var keys) ? keys : null),
+                measures
+                    .Select((measure, i) => new MeasureValue(
+                        measure,
+                        row.TryGetValue(MeasureAlias(i), out var value) ? value : null,
+                        row.TryGetValue(MeasureCountAlias(i), out var count) && count is not null ? Convert.ToInt64(count, CultureInfo.InvariantCulture) : 0))
+                    .ToList()))
             .ToList();
     }
+
+    /// <summary>A measure's alias, by its place in the spec — prefixed like <see cref="CountAlias"/>, so no grouping column shares it.</summary>
+    private static string MeasureAlias(int index) => "fb_measure_" + index.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The alias of how many rows a measure was computed from.</summary>
+    private static string MeasureCountAlias(int index) => "fb_measure_count_" + index.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>The document ids' alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
     private const string DocumentsAlias = "fb_documents";

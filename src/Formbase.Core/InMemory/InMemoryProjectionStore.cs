@@ -1,3 +1,4 @@
+using System.Globalization;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
@@ -136,7 +137,7 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                 // Ungrouped counts are one answer even when nothing is kept — COUNT(*) over no rows is 0,
                 // not an absent row.
                 IReadOnlyList<AggregateGroup> total =
-                    [new AggregateGroup(new Dictionary<string, object?>(StringComparer.Ordinal), kept.Count, RecordsOf(kept, spec.RecordsPerGroup))];
+                    [new AggregateGroup(new Dictionary<string, object?>(StringComparer.Ordinal), kept.Count, RecordsOf(kept, spec.RecordsPerGroup), Measure(kept, spec.Measures))];
                 return Task.FromResult(total);
             }
 
@@ -146,7 +147,8 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                     groupBy.Select((column, i) => (column, value: group.Key.Values[i]))
                         .ToDictionary(pair => pair.column, pair => pair.value, StringComparer.Ordinal),
                     group.LongCount(),
-                    RecordsOf(group, spec.RecordsPerGroup)))
+                    RecordsOf(group, spec.RecordsPerGroup),
+                    Measure(group.ToList(), spec.Measures)))
                 .ToList();
 
             return Task.FromResult(groups);
@@ -213,6 +215,30 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         _ => row.GetValueOrDefault(ProjectionSystemColumns.Record) is string record
             && string.Equals(record, via as string, StringComparison.Ordinal),
     };
+
+    /// <summary>
+    /// Each measure over the group's rows: the values present in the column, summed, averaged or
+    /// bounded — null when none is. Sums and averages are exact decimal arithmetic, as the
+    /// SQL backends' numeric sums are.
+    /// </summary>
+    private static List<MeasureValue> Measure(IReadOnlyCollection<Dictionary<string, object?>> rows, IReadOnlyList<AggregateMeasure>? measures) =>
+        (measures ?? [])
+            .Select(measure =>
+            {
+                var values = rows.Select(row => row.GetValueOrDefault(measure.Column)).Where(value => value is not null).ToList();
+                object? result = values.Count == 0
+                    ? null
+                    : measure.Function switch
+                    {
+                        MeasureFunction.Sum => values.Sum(value => Convert.ToDecimal(value, CultureInfo.InvariantCulture)),
+                        MeasureFunction.Average => values.Sum(value => Convert.ToDecimal(value, CultureInfo.InvariantCulture)) / values.Count,
+                        MeasureFunction.Min => values.Min(ValueOrder.Comparer),
+                        MeasureFunction.Max => values.Max(ValueOrder.Comparer),
+                        _ => throw new ArgumentOutOfRangeException(nameof(measures), measure.Function, null),
+                    };
+                return new MeasureValue(measure, result, values.Count);
+            })
+            .ToList();
 
     /// <summary>The first <paramref name="limit"/> rows' records in the order they were accepted, or null when none were asked for.</summary>
     private static List<RecordRef>? RecordsOf(IEnumerable<Dictionary<string, object?>> rows, int? limit) =>
