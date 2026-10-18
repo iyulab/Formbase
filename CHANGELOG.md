@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.23.0
+
+A minor. Still pairs with MorphDB `0.19.x` (`MorphDB.Client` 0.19.0, the bundle and the live
+fixtures on the MorphDB `0.19.0` image). Aggregates measure columns, and a query can ask where each
+reference value was read from; a `Formbase.MorphDb` projection built by an earlier release reports
+every source as `TargetUnavailable` until it is rebuilt.
 
 ### Added
 
@@ -37,6 +42,10 @@
   reference when the row is read — in query rows, filters, ordering and aggregate groups — provided
   its `EntityRef` carries a lookup and a via field; `UnresolvedReferences` names only the reference
   columns declared without that pair. The docs now say so. Behaviour is unchanged.
+
+### Internal
+
+- **The M3L adapter builds on `M3L.Native` 0.24.0** (was 0.20.0). The adapter is not packaged.
 
 ## 0.22.0
 
