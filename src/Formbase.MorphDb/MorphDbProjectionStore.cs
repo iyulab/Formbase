@@ -114,14 +114,32 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     ];
 
     /// <summary>
+    /// The columns a query that did not ask for sources reads: every column but the source lookups.
+    /// MorphDB computes a lookup only where the statement uses it, and a read that names no columns
+    /// uses them all — two correlated lookups per reference column on every row, for values the shaped
+    /// row then drops. A table without source lookups is read whole (an empty list asks for every
+    /// column), as is one that is not there, which the read itself then reports.
+    /// </summary>
+    private static List<string> WithoutSources(TableInfo? table)
+    {
+        var columns = table?.Columns ?? [];
+        var sources = columns
+            .Where(c => c.Lookup is not null)
+            .SelectMany(c => new[] { ProjectionSystemColumns.SourceDocumentOf(c.Name), ProjectionSystemColumns.SourceKeyOf(c.Name) })
+            .ToHashSet(StringComparer.Ordinal);
+        return columns.Any(c => sources.Contains(c.Name))
+            ? columns.Select(c => c.Name).Where(name => !sources.Contains(name)).ToList()
+            : [];
+    }
+
+    /// <summary>
     /// Whether each reference's target can answer, by reference column — what the lookups cannot say,
     /// since a lookup into a target that is missing, or lacks a column, reads null as a lookup that
     /// matched nothing does. Asked of the target's table as it stands when the query is read. A table
     /// built before it carried the source lookups has no entry: its sources are not known.
     /// </summary>
-    private async Task<Dictionary<string, bool>> AnswersAsync(string tableName, CancellationToken cancellationToken)
+    private async Task<Dictionary<string, bool>> AnswersAsync(TableInfo? table, CancellationToken cancellationToken)
     {
-        var table = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
         var columns = table?.Columns ?? [];
         var targets = new Dictionary<string, TableInfo?>(StringComparer.Ordinal);
         var answers = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -318,8 +336,12 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             ? specOrder.Select(k => new OrderBy(k.Column, ascending: !k.Descending)).ToList()
             : [];
 
+        // One read of the table's shape serves both: which columns to ask for, and — when sources are
+        // asked — whether each reference's target can answer.
+        var table = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<string> select = spec.ReferenceSources ? [] : WithoutSources(table);
         var answers = spec.ReferenceSources
-            ? await AnswersAsync(tableName, cancellationToken).ConfigureAwait(false)
+            ? await AnswersAsync(table, cancellationToken).ConfigureAwait(false)
             : null;
 
         // The window is read from where it starts: one request, unless it is wider than the most rows
@@ -331,6 +353,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             var take = Math.Min(limit - window.Count, MaxPageSize);
             var request = new QueryRequest
             {
+                Select = select,
                 Filters = filters,
                 OrderBy = orderBy,
                 PageSize = take,

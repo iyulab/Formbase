@@ -20,8 +20,10 @@
   the shape the reference reads). Read in the same statement as the value, so the value and its source
   are the same record; a second query to find it could meet a correction in between. Off by default.
   `Formbase.MorphDb` carries each reference's source as two more MorphDB lookups of the same target
-  row, created with the table: a projection built by an earlier release reports every source as
-  `TargetUnavailable` until it is rebuilt (`POST /formtypes/{type}/projection`).
+  row, created with the table, and reads them only when a query asks for sources — a query that does
+  not names its columns, so MorphDB does not compute the source lookups for it. A projection built by
+  an earlier release reports every source as `TargetUnavailable` until it is rebuilt
+  (`POST /formtypes/{type}/projection`).
 - **`InvalidQueryException.InapplicableMeasures`.** A measure of a column its function does not apply
   to — a sum of text, a bound of a boolean — is refused with the measures named; an undeclared
   measured column is in `UnknownColumns`, as for filters. Text bounds are left out for the reason text
