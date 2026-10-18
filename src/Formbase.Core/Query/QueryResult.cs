@@ -22,4 +22,11 @@ public sealed record QueryResult(
 /// among them: the record's identity is carried by <see cref="Record"/>, and anything else the backing
 /// store keeps is not the caller's to depend on.
 /// </param>
-public sealed record RecordRow(RecordRef Record, IReadOnlyDictionary<string, object?> Fields);
+/// <param name="References">
+/// Where each reference field's value was read from, by field name — present when the query asked
+/// for it (<see cref="QuerySpec.ReferenceSources"/>), else null.
+/// </param>
+public sealed record RecordRow(
+    RecordRef Record,
+    IReadOnlyDictionary<string, object?> Fields,
+    IReadOnlyDictionary<string, ReferenceSource>? References = null);

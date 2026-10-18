@@ -207,9 +207,19 @@ public sealed class SqliteProjectionStore : IProjectionStore
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var columns = await RequireColumnsAsync(connection, tableName, cancellationToken).ConfigureAwait(false);
         var types = columns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
+        if (spec.ReferenceSources)
+        {
+            foreach (var column in columns)
+            {
+                types[ProjectionSystemColumns.SourceDocumentOf(column.Name)] = ColumnType.Uuid;
+                types[ProjectionSystemColumns.SourceKeyOf(column.Name)] = ColumnType.Text;
+                types[ProjectionSystemColumns.SourceAnswersOf(column.Name)] = ColumnType.Integer;
+            }
+        }
 
         await using var command = connection.CreateCommand();
-        var sql = new StringBuilder($"SELECT * FROM {await SourceAsync(connection, tableName, columns, cancellationToken).ConfigureAwait(false)}");
+        var sql = new StringBuilder(
+            $"SELECT * FROM {await SourceAsync(connection, tableName, columns, cancellationToken, spec.ReferenceSources).ConfigureAwait(false)}");
         AppendWhere(sql, command, spec.Filters, types);
 
         if (spec.OrderBy is { Count: > 0 } orderBy)
@@ -350,8 +360,12 @@ public sealed class SqliteProjectionStore : IProjectionStore
     /// identifies on the target, the latest accepted when several match, and null when none does or
     /// the target cannot answer — its table does not exist, or exists without the column read or the
     /// column matched (a target redeclared and not yet rebuilt, or built before the column existed).
+    /// With <paramref name="sources"/>, each reference also selects the target row's document id and
+    /// record key by the same match and order — the row its value is read from — and whether the
+    /// target can answer.
     /// </summary>
-    private static async Task<string> SourceAsync(SqliteConnection connection, string tableName, List<ColumnDef> columns, CancellationToken cancellationToken)
+    private static async Task<string> SourceAsync(
+        SqliteConnection connection, string tableName, List<ColumnDef> columns, CancellationToken cancellationToken, bool sources = false)
     {
         var references = new Dictionary<string, (string Target, string Value, string? Field, bool Record, string Via)>(StringComparer.Ordinal);
         await using (var command = connection.CreateCommand())
@@ -387,10 +401,21 @@ public sealed class SqliteProjectionStore : IProjectionStore
             var answers = targetColumns.Contains(reference.Value) && targetColumns.Contains(matched);
             var via = $"base.{SqliteValues.Quote(reference.Via)}";
             var match = $"target.{SqliteValues.Quote(matched)} = {via}";
-            selected.Add(answers
-                ? $"(SELECT target.{SqliteValues.Quote(reference.Value)} FROM {SqliteValues.Quote(reference.Target)} AS target WHERE {match} " +
-                  $"ORDER BY target.{SqliteValues.Quote(ProjectionSystemColumns.Watermark)} DESC LIMIT 1) AS {SqliteValues.Quote(column.Name)}"
-                : $"NULL AS {SqliteValues.Quote(column.Name)}");
+            string Read(string targetColumn, string alias) => answers
+                ? $"(SELECT target.{SqliteValues.Quote(targetColumn)} FROM {SqliteValues.Quote(reference.Target)} AS target WHERE {match} " +
+                  $"ORDER BY target.{SqliteValues.Quote(ProjectionSystemColumns.Watermark)} DESC LIMIT 1) AS {SqliteValues.Quote(alias)}"
+                : $"NULL AS {SqliteValues.Quote(alias)}";
+
+            selected.Add(Read(reference.Value, column.Name));
+            if (sources)
+            {
+                // The watermark is unique, so the same match and order read the same target row.
+                selected.Add(Read(ProjectionSystemColumns.DocumentId, ProjectionSystemColumns.SourceDocumentOf(column.Name)));
+                selected.Add(targetColumns.Contains(ProjectionSystemColumns.RecordKey)
+                    ? Read(ProjectionSystemColumns.RecordKey, ProjectionSystemColumns.SourceKeyOf(column.Name))
+                    : $"NULL AS {SqliteValues.Quote(ProjectionSystemColumns.SourceKeyOf(column.Name))}");
+                selected.Add($"{(answers ? 1 : 0)} AS {SqliteValues.Quote(ProjectionSystemColumns.SourceAnswersOf(column.Name))}");
+            }
         }
 
         return $"(SELECT {string.Join(", ", selected)} FROM {quoted} AS base) AS {quoted}";

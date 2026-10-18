@@ -29,7 +29,8 @@ internal static class RecordEndpoints
                 "declared column's type, so `filter=total:42` matches a number. Ordering takes a " +
                 "comma-separated column list where a leading `-` reverses that column. Paging is " +
                 "deterministic whether or not the caller orders: the projection's watermark is " +
-                "appended as a final tie-breaker.")
+                "appended as a final tie-breaker. `referenceSources=true` adds, for each reference " +
+                "field, the target record its value was read from and what reading it found.")
             .Produces<RecordQueryResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status409Conflict)
@@ -81,6 +82,7 @@ internal static class RecordEndpoints
         int? limit,
         int? offset,
         string? orderBy,
+        bool? referenceSources,
         CancellationToken cancellationToken)
     {
         if (limit is < 0 || offset is < 0)
@@ -125,7 +127,8 @@ internal static class RecordEndpoints
             filters.Count > 0 ? filters : null,
             limit,
             offset,
-            order.Count > 0 ? order : null);
+            order.Count > 0 ? order : null,
+            referenceSources ?? false);
 
         var result = await engine.QueryAsync(FormTypeRef.Create(type), spec, cancellationToken)
             .ConfigureAwait(false);

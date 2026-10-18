@@ -630,6 +630,21 @@ by either — rows never carry them as fields, and a caller ordering by a name t
 would be depending on an internal.
 - **`limit` / `offset`** — paging is deterministic whether or not the caller orders, because the
   projection's watermark is appended as a final tie-breaker.
+- **`referenceSources=true`** — each row also carries **`references`**: for every reference field,
+  where its value was read from, in the same read as the value.
+
+  ```json
+  "references": {
+    "supplierName": { "target": { "document": "1f0c…", "key": "supplier-7" }, "outcome": "resolved" }
+  }
+  ```
+
+  `outcome` is `resolved` (a target record was found — its field may still be empty, and `target`
+  names it), `noTarget` (the via field is empty or matches no target record; a retired record is not
+  in the target's projection, so it reads as no target too) or `targetUnavailable` (the target's
+  projection does not exist, or is not yet rebuilt into the shape the reference reads — the result
+  is `stale` until it is). `target` is `null` unless `resolved`. Without the parameter, rows carry no
+  `references` at all.
 
 **`stale: true` still carries rows.** An answer a caller knows is from an earlier point in the stream
 is more useful than a refusal; whether it is good enough is theirs to decide.

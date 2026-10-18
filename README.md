@@ -315,6 +315,10 @@ What that call does and does not answer:
   and a via field) is computed when it is read. One declared **without the pair cannot be
   resolved**: it projects empty, and each `ProjectAsync` names those columns in
   `ProjectionResult.UnresolvedReferences`.
+- A query that sets `QuerySpec.ReferenceSources` gets, on each row, where each reference value was
+  read from (`RecordRow.References`): the target record, and whether one was found (`Resolved` —
+  its field may still be empty), none matched (`NoTarget`), or the target could not answer
+  (`TargetUnavailable`) — read with the value, so a value can be cited by its record.
 
 Declaring is deliberately not on this port — it belongs to whichever `IFieldHintSource` you
 registered (see the durable composition below).

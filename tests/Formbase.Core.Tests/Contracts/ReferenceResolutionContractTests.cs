@@ -152,6 +152,114 @@ public abstract class ReferenceResolutionContractTests
         await DropAsync(store);
     }
 
+    private Task<QueryResult> SourcesAsync(FormbaseEngine engine) =>
+        engine.QueryAsync(Orders, new QuerySpec(OrderBy: [new OrderKey("qty")], ReferenceSources: true), Ct);
+
+    // Asked for, each reference says which target record its value is that record's field of — and,
+    // when the value is empty, why: no target record, or a target record whose field is empty.
+    [Fact]
+    public async Task A_reference_says_which_target_record_its_value_was_read_from()
+    {
+        var (engine, store) = Engine(TargetLookup.Field("code"));
+        var keyed = await Accept(engine, Customers, """{"code":"C-1","grade":"A"}""", RecordKey.Create("cust-1"));
+        var own = await Accept(engine, Customers, """{"code":"C-2"}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-1","qty":1}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-2","qty":2}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-9","qty":3}""");
+        await Accept(engine, Orders, """{"qty":4}""");
+        await ProjectBothAsync(engine);
+
+        var rows = (await SourcesAsync(engine)).Rows;
+
+        rows.Select(r => r.Fields["grade_now"]).Should().Equal(new object?[] { "A", null, null, null });
+        rows.Select(r => r.References!["grade_now"]).Should().Equal(
+            new ReferenceSource(new RecordRef(keyed, RecordKey.Create("cust-1")), ReferenceOutcome.Resolved),
+            new ReferenceSource(new RecordRef(own, null), ReferenceOutcome.Resolved),
+            new ReferenceSource(null, ReferenceOutcome.NoTarget),
+            new ReferenceSource(null, ReferenceOutcome.NoTarget));
+        rows.Should().AllSatisfy(r => r.References!.Keys.Should().BeEquivalentTo(["grade_now", "rate_now"]));
+
+        // A correction moves the record to its new document: the source follows the value.
+        var corrected = await Accept(engine, Customers, """{"code":"C-1","grade":"B"}""", RecordKey.Create("cust-1"));
+        await engine.ProjectAsync(Customers, Ct);
+        var first = (await SourcesAsync(engine)).Rows[0];
+        first.Fields["grade_now"].Should().Be("B");
+        first.References!["grade_now"].Target.Should().Be(new RecordRef(corrected, RecordKey.Create("cust-1")));
+
+        // Not asked for, nothing is read about the sources.
+        (await GradesAsync(engine)).Should().HaveCount(4);
+        (await engine.QueryAsync(Orders, QuerySpec.All, Ct)).Rows.Should().AllSatisfy(r => r.References.Should().BeNull());
+
+        await DropAsync(store);
+    }
+
+    [Fact]
+    public async Task When_several_target_records_match_the_source_is_the_one_the_value_was_read_from()
+    {
+        var (engine, store) = Engine(TargetLookup.Field("code"));
+        await Accept(engine, Customers, """{"code":"C-1","grade":"old"}""");
+        var latest = await Accept(engine, Customers, """{"code":"C-1","grade":"new"}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-1","qty":1}""");
+        await ProjectBothAsync(engine);
+
+        var row = (await SourcesAsync(engine)).Rows.Single();
+        row.Fields["grade_now"].Should().Be("new");
+        row.References!["grade_now"].Should().Be(new ReferenceSource(new RecordRef(latest, null), ReferenceOutcome.Resolved));
+
+        await DropAsync(store);
+    }
+
+    [Fact]
+    public async Task A_record_lookup_says_which_record_it_found()
+    {
+        var (engine, store) = Engine(TargetLookup.Record);
+        var keyed = await Accept(engine, Customers, """{"code":"C-1","grade":"A"}""", RecordKey.Create("cust-1"));
+        await Accept(engine, Orders, """{"customer_ref":"cust-1","qty":1}""");
+        await Accept(engine, Orders, """{"customer_ref":"cust-9","qty":2}""");
+        await ProjectBothAsync(engine);
+
+        (await SourcesAsync(engine)).Rows.Select(r => r.References!["grade_now"]).Should().Equal(
+            new ReferenceSource(new RecordRef(keyed, RecordKey.Create("cust-1")), ReferenceOutcome.Resolved),
+            new ReferenceSource(null, ReferenceOutcome.NoTarget));
+
+        await DropAsync(store);
+    }
+
+    // A target with no projection, or one not yet rebuilt into the shape the reference reads, cannot
+    // answer: that is not "no such record", and the source says which.
+    [Fact]
+    public async Task A_target_that_cannot_answer_is_told_apart_from_no_target_record()
+    {
+        var (engine, store, hints) = EngineWithHints(TargetLookup.Field("code"));
+        await Accept(engine, Customers, """{"code":"C-1","grade":"A"}""");
+        await Accept(engine, Orders, """{"customer_ref":"C-1","qty":1}""");
+        await engine.ProjectAsync(Orders, Ct);
+
+        (await SourcesAsync(engine)).Rows.Single().References!["grade_now"]
+            .Should().Be(new ReferenceSource(null, ReferenceOutcome.TargetUnavailable), "the customers were never projected");
+
+        await engine.ProjectAsync(Customers, Ct);
+        hints.Declare(new FormTypeHints(Customers, Customers.Value,
+        [
+            new FieldHint("code", ColumnType.Text),
+            new FieldHint("grade", ColumnType.Text),
+            new FieldHint("tier", ColumnType.Text),
+        ]));
+        hints.Declare(new FormTypeHints(Orders, Orders.Value,
+        [
+            new FieldHint("customer_ref", ColumnType.Text),
+            new FieldHint("qty", ColumnType.Integer),
+            new FieldHint("grade_now", ColumnType.Text, Binding: FieldBinding.Reference,
+                Target: new EntityRef(Customers, "tier", TargetLookup.Field("code"), "customer_ref")),
+        ]));
+        await engine.ProjectAsync(Orders, Ct);
+
+        (await SourcesAsync(engine)).Rows.Single().References!["grade_now"]
+            .Should().Be(new ReferenceSource(null, ReferenceOutcome.TargetUnavailable), "the customers have no tier column yet");
+
+        await DropAsync(store);
+    }
+
     [Fact]
     public async Task When_several_target_records_match_the_latest_accepted_is_read()
     {

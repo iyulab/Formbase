@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+using Formbase.Core.Primitives;
 using Formbase.Core.Query;
 
 namespace Formbase.Host.Contracts;
@@ -25,13 +27,41 @@ public sealed record RecordQueryResponse(
 /// Exactly the declared columns — the projection's own bookkeeping is not part of what a caller
 /// reads, and an internal that leaks here would calcify into their contract.
 /// </param>
+/// <param name="References">
+/// Where each reference field's value was read from, by field name — only when the query asked for it
+/// with <c>referenceSources=true</c>; absent otherwise.
+/// </param>
 public sealed record RecordRowResponse(
     RecordRefResponse Record,
-    IReadOnlyDictionary<string, object?> Fields)
+    IReadOnlyDictionary<string, object?> Fields,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyDictionary<string, ReferenceSourceResponse>? References = null)
 {
     internal static RecordRowResponse From(RecordRow row) =>
-        new(new RecordRefResponse(row.Record.Document.Value, row.Record.Key?.Value), row.Fields);
+        new(
+            RecordRefResponse.From(row.Record),
+            row.Fields,
+            row.References?.ToDictionary(
+                pair => pair.Key,
+                pair => new ReferenceSourceResponse(
+                    pair.Value.Target is { } target ? RecordRefResponse.From(target) : null,
+                    pair.Value.Outcome),
+                StringComparer.Ordinal));
 }
+
+/// <summary>
+/// Where a reference field's value was read from, in the same read as the value.
+/// </summary>
+/// <param name="Target">
+/// The target record the value is that record's field of, as it is now — null unless
+/// <paramref name="Outcome"/> is <c>resolved</c>.
+/// </param>
+/// <param name="Outcome">
+/// <c>resolved</c>: a target record was found (its field may still be empty) · <c>noTarget</c>: the via
+/// field is empty or matches no target record — a retired one included · <c>targetUnavailable</c>: the
+/// target's projection does not exist, or is not yet rebuilt into the shape the reference reads.
+/// </param>
+public sealed record ReferenceSourceResponse(RecordRefResponse? Target, ReferenceOutcome Outcome);
 
 /// <summary>
 /// Which record a row is: the document standing for it now, and the key that names the record across
@@ -45,4 +75,7 @@ public sealed record RecordRowResponse(
 /// The record's key, the same through every correction — or null for a document sent without one,
 /// which is a record of its own and whose document is its identity.
 /// </param>
-public sealed record RecordRefResponse(Guid Document, string? Key);
+public sealed record RecordRefResponse(Guid Document, string? Key)
+{
+    internal static RecordRefResponse From(RecordRef record) => new(record.Document.Value, record.Key?.Value);
+}

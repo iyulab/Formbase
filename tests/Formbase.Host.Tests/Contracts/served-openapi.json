@@ -331,7 +331,7 @@
           "RecordEndpoints"
         ],
         "summary": "Reads a form type\u0027s projected records",
-        "description": "Filters are equality only, one per \u0060filter=column:value\u0060 parameter; the first colon separates the two, so a value may contain colons. Values are compared as the declared column\u0027s type, so \u0060filter=total:42\u0060 matches a number. Ordering takes a comma-separated column list where a leading \u0060-\u0060 reverses that column. Paging is deterministic whether or not the caller orders: the projection\u0027s watermark is appended as a final tie-breaker.",
+        "description": "Filters are equality only, one per \u0060filter=column:value\u0060 parameter; the first colon separates the two, so a value may contain colons. Values are compared as the declared column\u0027s type, so \u0060filter=total:42\u0060 matches a number. Ordering takes a comma-separated column list where a leading \u0060-\u0060 reverses that column. Paging is deterministic whether or not the caller orders: the projection\u0027s watermark is appended as a final tie-breaker. \u0060referenceSources=true\u0060 adds, for each reference field, the target record its value was read from and what reading it found.",
         "operationId": "QueryRecords",
         "parameters": [
           {
@@ -371,6 +371,13 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "referenceSources",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -1349,6 +1356,45 @@
           },
           "fields": {
             "type": "object"
+          },
+          "references": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ReferenceSourceResponse"
+            }
+          }
+        }
+      },
+      "ReferenceOutcome": {
+        "enum": [
+          "resolved",
+          "noTarget",
+          "targetUnavailable"
+        ],
+        "description": "What reading a reference found."
+      },
+      "ReferenceSourceResponse": {
+        "required": [
+          "target",
+          "outcome"
+        ],
+        "type": "object",
+        "properties": {
+          "target": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RecordRefResponse"
+              }
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReferenceOutcome"
           }
         }
       },

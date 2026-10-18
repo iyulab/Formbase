@@ -46,6 +46,13 @@ public interface IProjectionStore
     /// (text, or null or absent for a document that is a record of its own). Every
     /// <see cref="FieldFilter"/> applies; the caller has already checked that each operator applies to
     /// its column's type and coerced each value to it.
+    /// <para>
+    /// When <see cref="QuerySpec.ReferenceSources"/> is set, each reference column also comes with
+    /// where its value was read from, under <see cref="Projection.ProjectionSystemColumns.SourceDocumentOf"/>,
+    /// <see cref="Projection.ProjectionSystemColumns.SourceKeyOf"/> and
+    /// <see cref="Projection.ProjectionSystemColumns.SourceAnswersOf"/> — read from the same target row
+    /// as the value, in the same statement, so the value and its source cannot come from two rows.
+    /// </para>
     /// </summary>
     Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default);
 

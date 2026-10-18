@@ -51,7 +51,7 @@ public sealed class RecordQuery : IRecordQuery
             throw new ProjectionUnavailableException(type, ex);
         }
 
-        return new QueryResult(Shape(rows, schema), stale);
+        return new QueryResult(Shape(rows, schema, spec.ReferenceSources), stale);
     }
 
     public async Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
@@ -206,8 +206,9 @@ public sealed class RecordQuery : IRecordQuery
     /// the key set holds unconditionally.
     /// </summary>
     private static List<RecordRow> Shape(
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, TableSchema schema)
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, TableSchema schema, bool referenceSources)
     {
+        var references = referenceSources ? schema.Columns.Where(c => c.Reference is not null).ToList() : null;
         var shaped = new List<RecordRow>(rows.Count);
         foreach (var row in rows)
         {
@@ -217,10 +218,39 @@ public sealed class RecordQuery : IRecordQuery
                 fields[column.Name] = row.TryGetValue(column.Name, out var value) ? value : null;
             }
 
-            shaped.Add(new RecordRow(IdentityOf(row), fields));
+            shaped.Add(new RecordRow(
+                IdentityOf(row),
+                fields,
+                references?.ToDictionary(c => c.Name, c => SourceOf(row, c.Name), StringComparer.Ordinal)));
         }
 
         return shaped;
+    }
+
+    /// <summary>
+    /// Where a reference field's value was read from, from the source columns the store answered
+    /// beside it. A store that left them out answered nothing about the source, which is read as a
+    /// target that could not answer rather than as no target — the weaker claim.
+    /// </summary>
+    private static ReferenceSource SourceOf(IReadOnlyDictionary<string, object?> row, string column)
+    {
+        var answers = row.GetValueOrDefault(ProjectionSystemColumns.SourceAnswersOf(column)) switch
+        {
+            bool flag => flag,
+            long number => number != 0,
+            int number => number != 0,
+            _ => false,
+        };
+        if (!answers)
+        {
+            return new ReferenceSource(null, ReferenceOutcome.TargetUnavailable);
+        }
+
+        return row.GetValueOrDefault(ProjectionSystemColumns.SourceDocumentOf(column)) is null
+            ? new ReferenceSource(null, ReferenceOutcome.NoTarget)
+            : new ReferenceSource(
+                IdentityOf(row, ProjectionSystemColumns.SourceDocumentOf(column), ProjectionSystemColumns.SourceKeyOf(column)),
+                ReferenceOutcome.Resolved);
     }
 
     /// <summary>
@@ -230,25 +260,28 @@ public sealed class RecordQuery : IRecordQuery
     /// is a record of its own. A row without a document id is a store that broke its contract; reading
     /// it as some other record would hand the caller a wrong identity, so it is refused.
     /// </summary>
-    private static RecordRef IdentityOf(IReadOnlyDictionary<string, object?> row)
+    private static RecordRef IdentityOf(IReadOnlyDictionary<string, object?> row) =>
+        IdentityOf(row, ProjectionSystemColumns.DocumentId, ProjectionSystemColumns.RecordKey);
+
+    private static RecordRef IdentityOf(IReadOnlyDictionary<string, object?> row, string documentColumn, string keyColumn)
     {
-        var document = row.TryGetValue(ProjectionSystemColumns.DocumentId, out var id) ? id : null;
+        var document = row.TryGetValue(documentColumn, out var id) ? id : null;
         var documentId = document switch
         {
             Guid guid => DocumentId.From(guid),
             string text when Guid.TryParse(text, out var parsed) => DocumentId.From(parsed),
             _ => throw new InvalidOperationException(
-                $"A projected row came back without a readable '{ProjectionSystemColumns.DocumentId}' " +
+                $"A projected row came back without a readable '{documentColumn}' " +
                 $"(read '{document ?? "null"}'); every projected row carries the document it was mapped from."),
         };
 
-        var key = row.TryGetValue(ProjectionSystemColumns.RecordKey, out var held) ? held : null;
+        var key = row.TryGetValue(keyColumn, out var held) ? held : null;
         return new RecordRef(documentId, key switch
         {
             null => null,
             string text => RecordKey.Create(text),
             _ => throw new InvalidOperationException(
-                $"A projected row's '{ProjectionSystemColumns.RecordKey}' is not text (read a {key.GetType().Name})."),
+                $"A projected row's '{keyColumn}' is not text (read a {key.GetType().Name})."),
         });
     }
 

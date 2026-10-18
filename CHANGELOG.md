@@ -12,6 +12,13 @@
   `decimal` from every store and exact — SQLite adds decimals as decimals, not as floating point; a
   group with no values gets `null`, not `0`. Read in the same read as the count, so the records behind
   a group (`RecordsPerGroup`, `RecordsOf`) are the records its measures are computed from.
+- **A reference value says which record it was read from.** `QuerySpec.ReferenceSources` (HTTP
+  `referenceSources=true`) adds `RecordRow.References`: for each reference field, a `ReferenceSource`
+  — the target `RecordRef` the value is that record's field of, and a `ReferenceOutcome`: `Resolved`
+  (found; the field may still be empty), `NoTarget` (the via field is empty or matches nothing — a
+  retired record included) or `TargetUnavailable` (the target's projection is missing or not yet in
+  the shape the reference reads). Read in the same statement as the value, so the value and its source
+  are the same record; a second query to find it could meet a correction in between. Off by default.
 - **`InvalidQueryException.InapplicableMeasures`.** A measure of a column its function does not apply
   to — a sum of text, a bound of a boolean — is refused with the measures named; an undeclared
   measured column is in `UnknownColumns`, as for filters. Text bounds are left out for the reason text

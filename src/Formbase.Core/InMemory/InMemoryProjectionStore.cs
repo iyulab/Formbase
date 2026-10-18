@@ -91,7 +91,7 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         lock (_gate)
         {
             var table = Require(tableName);
-            IEnumerable<Dictionary<string, object?>> query = Resolved(table);
+            IEnumerable<Dictionary<string, object?>> query = Resolved(table, spec.ReferenceSources);
 
             if (spec.Filters is { Count: > 0 } filters)
             {
@@ -158,10 +158,11 @@ public sealed class InMemoryProjectionStore : IProjectionStore
     /// <summary>
     /// The table's rows with each reference column computed from its target table as it stands now —
     /// the row the via column identifies, the latest accepted when several match, null when none does
-    /// or the target table does not exist. Filters, orders and groups then read the computed value
-    /// like any other.
+    /// or the target cannot answer — its table does not exist, or was built without the column read or
+    /// the column matched. Filters, orders and groups then read the computed value like any other.
+    /// With <paramref name="sources"/>, each reference also carries the target row it was read from.
     /// </summary>
-    private List<Dictionary<string, object?>> Resolved(Table table)
+    private List<Dictionary<string, object?>> Resolved(Table table, bool sources = false)
     {
         var references = table.Schema.Columns.Where(c => c.Reference is not null).ToList();
         if (references.Count == 0)
@@ -173,17 +174,33 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         foreach (var column in references)
         {
             var reference = column.Reference!;
-            _tables.TryGetValue(reference.TargetTable, out var target);
+            var target = _tables.TryGetValue(reference.TargetTable, out var found) && Answers(found, reference) ? found : null;
             foreach (var row in rows)
             {
-                row[column.Name] = target is null ? null : Read(target, reference, row.GetValueOrDefault(reference.ViaColumn));
+                var read = target is null ? null : Read(target, reference, row.GetValueOrDefault(reference.ViaColumn));
+                row[column.Name] = read?.GetValueOrDefault(reference.ValueColumn);
+                if (sources)
+                {
+                    row[ProjectionSystemColumns.SourceDocumentOf(column.Name)] = read?.GetValueOrDefault(ProjectionSystemColumns.DocumentId);
+                    row[ProjectionSystemColumns.SourceKeyOf(column.Name)] = read?.GetValueOrDefault(ProjectionSystemColumns.RecordKey);
+                    row[ProjectionSystemColumns.SourceAnswersOf(column.Name)] = target is not null;
+                }
             }
         }
 
         return rows;
     }
 
-    private static object? Read(Table target, ReferenceDef reference, object? via)
+    /// <summary>Whether <paramref name="target"/> was built with the column a reference reads and the column it matches.</summary>
+    private static bool Answers(Table target, ReferenceDef reference)
+    {
+        var matched = reference.Lookup is TargetLookup.FieldLookup field ? field.Name : ProjectionSystemColumns.Record;
+        return target.Schema.Columns.Any(c => c.Name == reference.ValueColumn)
+            && target.Schema.Columns.Any(c => c.Name == matched);
+    }
+
+    /// <summary>The target row <paramref name="via"/> identifies — the latest accepted when several do — or null.</summary>
+    private static Dictionary<string, object?>? Read(Table target, ReferenceDef reference, object? via)
     {
         if (via is null)
         {
@@ -200,7 +217,7 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             }
         }
 
-        return latest?.GetValueOrDefault(reference.ValueColumn);
+        return latest;
     }
 
     /// <summary>
