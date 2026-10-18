@@ -46,16 +46,16 @@ public static class ProjectionSystemColumns
     /// (<see cref="Query.QuerySpec.ReferenceSources"/>): the target row's document id, or null when no
     /// target row was read. Never stored — a store computes it with the reference, from the same row.
     /// </summary>
-    public static string SourceDocumentOf(string referenceColumn) => "fb_src_doc:" + referenceColumn;
+    public static string SourceDocumentOf(string referenceColumn) => "fb_src_doc__" + referenceColumn;
 
     /// <summary>The target row's record key, beside <see cref="SourceDocumentOf"/>; null for a record of its own.</summary>
-    public static string SourceKeyOf(string referenceColumn) => "fb_src_key:" + referenceColumn;
+    public static string SourceKeyOf(string referenceColumn) => "fb_src_key__" + referenceColumn;
 
     /// <summary>
     /// Whether the target can answer the reference at all — its table exists with the column read and
     /// the column matched — beside <see cref="SourceDocumentOf"/>: a boolean, or an integer 1 or 0.
     /// </summary>
-    public static string SourceAnswersOf(string referenceColumn) => "fb_src_ans:" + referenceColumn;
+    public static string SourceAnswersOf(string referenceColumn) => "fb_src_ans__" + referenceColumn;
 
     /// <summary>The <see cref="Record"/> value of a document: its key, else its document id in canonical form.</summary>
     public static string RecordOf(Primitives.DocumentId document, Primitives.RecordKey? key) =>

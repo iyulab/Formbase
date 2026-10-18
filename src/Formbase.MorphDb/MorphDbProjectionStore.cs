@@ -54,13 +54,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         {
             Name = schema.TableName,
             Columns = schema.Columns
-                .Select(c => new CreateColumnRequest
-                {
-                    Name = c.Name,
-                    Type = MorphDbTypeMap.ToMorphType(c.Type),
-                    Nullable = c.Nullable,
-                    Lookup = c.Reference is { } reference ? Lookup(reference) : null,
-                })
+                .SelectMany(c => c.Reference is { } reference
+                    ? [Column(c.Name, c.Type, c.Nullable, Lookup(reference, reference.ValueColumn)), .. SourceColumns(c.Name, reference)]
+                    : new[] { Column(c.Name, c.Type, c.Nullable, lookup: null) })
                 .ToList(),
         };
 
@@ -87,15 +83,69 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// the target's projection state — rather than refusing this table or failing its reads.
     /// </para>
     /// </summary>
-    private static LookupConfig Lookup(ReferenceDef reference) => new()
+    private static LookupConfig Lookup(ReferenceDef reference, string targetColumn) => new()
     {
         RelationColumn = reference.ViaColumn,
         TargetTable = reference.TargetTable,
-        TargetColumn = reference.ValueColumn,
+        TargetColumn = targetColumn,
         MatchColumn = reference.Lookup is TargetLookup.FieldLookup field ? field.Name : ProjectionSystemColumns.Record,
         OrderBy = $"{ProjectionSystemColumns.Watermark} desc",
         WhenTargetMissing = "null",
     };
+
+    private static CreateColumnRequest Column(string name, ColumnType type, bool nullable, LookupConfig? lookup) => new()
+    {
+        Name = name,
+        Type = MorphDbTypeMap.ToMorphType(type),
+        Nullable = nullable,
+        Lookup = lookup,
+    };
+
+    /// <summary>
+    /// Where a reference's value is read from, as two more lookups of the same target row — same
+    /// match, same order, so the row whose value is read is the row whose document and key are — under
+    /// the names a query asking for sources reads (<see cref="QuerySpec.ReferenceSources"/>). A lookup
+    /// returns one column, so the record's two halves take one each.
+    /// </summary>
+    private static IEnumerable<CreateColumnRequest> SourceColumns(string column, ReferenceDef reference) =>
+    [
+        Column(ProjectionSystemColumns.SourceDocumentOf(column), ColumnType.Uuid, nullable: true, Lookup(reference, ProjectionSystemColumns.DocumentId)),
+        Column(ProjectionSystemColumns.SourceKeyOf(column), ColumnType.Text, nullable: true, Lookup(reference, ProjectionSystemColumns.RecordKey)),
+    ];
+
+    /// <summary>
+    /// Whether each reference's target can answer, by reference column — what the lookups cannot say,
+    /// since a lookup into a target that is missing, or lacks a column, reads null as a lookup that
+    /// matched nothing does. Asked of the target's table as it stands when the query is read. A table
+    /// built before it carried the source lookups has no entry: its sources are not known.
+    /// </summary>
+    private async Task<Dictionary<string, bool>> AnswersAsync(string tableName, CancellationToken cancellationToken)
+    {
+        var table = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+        var columns = table?.Columns ?? [];
+        var targets = new Dictionary<string, TableInfo?>(StringComparer.Ordinal);
+        var answers = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var value in columns.Where(c => c.Lookup is not null))
+        {
+            if (!columns.Any(c => c.Name == ProjectionSystemColumns.SourceDocumentOf(value.Name)))
+            {
+                continue;
+            }
+
+            var lookup = value.Lookup!;
+            if (!targets.TryGetValue(lookup.TargetTable, out var target))
+            {
+                target = await _client.Schema.GetTableAsync(lookup.TargetTable, cancellationToken).ConfigureAwait(false);
+                targets[lookup.TargetTable] = target;
+            }
+
+            answers[value.Name] = target is not null
+                && target.Columns.Any(c => c.Name == lookup.TargetColumn)
+                && target.Columns.Any(c => c.Name == lookup.MatchColumn);
+        }
+
+        return answers;
+    }
 
     /// <summary>
     /// The rows as MorphDB takes them: without the columns it computes. A projected row carries every
@@ -268,6 +318,10 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             ? specOrder.Select(k => new OrderBy(k.Column, ascending: !k.Descending)).ToList()
             : [];
 
+        var answers = spec.ReferenceSources
+            ? await AnswersAsync(tableName, cancellationToken).ConfigureAwait(false)
+            : null;
+
         // The window is read from where it starts: one request, unless it is wider than the most rows
         // MorphDB returns at once, in which case each further request starts where the last one ended.
         var window = new List<IReadOnlyDictionary<string, object?>>(Math.Min(limit, MaxPageSize));
@@ -287,8 +341,16 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 .QueryAsync(tableName, request, cancellationToken)
                 .ConfigureAwait(false);
 
-            window.AddRange(paged.Data
-                .Select(record => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>(record.Data, StringComparer.Ordinal)));
+            window.AddRange(paged.Data.Select(record =>
+            {
+                var row = new Dictionary<string, object?>(record.Data, StringComparer.Ordinal);
+                foreach (var (column, answer) in answers ?? [])
+                {
+                    row[ProjectionSystemColumns.SourceAnswersOf(column)] = answer;
+                }
+
+                return (IReadOnlyDictionary<string, object?>)row;
+            }));
 
             // Fewer rows than asked for means the table ran out — asking again would only read nothing.
             if (paged.Data.Count < take)
