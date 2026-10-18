@@ -26,10 +26,13 @@ namespace Formbase.Core.Projection;
 /// own reasons via <see cref="Skipped"/>.
 /// </param>
 /// <param name="UnresolvedReferences">
-/// Declared columns whose <see cref="Schema.FieldBinding.Reference"/> binding the engine did not
-/// resolve, in declared order. A reference reads true *now*, which the engine cannot yet evaluate,
-/// so the column is left empty rather than filled with the document's own fixed-then copy — and
-/// named here, because leaving it empty without saying so is the same silence in a quieter form.
+/// Declared <see cref="Schema.FieldBinding.Reference"/> columns that cannot be computed, in declared
+/// order: those whose target names no way to find its record (no lookup and via field on the
+/// <see cref="Schema.EntityRef"/>). A reference with that pair is computed by the store when the row is
+/// read and never appears here. One without it reads empty rather than the document's own fixed-then
+/// copy — and is named here, because leaving it empty without saying so is the same silence in a
+/// quieter form. A declaration-level fact: the list is the same on every run until the declaration
+/// changes.
 /// </param>
 /// <param name="ProjectedWatermark">The raw-stream watermark the run projected up to.</param>
 public sealed record ProjectionResult(

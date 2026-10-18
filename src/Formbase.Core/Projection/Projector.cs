@@ -200,9 +200,10 @@ public sealed class Projector : IProjector
 
     /// <summary>
     /// The proposed schema with the system columns added, keeping the declared relations and version —
-    /// the store must receive the full declaration, not just the column list. An unresolved reference
-    /// column is relaxed to nullable on the way: the engine leaves it empty, so carrying the declared NOT
-    /// NULL through would have the store reject every row the engine itself emptied. The declaration is
+    /// the store must receive the full declaration, not just the column list. A reference column is
+    /// relaxed to nullable on the way: its value is computed when the row is read (or, without a lookup,
+    /// never), so the projected row carries nothing for it, and carrying the declared NOT NULL through
+    /// would have the store reject every row the engine itself left empty. The declaration is
     /// unchanged — only the physical column this stage can honor.
     /// </summary>
     private static TableSchema PhysicalSchema(TableSchema schema) => schema with

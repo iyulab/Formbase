@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- **The API docs no longer say a reference is not resolved.** `FieldBinding`, `FieldBinding.Reference`,
+  `ProjectionResult.UnresolvedReferences` and the HTTP projection contract still described the
+  `Reference` binding as declared but not executed. Since 0.21.0 every projection store computes a
+  reference when the row is read — in query rows, filters, ordering and aggregate groups — provided
+  its `EntityRef` carries a lookup and a via field; `UnresolvedReferences` names only the reference
+  columns declared without that pair. The docs now say so. Behaviour is unchanged.
+
 ## 0.22.0
 
 A minor. Pairs with MorphDB `0.19.x` (was `0.18.x`): MorphDB enforces row-level security in

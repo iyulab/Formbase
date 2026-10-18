@@ -23,8 +23,10 @@ namespace Formbase.Host.Contracts;
 /// conflates the two, and these counts are what makes the conflation visible.
 /// </param>
 /// <param name="UnresolvedReferences">
-/// Declared columns left empty because their binding could not be resolved. Named rather than
-/// silently blank: an empty column with no explanation reads as absent data.
+/// Declared reference columns that cannot be computed because their target names no way to find its
+/// record (no lookup and via field) — they read empty. A reference with that pair is computed when it
+/// is read and is not listed. Named rather than silently blank: an empty column with no explanation
+/// reads as absent data.
 /// </param>
 /// <param name="NotProjectedReason">
 /// Why nothing was built, when <see cref="Projected"/> is false; null when it is true. The four
