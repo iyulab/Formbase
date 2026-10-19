@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Pairs with MorphDB `0.21.x` (was `0.19.x`). Formbase's own behaviour and API are unchanged, and a
+bundle volume from 0.23.0 starts on the new MorphDB image with no step to run.
+
+### Dependencies
+
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.21.0** (was 0.19.0). The client calls Formbase
+  makes keep their shape; the client's breaking changes in 0.20.0 and 0.21.0 are to views,
+  transactions and JSON import options, which Formbase does not use. The bundle and the live
+  fixtures run the MorphDB `0.21.0` image.
+
 ## 0.23.0
 
 A minor. Still pairs with MorphDB `0.19.x` (`MorphDB.Client` 0.19.0, the bundle and the live
