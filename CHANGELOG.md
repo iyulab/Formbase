@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.23.0** (was 0.22.0), and the bundle and the live
+  fixtures run the MorphDB `0.23.0` image. The client is unchanged; MorphDB 0.23.0's wire changes are to
+  GraphQL, OData and values a fixed set of choices does not hold, which Formbase does not use. A REST
+  list read without an order now comes earliest first, so the paged reads Formbase makes to find records
+  by a field's value hold every matching row once.
+
 ## 0.25.0
 
 A minor. Pairs with MorphDB `0.22.x` (was `0.21.x`), which closes security defects of MorphDB `0.21.x`:
