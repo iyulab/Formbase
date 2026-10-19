@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.25.0
+
+A minor. Pairs with MorphDB `0.22.x` (was `0.21.x`), which closes security defects of MorphDB `0.21.x`:
+a caller of one project could reach another project's schema objects and webhook dead letters by id,
+and any issued secret could read the service's diagnostics. The bundle runs the MorphDB `0.22.0` image —
+upgrading a bundle picks those fixes up. Formbase's own behaviour and API are unchanged, and a bundle
+volume from 0.24.0 starts on the new MorphDB image with no step to run.
+
+### Dependencies
+
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.22.0** (was 0.21.0). The client calls Formbase
+  makes keep their shape; the client's breaking changes in 0.22.0 are to webhook models, xlsx export
+  options and column routes, which Formbase does not use. The bundle and the live fixtures run the
+  MorphDB `0.22.0` image.
+
 ## 0.24.0
 
 A minor. Pairs with MorphDB `0.21.x` (was `0.19.x`). Formbase's own behaviour and API are unchanged, and a
