@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.24.0
 
-Pairs with MorphDB `0.21.x` (was `0.19.x`). Formbase's own behaviour and API are unchanged, and a
+A minor. Pairs with MorphDB `0.21.x` (was `0.19.x`). Formbase's own behaviour and API are unchanged, and a
 bundle volume from 0.23.0 starts on the new MorphDB image with no step to run.
 
 ### Dependencies
