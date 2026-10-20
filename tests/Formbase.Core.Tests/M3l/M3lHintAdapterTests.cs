@@ -94,7 +94,7 @@ public class M3lHintAdapterTests
         var result = M3lHintAdapter.Adapt(FormWithRelationsSection);
 
         var relationGaps = result.Gaps
-            .Where(g => g.Model == "Inspection" && g.Construct.StartsWith("relations section:", StringComparison.Ordinal))
+            .Where(g => g.Declaration == "Inspection" && g.Construct.StartsWith("relations section:", StringComparison.Ordinal))
             .ToList();
         relationGaps.Should().HaveCount(3, "one gap per entry of the section");
         relationGaps.Should().OnlyContain(g => g.Kind == VocabularyGapKind.Unresolved && g.Field == null);
@@ -440,9 +440,9 @@ public class M3lHintAdapterTests
 
         result.Hints.Single(h => h.TableName == "customer").Fields.Select(f => f.Name).Should().Equal("tier");
         result.Gaps.Should().Contain(g =>
-            g.Model == "Customer" && g.Field == null && g.Construct == "aspect of Party");
+            g.Declaration == "Customer" && g.Field == null && g.Construct == "aspect of Party");
         result.Gaps.Should().Contain(g =>
-            g.Model == "Vendor" && g.Field == null && g.Construct == "subtype of Party");
+            g.Declaration == "Vendor" && g.Field == null && g.Construct == "subtype of Party");
     }
 
     [Fact]
@@ -450,7 +450,7 @@ public class M3lHintAdapterTests
     {
         var result = M3lHintAdapter.Adapt(OwnedAndComposedForm);
 
-        result.Gaps.Where(g => g.Construct == "owner acme").Select(g => g.Model)
+        result.Gaps.Where(g => g.Construct == "owner acme").Select(g => g.Declaration)
             .Should().BeEquivalentTo("Party", "Customer", "Vendor");
         result.Hints.Single(h => h.TableName == "party").Type.Value.Should().Be("party",
             "the form type is still the bare model name — that is the loss being measured");

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`Formbase.Formdown` — a new package for forms written in formdown.** `FormdownAdapter.AdaptSchema`
+  turns the JSON formdown core's `getSchema()` returns into the form type's `FormTypeHints`: one field
+  per data field in form order (buttons are not fields), required fields not nullable, types from the
+  input — a number input is `Integer` unless its step or minimum admits fractions, a checkbox group is
+  `Jsonb`, a single checkbox or toggle `Boolean`, a date `Timestamp`, a time, month or week `Text`.
+  `FormdownAdapter.AdaptData` turns a filled form into a document typed by those hints: formdown hands
+  values over as text, so a number field's text becomes a JSON number and an empty number or date field
+  becomes null; text that is not a plain invariant number is kept as sent, so the projection reports it
+  instead of storing a misread value. What the hints cannot carry — a written label, an option list, a
+  validation rule, a formula — is reported as a `VocabularyGap`. No package dependencies beyond
+  `Formbase.Core`; trim- and AOT-compatible.
+- **`VocabularyGap` and `VocabularyGapKind` are in `Formbase.Core.Schema`**, shared by every input
+  adapter. They were part of the unpackaged M3L adapter; its property `Model` is now `Declaration`.
+
 ## 0.27.0
 
 A minor. Pairs with MorphDB `0.24.x`. A repeated block inside one form — the lines of an order, the

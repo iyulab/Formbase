@@ -64,6 +64,7 @@ dotnet add package Formbase.MorphDb              # IProjectionStore over MorphDB
 dotnet add package Formbase.Postgres             # durable raw store, projection state, field hints
 dotnet add package Formbase.SchemaIntelligence   # optional: LLM-backed ISchemaProposer
 dotnet add package Formbase.Sqlite               # raw store, projection store, state and hints in one file — no database server
+dotnet add package Formbase.Formdown             # optional: formdown forms in — a getSchema() result to field hints, filled forms to typed documents
 dotnet add package Microsoft.Extensions.DependencyInjection  # the container the quick start builds; skip it if your host already has one
 ```
 
@@ -251,6 +252,50 @@ var after = await engine.QueryAsync(inspections, new QuerySpec());
 `TargetLookup.Field("code")` finds the target by one of its declared fields instead of its record key.
 A reference declared without the lookup pair cannot be computed and projects empty (see
 [Reading a declaration back](#reading-a-declaration-back)).
+
+### A formdown form in
+
+`Formbase.Formdown` takes a form written in [formdown](https://github.com/iyulab/formdown): the
+schema formdown core's `getSchema()` returns becomes the form type's declaration, and a filled form —
+whose values formdown hands over as text — becomes a document typed by that declaration. What the
+declaration has no slot for (labels, option lists, ranges, patterns, formulas) comes back as gaps
+instead of being dropped silently.
+
+<!-- snippet: compile packages="Formbase.Core Formbase.DependencyInjection Formbase.Formdown Microsoft.Extensions.DependencyInjection" -->
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Formbase.Core;
+using Formbase.Core.InMemory;
+using Formbase.Core.Primitives;
+using Formbase.Core.Query;
+using Formbase.Formdown;
+
+var services = new ServiceCollection();
+services.AddFormbaseInMemory();
+await using var provider = services.BuildServiceProvider();
+
+var engine = provider.GetRequiredService<FormbaseEngine>();
+var hints  = provider.GetRequiredService<InMemoryFieldHintSource>();
+
+var inspection = FormTypeRef.Create("inspection");
+
+// 1) The schema getSchema() returned for the form, read as JSON — formdown's parser stays the only one.
+var schema = FormdownAdapter.AdaptSchema("""
+    {"lot":{"type":"text","required":true},
+     "qty":{"type":"number","validation":{"min":0}},
+     "result":{"type":"radio","options":[{"value":"pass"},{"value":"fail"}]}}
+    """, inspection, "inspections");
+hints.Declare(schema.Hints);
+// schema.Gaps -> what the declaration cannot carry: min=0 on qty, the options of result
+
+// 2) A filled form: its values arrive as text, and are typed by the declaration.
+await engine.AcceptAsync(inspection, FormdownAdapter.AdaptData(
+    """{"lot":"L-1","qty":"12","result":"pass"}""", schema.Hints));
+await engine.ProjectAsync(inspection);
+
+var rows = (await engine.QueryAsync(inspection, QuerySpec.All)).Rows;
+// rows[0].Fields["qty"] -> 12, a number the projection can sum
+```
 
 ## Architecture
 
@@ -455,7 +500,7 @@ Known gaps (audited 2026-07-20 against Formology):
 Planned (later stages, each its own effort):
 
 - **Ontology layer** — proposals that read structure a form already declares, growing from the `ISchemaProposer` seam
-- Input adapters (M3L and others) that produce `FormType` + `Document` — the `Formbase.M3L` spike now fills the vocabulary axes it once measured as gaps; productizing it is a separate decision
+- More input adapters that produce `FormType` + `Document` — `Formbase.Formdown` ships for formdown forms; the `Formbase.M3L` spike now fills the vocabulary axes it once measured as gaps, and productizing it is a separate decision
 - Non-blocking re-projection
 
 ## License

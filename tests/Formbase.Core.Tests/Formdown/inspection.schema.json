@@ -1,0 +1,204 @@
+{
+  "lot_no": {
+    "type": "text",
+    "label": "로트 번호",
+    "required": true,
+    "position": 1,
+    "validation": {
+      "maxlength": 50
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "inspected_on": {
+    "type": "date",
+    "label": "Inspected On",
+    "required": true,
+    "position": 2,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "qty": {
+    "type": "number",
+    "label": "Qty",
+    "position": 3,
+    "validation": {
+      "min": 0
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "unit_price": {
+    "type": "number",
+    "label": "Unit Price",
+    "position": 4,
+    "validation": {
+      "step": 0.01
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "total": {
+    "type": "number",
+    "label": "Total",
+    "position": 5,
+    "compute": "qty * unit_price",
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "passed": {
+    "type": "checkbox",
+    "label": "Passed",
+    "position": 6,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "result": {
+    "type": "radio",
+    "label": "Result",
+    "position": 7,
+    "options": [
+      {
+        "value": "pass",
+        "label": "합격"
+      },
+      {
+        "value": "fail",
+        "label": "불합격"
+      }
+    ],
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "defects": {
+    "type": "checkbox",
+    "label": "Defects",
+    "position": 8,
+    "options": [
+      {
+        "value": "scratch"
+      },
+      {
+        "value": "dent"
+      },
+      {
+        "value": "stain"
+      }
+    ],
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "grade": {
+    "type": "select",
+    "label": "Grade",
+    "position": 9,
+    "options": [
+      {
+        "value": "A"
+      },
+      {
+        "value": "B"
+      },
+      {
+        "value": "C"
+      }
+    ],
+    "allowOther": true,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "note": {
+    "type": "textarea",
+    "label": "Note",
+    "position": 10,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "shift_start": {
+    "type": "time",
+    "label": "Shift Start",
+    "position": 11,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "photo": {
+    "type": "file",
+    "label": "Photo",
+    "position": 12,
+    "validation": {
+      "accept": "image/*"
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "lotCode": {
+    "type": "text",
+    "label": "Lot Code",
+    "position": 13,
+    "pattern": "^[A-Z]{2}-\\d+$",
+    "validation": {
+      "pattern": "^[A-Z]{2}-\\d+$"
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "supplier": {
+    "type": "text",
+    "label": "Supplier",
+    "position": 14,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  },
+  "send": {
+    "type": "submit",
+    "label": "Send",
+    "position": 15,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-검사"
+  }
+}

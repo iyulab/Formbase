@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.Formdown</RootNamespace>
+    <Description>formdown input adapter for formbase — turns a formdown schema (getSchema() JSON) into field hints and formdown form data into typed documents, and reports what the hint vocabulary cannot carry.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Formbase.Core.Tests" />
+  </ItemGroup>
+
+</Project>

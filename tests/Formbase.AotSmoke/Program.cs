@@ -2,12 +2,13 @@ using Formbase.Core;
 using Formbase.Core.Primitives;
 using Formbase.Core.Query;
 using Formbase.Core.Schema;
+using Formbase.Formdown;
 using Formbase.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 // The local single-file path end to end under Native AOT: documents into SQLite, a declaration with a
 // bound field and a relation stored and read back, a projection, a query, and an aggregate with the
-// records behind each count — then the MorphDB projection store against a stub server (MorphDbPath).
+// records behind each count, a formdown form adapted in — then the MorphDB projection store against a stub server (MorphDbPath).
 // A path that still needs reflection throws here, so the process exits
 // non-zero and the publish-and-run step fails.
 
@@ -58,6 +59,17 @@ try
         var counts = await engine.AggregateAsync(inspection, new AggregateSpec(GroupBy: ["result"], RecordsPerGroup: 2));
         var ok = counts.Groups.Single(g => Equals(g.Key["result"], "ok"));
         Check(ok.Count == 2 && ok.Records is [var x, var y] && x == keyed && y == keyless, "aggregate records");
+
+        // A formdown form in: its schema to a declaration, a filled form's text values to typed ones.
+        var checkup = FormTypeRef.Create("checkup");
+        var adapted = FormdownAdapter.AdaptSchema(
+            """{"lot":{"type":"text","required":true,"position":1},"qty":{"type":"number","position":2}}""",
+            checkup, "checkup_rows");
+        await hints.DeclareAsync(adapted.Hints);
+        await engine.AcceptAsync(checkup, FormdownAdapter.AdaptData("""{"lot":"L-1","qty":"12"}""", adapted.Hints));
+        await engine.ProjectAsync(checkup);
+        var sum = await engine.AggregateAsync(checkup, new AggregateSpec(Measures: [AggregateMeasure.Sum("qty")]));
+        Check(sum.Groups is [{ Measures: [{ Value: 12m }] }], "formdown form typed and summed");
     }
 
     await MorphDbPath.RunAsync();

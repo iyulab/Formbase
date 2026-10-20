@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\Formbase.Sqlite\Formbase.Sqlite.csproj" />
     <ProjectReference Include="..\..\src\Formbase.MorphDb\Formbase.MorphDb.csproj" />
     <ProjectReference Include="..\..\src\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
+    <ProjectReference Include="..\..\src\Formbase.Formdown\Formbase.Formdown.csproj" />
   </ItemGroup>
 
   <ItemGroup>
