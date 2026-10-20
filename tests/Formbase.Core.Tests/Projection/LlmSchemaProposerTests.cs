@@ -24,7 +24,7 @@ public sealed class LlmSchemaProposerContractTests : SchemaProposerContract
     protected override async Task<ISchemaProposer> CreateKnowingLotAndQtyAsync()
     {
         var raw = new InMemoryRawStore();
-        var intake = new IntakeService(raw);
+        var intake = new IntakeService(raw, new InMemoryFieldHintSource());
         await intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","qty":10}"""));
         await intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-2"}"""));
         return new LlmSchemaProposer(raw, new ScriptedChatClient(CanonicalProposal));
@@ -38,7 +38,7 @@ public class LlmSchemaProposerTests
     private static async Task<InMemoryRawStore> RawWith(params string[] documents)
     {
         var raw = new InMemoryRawStore();
-        var intake = new IntakeService(raw);
+        var intake = new IntakeService(raw, new InMemoryFieldHintSource());
         foreach (var json in documents)
         {
             await intake.AcceptAsync(Qc, DocumentBody.Parse(json));

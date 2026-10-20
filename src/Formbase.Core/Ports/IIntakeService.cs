@@ -5,7 +5,9 @@ namespace Formbase.Core.Ports;
 /// <summary>
 /// Accepts documents into the raw store. Declaration is never required to accept a document —
 /// this is the raw-first intake path. Success means the data is durable, regardless of whether
-/// a projection exists.
+/// a projection exists. The one form type that accepts nothing is a repeated section of another
+/// (<see cref="Schema.RelationHint.SectionField"/>): its rows come inside the parent's documents, and
+/// every method here refuses it with <see cref="Errors.FormTypeIsASectionException"/>.
 /// </summary>
 public interface IIntakeService
 {

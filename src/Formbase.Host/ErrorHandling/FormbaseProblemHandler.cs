@@ -66,6 +66,13 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 "projection-table-owned-elsewhere",
                 "Another writer built this projected table",
                 e.Message),
+            // 409: the document is fine; the form type it was sent under is another's section, and
+            // sending it inside the parent's document (or under another type) makes it acceptable.
+            FormTypeIsASectionException e => Problem(
+                StatusCodes.Status409Conflict,
+                "form-type-is-a-section",
+                "The form type is a repeated section of another and accepts no documents",
+                e.Message),
             TableNameInUseException e => Problem(
                 StatusCodes.Status409Conflict,
                 "table-name-in-use",

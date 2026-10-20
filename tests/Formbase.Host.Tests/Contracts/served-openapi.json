@@ -16,7 +16,7 @@
           "DocumentEndpoints"
         ],
         "summary": "Accepts a document into the raw store",
-        "description": "The document is stored verbatim; no declaration is required and none is consulted. An object naming a property twice is refused with 400. Send an Idempotency-Key header to make re-submission safe: the same key with the same request returns the same document without appending a second copy. A key already used for another request (another form type, record key, or body) is refused with 422. Name a \u0060recordKey\u0060 to make the document a correction of that record: the projection shows only the record\u0027s latest document. Without one, the document is a record of its own.",
+        "description": "The document is stored verbatim; no declaration is required. An object naming a property twice is refused with 400. A form type that is a repeated section of another accepts no documents of its own and is refused with 409: its rows are sent inside the parent document. Send an Idempotency-Key header to make re-submission safe: the same key with the same request returns the same document without appending a second copy. A key already used for another request (another form type, record key, or body) is refused with 422. Name a \u0060recordKey\u0060 to make the document a correction of that record: the projection shows only the record\u0027s latest document. Without one, the document is a record of its own.",
         "operationId": "AcceptDocument",
         "parameters": [
           {
@@ -63,6 +63,16 @@
           },
           "400": {
             "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -437,7 +447,7 @@
           "RecordEndpoints"
         ],
         "summary": "Retires a record",
-        "description": "Appends a retirement of the record named by \u0060recordKey\u0060: the projection stops showing it, and its documents stay in the raw stream, where the retirement appears as a document with \u0060retired: true\u0060 and no body. Appending under the key again brings the record back. Nothing checks that the key was ever used. An Idempotency-Key header works as it does for intake.",
+        "description": "Appends a retirement of the record named by \u0060recordKey\u0060: the projection stops showing it, and its documents stay in the raw stream, where the retirement appears as a document with \u0060retired: true\u0060 and no body. Appending under the key again brings the record back. Nothing checks that the key was ever used. An Idempotency-Key header works as it does for intake. A repeated section\u0027s form type has no records of its own to retire and is refused with 409.",
         "operationId": "RetireRecord",
         "parameters": [
           {
@@ -484,6 +494,16 @@
           },
           "400": {
             "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {

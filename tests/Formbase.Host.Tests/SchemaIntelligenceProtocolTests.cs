@@ -41,7 +41,7 @@ public class SchemaIntelligenceProtocolTests
         await using var provider = Compose(stub.Origin);
 
         var raw = provider.GetRequiredService<IRawStore>();
-        await new IntakeService(raw).AcceptAsync(
+        await new IntakeService(raw, new InMemoryFieldHintSource()).AcceptAsync(
             Inspections, DocumentBody.Parse("""{"lot":"L-2024-001","qty":120}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var schema = await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Inspections, TestContext.Current.CancellationToken);
@@ -81,7 +81,7 @@ public class SchemaIntelligenceProtocolTests
         // Carries both fields the canned proposal names: a sample missing one would fail on the
         // guard against invented properties, which says nothing about where the request went.
         var raw = provider.GetRequiredService<IRawStore>();
-        await new IntakeService(raw).AcceptAsync(
+        await new IntakeService(raw, new InMemoryFieldHintSource()).AcceptAsync(
             Inspections, DocumentBody.Parse("""{"lot":"L-1","qty":1}"""), cancellationToken: TestContext.Current.CancellationToken);
         await provider.GetRequiredService<ISchemaProposer>().ProposeAsync(Inspections, TestContext.Current.CancellationToken);
 

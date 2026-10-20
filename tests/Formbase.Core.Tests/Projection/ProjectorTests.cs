@@ -23,7 +23,7 @@ public class ProjectorTests
 
         public Harness()
         {
-            Intake = new IntakeService(Raw);
+            Intake = new IntakeService(Raw, Hints);
             Projector = new Projector(Raw, new HintSchemaProposer(Hints), Store, State);
         }
 
@@ -359,7 +359,7 @@ public class ProjectorTests
         hints.Declare(new FormTypeHints(Qc, Table, [new FieldHint("lot", ColumnType.Text)]));
         var state = new InMemoryProjectionState();
         var projector = new Projector(raw, new HintSchemaProposer(hints), new ThrowingProjectionStore(), state);
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await new IntakeService(raw, hints).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var act = () => projector.ProjectAsync(Qc);
 
@@ -375,7 +375,7 @@ public class ProjectorTests
         hints.Declare(new FormTypeHints(Qc, Table, [new FieldHint("lot", ColumnType.Text)]));
         var state = new ThrowingProjectionState(new TimeoutException("state store unreachable"));
         var projector = new Projector(raw, new HintSchemaProposer(hints), new ThrowingProjectionStore(), state);
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await new IntakeService(raw, hints).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var act = () => projector.ProjectAsync(Qc);
 
@@ -395,7 +395,7 @@ public class ProjectorTests
         var hints = new InMemoryFieldHintSource();
         hints.Declare(new FormTypeHints(Qc, Table, [new FieldHint("lot", ColumnType.Text)]));
         var projector = new Projector(raw, new HintSchemaProposer(hints), new ThrowingProjectionStore(), new InMemoryProjectionState());
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await new IntakeService(raw, hints).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var act = () => projector.ProjectAsync(Qc);
 

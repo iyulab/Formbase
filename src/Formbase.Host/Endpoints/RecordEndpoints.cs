@@ -43,9 +43,11 @@ internal static class RecordEndpoints
                 "Appends a retirement of the record named by `recordKey`: the projection stops showing it, " +
                 "and its documents stay in the raw stream, where the retirement appears as a document with " +
                 "`retired: true` and no body. Appending under the key again brings the record back. Nothing " +
-                "checks that the key was ever used. An Idempotency-Key header works as it does for intake.")
+                "checks that the key was ever used. An Idempotency-Key header works as it does for intake. " +
+                "A repeated section's form type has no records of its own to retire and is refused with 409.")
             .Produces<AcceptedDocumentResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         return routes;

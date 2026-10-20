@@ -23,7 +23,7 @@ public class LlmSchemaProposerLiveTests
     public async Task A_real_model_proposes_a_projectable_schema_from_raw_documents()
     {
         var raw = new InMemoryRawStore();
-        var intake = new IntakeService(raw);
+        var intake = new IntakeService(raw, new InMemoryFieldHintSource());
         await intake.AcceptAsync(Inspections, DocumentBody.Parse(
             """{"lot":"L-2024-001","qty":120,"passed":true,"inspected_at":"2026-07-01T09:30:00Z","note":"ok"}"""), cancellationToken: TestContext.Current.CancellationToken);
         await intake.AcceptAsync(Inspections, DocumentBody.Parse(

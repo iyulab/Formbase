@@ -21,7 +21,7 @@ public class ProjectionTriggerTests
 
         public Harness()
         {
-            Intake = new IntakeService(Raw);
+            Intake = new IntakeService(Raw, Hints);
             Projector = new Projector(Raw, new HintSchemaProposer(Hints), Store, State);
         }
 

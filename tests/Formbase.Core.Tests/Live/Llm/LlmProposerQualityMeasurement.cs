@@ -161,7 +161,7 @@ public class LlmProposerQualityMeasurement(ITestOutputHelper output)
     {
         var type = FormTypeRef.Create(qualityCase.Name.Replace('-', '_'));
         var raw = new InMemoryRawStore();
-        var intake = new IntakeService(raw);
+        var intake = new IntakeService(raw, new InMemoryFieldHintSource());
         foreach (var document in qualityCase.Documents)
         {
             await intake.AcceptAsync(type, DocumentBody.Parse(document));

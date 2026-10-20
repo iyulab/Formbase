@@ -61,7 +61,7 @@ public class ProjectionUnverifiedTests
         hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
         var store = new InMemoryProjectionStore();
         var state = new InMemoryProjectionState();
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await new IntakeService(raw, hints).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         var proposer = new HintSchemaProposer(hints);
         await new Projector(raw, proposer, store, state).ProjectAsync(Qc, TestContext.Current.CancellationToken);
@@ -82,7 +82,7 @@ public class ProjectionUnverifiedTests
         var raw = new InMemoryRawStore();
         var hints = new InMemoryFieldHintSource();
         hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await new IntakeService(raw, hints).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
         // A state whose ClearAsync fails but whose MarkUnverifiedAsync works — the exact split the
         // tri-state exists for.

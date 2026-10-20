@@ -86,7 +86,7 @@ public sealed class MorphDbReferenceSourceReadLiveTests
                 Target: new EntityRef(Customers, "grade", TargetLookup.Field("code"), "customer_ref")),
         ]));
         return new FormbaseEngine(
-            new IntakeService(raw),
+            new IntakeService(raw, hints),
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),

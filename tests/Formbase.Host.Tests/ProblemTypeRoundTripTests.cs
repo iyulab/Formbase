@@ -202,6 +202,25 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                     new { tableName = table, declarationVersion = 1, fields = new[] { new { name = "total", type = "integer" } } });
             },
 
+            ["/problems/form-type-is-a-section"] = async t =>
+            {
+                var parent = NewFormType();
+                var section = NewFormType();
+                (await t._client.PutAsJsonAsync(
+                    $"/formtypes/{section}/declaration",
+                    new { tableName = $"t_{section}", declarationVersion = 1, fields = new[] { new { name = "orderNo", type = "text" } } })).Dispose();
+                (await t._client.PutAsJsonAsync(
+                    $"/formtypes/{parent}/declaration",
+                    new
+                    {
+                        tableName = $"t_{parent}",
+                        declarationVersion = 1,
+                        fields = new[] { new { name = "orderNo", type = "text" } },
+                        relations = new[] { new { name = "lines", kind = "child", target = section, keyField = "orderNo", sectionField = "lines" } },
+                    })).Dispose();
+                return await t.PostDocumentAsync(section, """{"orderNo":"A-1"}""");
+            },
+
             ["/problems/idempotency-key-reused"] = async t =>
             {
                 var key = Guid.NewGuid().ToString();

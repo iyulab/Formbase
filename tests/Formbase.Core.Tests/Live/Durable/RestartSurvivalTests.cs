@@ -74,7 +74,7 @@ public sealed class RestartSurvivalTests
         var proposer = new HintSchemaProposer(hints);
 
         return new FormbaseEngine(
-            new IntakeService(raw),
+            new IntakeService(raw, new InMemoryFieldHintSource()),
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),

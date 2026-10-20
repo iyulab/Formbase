@@ -20,6 +20,12 @@
   null one, holds no rows; a section that is not an array of objects skips the parent document, and a
   row that cannot be mapped is a skip of the parent naming the row. The section's projection status and
   trigger follow the parent's stream, and changing the section field rebuilds the section's table.
+- **A repeated section's form type accepts no documents of its own.** A document, retirement or batch
+  sent under it is refused with `FormTypeIsASectionException` — `409` `/problems/form-type-is-a-section`
+  — and nothing is stored: its rows arrive inside the parent's documents, and a document of its own
+  would be stored and never projected. Documents it received before it became a section stay in its raw
+  stream and are not projected. Intake otherwise still needs no declaration; when the declarations cannot
+  be read, intake fails as `IntakeException` (`503`), as it does when the raw store cannot be written.
 - `RecordRef.Row` (wire: `record.row`, absent otherwise) is a section row's position, so the rows one
   parent document holds are told apart; record queries over a section page by position after the
   watermark.
@@ -33,6 +39,9 @@
 
 - `IFieldHintSource` gains `GetSectionSourceAsync`. An implementation outside this repository has to add
   it; a store that holds no section declarations answers null.
+- `IntakeService` takes the `IFieldHintSource` as a second constructor argument. Registration through
+  `AddFormbaseCore` is unchanged; code that constructs it directly passes the same hint source the engine
+  reads.
 
 ## 0.26.0
 

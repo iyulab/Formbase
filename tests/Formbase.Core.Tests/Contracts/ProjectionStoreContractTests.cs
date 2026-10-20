@@ -347,7 +347,7 @@ public abstract class ProjectionStoreContractTests
         var state = new InMemoryProjectionState();
         var proposer = new HintSchemaProposer(hints);
         var engine = new FormbaseEngine(
-            new IntakeService(raw),
+            new IntakeService(raw, hints),
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),

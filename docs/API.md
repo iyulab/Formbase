@@ -140,9 +140,11 @@ Content-Type: application/json
 
 The document is stored **verbatim**. Nothing interprets it at intake — not a declaration, not a
 type check — so a form type with no declaration accepts documents exactly as one with a declaration
-does, and they wait in raw until a shape is declared for them. The one thing refused is an object
-that names a property twice (`400` `/problems/invalid-request`): JSON leaves its meaning open and
-stores disagree on it, so it could not be given back as it was sent.
+does, and they wait in raw until a shape is declared for them. Two things are refused: an object
+that names a property twice (`400` `/problems/invalid-request`) — JSON leaves its meaning open and
+stores disagree on it, so it could not be given back as it was sent — and a document under a form
+type that is a [repeated section](#repeated-sections) of another (`409`
+`/problems/form-type-is-a-section`), whose rows arrive inside the parent's documents.
 
 **`Idempotency-Key` makes a retry safe.** The key becomes the document's identity, so re-sending the
 same request lands on the same document rather than a second copy, takes no new position in the
@@ -361,6 +363,53 @@ This is the shape the next projection run will build. A form type with no declar
   without the column is not re-checked.
 - **`kind`** on a relation — `child` (an owned entity whose key field points back here) or
   `reference` (a link out).
+- **`sectionField`** on a `child` relation — the array field of this form type's documents whose items
+  are the target's rows. See [Repeated sections](#repeated-sections).
+
+### Repeated sections
+
+A paper form often repeats a block inside one sheet — the lines of an order, the items of an
+inspection checklist. Declare the block as its own form type, and name the array that holds it on the
+parent's `child` relation:
+
+```http
+PUT /formtypes/orders/declaration
+{
+  "tableName": "orders", "declarationVersion": 1,
+  "fields": [ { "name": "orderNo", "type": "text" }, { "name": "customer", "type": "text" } ],
+  "relations": [ { "name": "lines", "kind": "child", "target": "orderlines",
+                   "keyField": "orderNo", "sectionField": "lines" } ]
+}
+
+PUT /formtypes/orderlines/declaration
+{
+  "tableName": "orderlines", "declarationVersion": 1,
+  "fields": [ { "name": "orderNo", "type": "text" }, { "name": "product", "type": "text" },
+              { "name": "qty", "type": "integer" } ]
+}
+```
+
+Documents are sent to the parent, sections and all —
+`{ "orderNo": "A-7", "customer": "ada", "lines": [ { "product": "bolt", "qty": 3 }, { "product": "nut", "qty": 5 } ] }` —
+and projecting `orderlines` cuts them into rows: one per array item, with `orderNo` set to the parent's
+value (the parent's value wins over an item property of the same name; a parent that declares no field
+named like `keyField` gives each row its record identity instead). The parent's own table does not carry
+the array.
+
+- **The section has no documents of its own.** A document or retirement sent under `orderlines` is
+  refused with `409` `/problems/form-type-is-a-section`. Its projection status, staleness and trigger
+  follow the parent's stream, so a new order makes `orderlines` stale. Documents it received before it
+  became a section stay readable in its raw stream and are not projected.
+- **A row is part of its parent's record.** Its record identity is the parent's, a slash and the item's
+  position (`o-1/0`); it shares the parent's document and record key, and a record query names it with
+  `record.row`, its position. Correcting or retiring the parent replaces every row it held.
+- **What cannot be read is a skip of the parent document.** A section that is not an array, or an item
+  that is not an object, skips the parent; a row missing a required field is a skip of the parent whose
+  reason names the row (`row 1 of section 'lines': …`). A parent with no section, or `null`, holds no rows.
+- **Declarations are checked.** `sectionField` is refused (`400` `/problems/invalid-declaration`) on a
+  `reference` relation, when the parent also declares it as a field, when another form type already names
+  the same section, when either side would nest sections, and when the section does not declare the
+  relation's `keyField`. Changing `sectionField` is a new shape, and the next projection rebuilds.
 
 ### Putting a declaration in force
 
@@ -691,6 +740,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
 | 409 | `/problems/projection-table-owned-elsewhere` | The projection would replace a table another host built from its own raw stream in the same MorphDB project; nothing was dropped |
 | 409 | `/problems/table-name-in-use` | Another form type already projects into the table the declaration names |
+| 409 | `/problems/form-type-is-a-section` | A document or retirement was sent under a form type that is a repeated section of another; send the row inside the parent document's section array |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |

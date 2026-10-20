@@ -32,8 +32,10 @@ internal static class DocumentEndpoints
             .WithName("AcceptDocument")
             .WithSummary("Accepts a document into the raw store")
             .WithDescription(
-                "The document is stored verbatim; no declaration is required and none is consulted. " +
+                "The document is stored verbatim; no declaration is required. " +
                 "An object naming a property twice is refused with 400. " +
+                "A form type that is a repeated section of another accepts no documents of its own and is " +
+                "refused with 409: its rows are sent inside the parent document. " +
                 "Send an Idempotency-Key header to make re-submission safe: the same key with the same " +
                 "request returns the same document without appending a second copy. A key already used " +
                 "for another request (another form type, record key, or body) is refused with 422. " +
@@ -41,6 +43,7 @@ internal static class DocumentEndpoints
                 "only the record's latest document. Without one, the document is a record of its own.")
             .Produces<AcceptedDocumentResponse>(StatusCodes.Status201Created)
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         routes.MapGet("/formtypes/{type}/documents", ListAsync)

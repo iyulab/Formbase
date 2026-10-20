@@ -85,7 +85,7 @@ public class RawStreamReadTests
         var store = new InMemoryProjectionStore();
         var state = new InMemoryProjectionState();
         return new FormbaseEngine(
-            new IntakeService(raw),
+            new IntakeService(raw, hints),
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),

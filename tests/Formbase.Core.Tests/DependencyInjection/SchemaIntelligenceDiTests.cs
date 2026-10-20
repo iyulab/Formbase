@@ -198,7 +198,7 @@ public class SchemaIntelligenceDiTests
     {
         var services = new ServiceCollection();
         var raw = new InMemoryRawStore();
-        await new IntakeService(raw).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await new IntakeService(raw, new InMemoryFieldHintSource()).AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1","grade":"A","note":"n"}"""), cancellationToken: TestContext.Current.CancellationToken);
         services.AddSingleton<IRawStore>(raw);
         services.AddSingleton<IChatClient>(new ScriptedChatClient(ModelProposal));
         services.AddLlmSchemaProposer();

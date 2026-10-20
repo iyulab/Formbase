@@ -14,7 +14,7 @@ public class IntakeServiceTests
     public async Task Accept_stores_the_document_and_returns_its_id()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
 
         var id = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
 
@@ -27,7 +27,7 @@ public class IntakeServiceTests
     public async Task Accept_without_declaration_succeeds_for_a_first_seen_form_type()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
 
         // No schema/hint declared anywhere — raw-first intake must still succeed.
         var id = await intake.AcceptAsync(FormTypeRef.Create("never-seen"), Body("""{"x":1}"""), cancellationToken: TestContext.Current.CancellationToken);
@@ -39,7 +39,7 @@ public class IntakeServiceTests
     public async Task Accept_with_the_same_idempotency_id_is_safe_to_retry()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var key = DocumentId.New();
 
         var first = await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: TestContext.Current.CancellationToken);
@@ -53,7 +53,7 @@ public class IntakeServiceTests
     public async Task Accept_refuses_a_key_already_holding_a_document_of_another_form_type()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var key = DocumentId.New();
         var other = FormTypeRef.Create("work-order");
 
@@ -72,7 +72,7 @@ public class IntakeServiceTests
     public async Task Accept_refuses_a_key_already_holding_a_different_body_of_the_same_form_type()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var key = DocumentId.New();
 
         await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: TestContext.Current.CancellationToken);
@@ -97,7 +97,7 @@ public class IntakeServiceTests
     public async Task Accept_treats_the_same_JSON_value_written_differently_as_a_retry(string first, string retry)
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var key = DocumentId.New();
 
         var original = await intake.AcceptAsync(Qc, Body(first), key, cancellationToken: TestContext.Current.CancellationToken);
@@ -110,7 +110,7 @@ public class IntakeServiceTests
     [Fact]
     public async Task Accept_wraps_a_low_level_store_failure_as_IntakeException()
     {
-        var intake = new IntakeService(new ThrowingRawStore());
+        var intake = new IntakeService(new ThrowingRawStore(), new InMemoryFieldHintSource());
 
         var act = () => intake.AcceptAsync(Qc, Body("""{"n":1}"""));
 
@@ -121,7 +121,7 @@ public class IntakeServiceTests
     public async Task AcceptMany_stores_documents_and_retirements_and_returns_their_ids_in_order()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var ct = TestContext.Current.CancellationToken;
         var key = RecordKey.Create("lot-1");
         var supplied = DocumentId.New();
@@ -151,7 +151,7 @@ public class IntakeServiceTests
     public async Task AcceptMany_retried_with_the_same_idempotency_ids_stores_nothing_twice()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var ct = TestContext.Current.CancellationToken;
         IntakeDocument[] batch =
         [
@@ -170,7 +170,7 @@ public class IntakeServiceTests
     public async Task AcceptMany_refuses_a_batch_reusing_a_key_and_stores_none_of_it()
     {
         var store = new InMemoryRawStore();
-        var intake = new IntakeService(store);
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
         var ct = TestContext.Current.CancellationToken;
         var key = DocumentId.New();
         await intake.AcceptAsync(Qc, Body("""{"n":1}"""), key, cancellationToken: ct);
@@ -188,7 +188,7 @@ public class IntakeServiceTests
     [Fact]
     public async Task AcceptMany_wraps_a_low_level_store_failure_as_IntakeException()
     {
-        var intake = new IntakeService(new ThrowingRawStore());
+        var intake = new IntakeService(new ThrowingRawStore(), new InMemoryFieldHintSource());
 
         var act = () => intake.AcceptManyAsync(Qc, [IntakeDocument.Accept(Body("""{"n":1}"""))]);
 
@@ -217,5 +217,68 @@ public class IntakeServiceTests
 
         public Task<Watermark> HeadAsync(FormTypeRef type, CancellationToken cancellationToken = default)
             => Task.FromResult(Watermark.Zero);
+    }
+
+    private static readonly FormTypeRef Order = FormTypeRef.Create("order");
+    private static readonly FormTypeRef Line = FormTypeRef.Create("order-line");
+
+    private static InMemoryFieldHintSource WithSection()
+    {
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(new Formbase.Core.Schema.FormTypeHints(Line, "order_lines", [new Formbase.Core.Schema.FieldHint("order_no", Formbase.Core.Schema.ColumnType.Text)]));
+        hints.Declare(new Formbase.Core.Schema.FormTypeHints(Order, "orders", [new Formbase.Core.Schema.FieldHint("order_no", Formbase.Core.Schema.ColumnType.Text)],
+            [new Formbase.Core.Schema.RelationHint("lines", Formbase.Core.Schema.RelationKind.Child, Line, "order_no", "lines")]));
+        return hints;
+    }
+
+    [Fact]
+    public async Task A_document_under_a_repeated_section_is_refused_and_nothing_is_stored()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, WithSection());
+        var ct = TestContext.Current.CancellationToken;
+
+        var accept = () => intake.AcceptAsync(Line, Body("""{"order_no":"A-1"}"""), cancellationToken: ct);
+        var retire = () => intake.RetireAsync(Line, RecordKey.Create("k"), cancellationToken: ct);
+        var batch = () => intake.AcceptManyAsync(Line, [IntakeDocument.Accept(Body("""{"order_no":"A-1"}"""))], ct);
+
+        var refused = (await accept.Should().ThrowAsync<FormTypeIsASectionException>()).Which;
+        refused.Parent.Should().Be(Order);
+        refused.SectionField.Should().Be("lines");
+        refused.Message.Should().Contain("'lines'").And.Contain("'order'");
+        await retire.Should().ThrowAsync<FormTypeIsASectionException>();
+        await batch.Should().ThrowAsync<FormTypeIsASectionException>();
+        (await store.HeadAsync(Line, ct)).Should().Be(Watermark.Zero);
+    }
+
+    [Fact]
+    public async Task The_parent_of_a_repeated_section_accepts_documents()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, WithSection());
+
+        var id = await intake.AcceptAsync(Order, Body("""{"order_no":"A-1","lines":[{"x":1}]}"""), cancellationToken: TestContext.Current.CancellationToken);
+
+        (await store.GetAsync(id, TestContext.Current.CancellationToken)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Declarations_that_cannot_be_read_fail_the_intake_as_an_intake_failure()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, new UnreadableHints());
+
+        await FluentActions.Awaiting(() => intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<IntakeException>().WithMessage("*declarations could not be read*");
+        (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Watermark.Zero);
+    }
+
+    private sealed class UnreadableHints : IFieldHintSource
+    {
+        public Task<Formbase.Core.Schema.FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("the declaration store went away");
+
+        public Task<Formbase.Core.Schema.SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("the declaration store went away");
     }
 }

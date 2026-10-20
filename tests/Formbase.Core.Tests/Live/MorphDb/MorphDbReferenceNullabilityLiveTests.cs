@@ -101,7 +101,7 @@ public sealed class MorphDbReferenceNullabilityLiveTests
         var store = new MorphDbProjectionStore(_fixture.CreateClient());
         var proposer = new HintSchemaProposer(hints);
         var engine = new FormbaseEngine(
-            new IntakeService(raw),
+            new IntakeService(raw, hints),
             raw,
             new Projector(raw, proposer, store, state),
             new RecordQuery(raw, proposer, store, state),

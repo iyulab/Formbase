@@ -25,7 +25,7 @@ public class RecordQueryTests
 
         public Harness(IProjectionStore? queryStore = null)
         {
-            Intake = new IntakeService(Raw);
+            Intake = new IntakeService(Raw, Hints);
             var proposer = new HintSchemaProposer(Hints);
             Projector = new Projector(Raw, proposer, Store, State);
             Query = new RecordQuery(Raw, proposer, queryStore ?? Store, State);
