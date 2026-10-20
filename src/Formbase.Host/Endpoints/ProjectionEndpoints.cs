@@ -1,4 +1,5 @@
 using Formbase.Core;
+using Formbase.Core.Errors;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
 using Formbase.Host.Contracts;
@@ -62,8 +63,18 @@ internal static class ProjectionEndpoints
         CancellationToken cancellationToken)
     {
         var formType = FormTypeRef.Create(type);
-        var result = await engine.ProjectAsync(formType, cancellationToken)
-            .ConfigureAwait(false);
+        ProjectionResult result;
+        try
+        {
+            result = await engine.ProjectAsync(formType, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
+        {
+            // A store that cannot be reached mid-run is the outage the query path already reports as
+            // 503; answering it here as an unhandled 500 told the caller the host was broken. The run
+            // left the projection reporting notProjected (or unverified), so nothing stale is served.
+            throw new ProjectionUnavailableException(formType, ex);
+        }
 
         runTracker.Record(formType, result);
 

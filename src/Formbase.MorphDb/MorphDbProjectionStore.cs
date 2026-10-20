@@ -47,7 +47,56 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         _owner = owner;
     }
 
-    public async Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default)
+    // Every port call goes through one translation: a MorphDB project deleted after the host started
+    // answers 404 PROJECT_NOT_FOUND to everything, which read as "no such table" (and a drop of an
+    // absent table) until the create failed with an error naming neither.
+
+    public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) =>
+        Translated(() => TableExistsCoreAsync(tableName, cancellationToken));
+
+    public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) =>
+        Translated(async () => { await DropTableCoreAsync(tableName, cancellationToken).ConfigureAwait(false); return true; });
+
+    public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
+        Translated(async () => { await CreateTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
+
+    public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) =>
+        Translated(() => BulkInsertCoreAsync(tableName, rows, cancellationToken));
+
+    public Task<int> ReplaceRowsAsync(
+        string tableName,
+        IReadOnlyCollection<RecordKey> removeKeys,
+        IReadOnlyCollection<DocumentId> removeDocuments,
+        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken = default) =>
+        Translated(() => ReplaceRowsCoreAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken));
+
+    public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
+        Translated(() => QueryCoreAsync(tableName, spec, cancellationToken));
+
+    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
+        Translated(() => AggregateCoreAsync(tableName, spec, cancellationToken));
+
+    private static async Task<T> Translated<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await call().ConfigureAwait(false);
+        }
+        catch (MorphDBNotFoundException missing) when (IsMissingProject(missing))
+        {
+            throw new ProjectionStoreMissingException(
+                "The MorphDB project this host projects into no longer exists (PROJECT_NOT_FOUND) — it was " +
+                "deleted after the host started. Create a project, set Formbase:MorphDb:ProjectId to its id and " +
+                "restart; the projections are rebuilt from the raw stream, which is unaffected.",
+                missing);
+        }
+    }
+
+    private static bool IsMissingProject(MorphDBNotFoundException exception) =>
+        string.Equals(exception.ErrorCode, "PROJECT_NOT_FOUND", StringComparison.Ordinal);
+
+    private async Task<bool> TableExistsCoreAsync(string tableName, CancellationToken cancellationToken = default)
         => await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false) is not null;
 
     /// <summary>
@@ -56,7 +105,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// The check and the drop are two requests, so two owners racing for one unmarked table can still
     /// both pass it; the mark makes every later collision visible.
     /// </summary>
-    public async Task DropTableAsync(string tableName, CancellationToken cancellationToken = default)
+    private async Task DropTableCoreAsync(string tableName, CancellationToken cancellationToken = default)
     {
         if (_owner is not null)
         {
@@ -81,13 +130,13 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         {
             await _client.Schema.DropTableAsync(tableName, cancellationToken).ConfigureAwait(false);
         }
-        catch (MorphDBNotFoundException)
+        catch (MorphDBNotFoundException missing) when (!IsMissingProject(missing))
         {
             // Already absent — drop is idempotent.
         }
     }
 
-    public async Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default)
+    private async Task CreateTableCoreAsync(TableSchema schema, CancellationToken cancellationToken = default)
     {
         // Only the generic column shape crosses into MorphDB — projected tables are generic by
         // design (FormType never reaches MorphDB). The declaration axes stay formbase-internal:
@@ -290,7 +339,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         }
     }
 
-    public async Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+    private async Task<int> BulkInsertCoreAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
     {
         if (rows.Count == 0)
         {
@@ -325,7 +374,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// in one batch, then the new rows inserted. Neither step spans the other in a transaction; a retry
     /// after a failure between them is safe because the call is idempotent.
     /// </summary>
-    public async Task<int> ReplaceRowsAsync(
+    private async Task<int> ReplaceRowsCoreAsync(
         string tableName,
         IReadOnlyCollection<RecordKey> removeKeys,
         IReadOnlyCollection<DocumentId> removeDocuments,
@@ -369,7 +418,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         return await BulkInsertAsync(tableName, rows, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
+    private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryCoreAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
     {
         var limit = spec.Limit ?? DefaultPageSize;
         var offset = spec.Offset ?? 0;
@@ -438,7 +487,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         return window;
     }
 
-    public async Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+    private async Task<IReadOnlyList<AggregateGroup>> AggregateCoreAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
     {
         var groupBy = spec.GroupBy ?? [];
         var measures = spec.Measures ?? [];

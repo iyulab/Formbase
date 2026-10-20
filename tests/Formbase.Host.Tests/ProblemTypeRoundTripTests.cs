@@ -227,13 +227,17 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                     new ForeignTableProjectionStore(new InMemoryProjectionStore()));
                 using var client = factory.CreateClient();
 
-                var type = NewFormType();
-                factory.Services.GetRequiredService<InMemoryFieldHintSource>()
-                    .Declare(new FormTypeHints(FormTypeRef.Create(type), type, [new FieldHint("total", ColumnType.Integer)]));
-                (await client.PostAsync($"/formtypes/{type}/documents",
-                    new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"))).Dispose();
+                return await RunProjectionOfNewTypeAsync(factory, client);
+            },
 
-                return await client.PostAsync($"/formtypes/{type}/projection", null);
+            ["/problems/projection-store-missing"] = async t =>
+            {
+                // What the MorphDB store raises once its project answers PROJECT_NOT_FOUND.
+                using var factory = t.WithStore<IProjectionStore>(new FailingRunProjectionStore(
+                    new InMemoryProjectionStore(),
+                    new ProjectionStoreMissingException("The MorphDB project this host projects into no longer exists.")));
+                using var client = factory.CreateClient();
+                return await RunProjectionOfNewTypeAsync(factory, client);
             },
 
             ["/problems/projection-unavailable"] = async t =>
@@ -407,6 +411,60 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
 
         public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The projection store is not reachable.");
+    }
+
+    /// <summary>
+    /// A projection run against a store that fails mid-run with something that is not a Formbase
+    /// error — a connection refused — is the outage the query path reports as 503, not a 500.
+    /// </summary>
+    [Fact]
+    public async Task A_projection_run_against_an_unreachable_store_answers_projection_unavailable()
+    {
+        using var factory = WithStore<IProjectionStore>(new FailingRunProjectionStore(
+            new InMemoryProjectionStore(), new HttpRequestException("Connection refused")));
+        using var client = factory.CreateClient();
+
+        using var response = await RunProjectionOfNewTypeAsync(factory, client);
+
+        ((int)response.StatusCode).Should().Be(503);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().Contain("/problems/projection-unavailable");
+    }
+
+    private static async Task<HttpResponseMessage> RunProjectionOfNewTypeAsync(WebApplicationFactory<Program> factory, HttpClient client)
+    {
+        var type = NewFormType();
+        factory.Services.GetRequiredService<InMemoryFieldHintSource>()
+            .Declare(new FormTypeHints(FormTypeRef.Create(type), type, [new FieldHint("total", ColumnType.Integer)]));
+        (await client.PostAsync($"/formtypes/{type}/documents",
+            new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"))).Dispose();
+
+        return await client.PostAsync($"/formtypes/{type}/projection", null);
+    }
+
+    /// <summary>A store whose table creation fails with <paramref name="failure"/>; reads pass through.</summary>
+    private sealed class FailingRunProjectionStore(IProjectionStore inner, Exception failure) : IProjectionStore
+    {
+        public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) =>
+            inner.TableExistsAsync(tableName, cancellationToken);
+
+        public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) =>
+            inner.DropTableAsync(tableName, cancellationToken);
+
+        public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
+            throw failure;
+
+        public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) =>
+            inner.BulkInsertAsync(tableName, rows, cancellationToken);
+
+        public Task<int> ReplaceRowsAsync(string tableName, IReadOnlyCollection<RecordKey> removeKeys, IReadOnlyCollection<DocumentId> removeDocuments, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+            => inner.ReplaceRowsAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken);
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
+            inner.QueryAsync(tableName, spec, cancellationToken);
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
+            inner.AggregateAsync(tableName, spec, cancellationToken);
     }
 
     private sealed class ForeignTableProjectionStore(IProjectionStore inner) : IProjectionStore

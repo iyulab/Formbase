@@ -38,6 +38,12 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
                 "The projection's integrity is unconfirmed",
                 e.Message),
 
+            ProjectionStoreMissingException e => Problem(
+                StatusCodes.Status503ServiceUnavailable,
+                "projection-store-missing",
+                "The projection store's location no longer exists",
+                e.Message),
+
             ProjectionUnavailableException e => Problem(
                 StatusCodes.Status503ServiceUnavailable,
                 "projection-unavailable",

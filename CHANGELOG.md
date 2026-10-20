@@ -14,6 +14,16 @@
   before this carry no mark and are replaced as before; the rebuild marks them. A namespace record
   written by an earlier version gains its store id on the next start, with no step to run.
 
+- **A MorphDB project deleted while a host runs is reported, not a `500`.** The startup check refuses a
+  missing project, but a running host's next projection read the project's `404` as "no such table",
+  treated the drop as done, and failed creating the table with an unhandled `500` naming neither. Every
+  projection-store call now answers that case as `503` `/problems/projection-store-missing` — retrying
+  does not help; give the host a project again and restart, and the projections rebuild from the raw
+  stream, which keeps accepting documents meanwhile.
+- **A projection run against an unreachable store answers `503` `/problems/projection-unavailable`**, as
+  queries already did, instead of an unhandled `500`. The run leaves the projection reporting
+  `notProjected` (or `unverified`), so nothing stale is served.
+
 ### Added
 
 - **`MorphDbProjectionStore` takes an owner** (`IProjectionTableOwnerSource`, `ProjectionTableOwner`)

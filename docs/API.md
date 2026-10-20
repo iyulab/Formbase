@@ -694,6 +694,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
+| 503 | `/problems/projection-store-missing` | The MorphDB project the host projects into was deleted after it started; retrying does not help — give the host a project again and restart (documents are still accepted) |
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
 | 503 | `/problems/schema-proposer-unavailable` | Schema intelligence is installed but the model could not be reached (connection, timeout, auth, rate limit) |
 
