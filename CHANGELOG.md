@@ -2,13 +2,33 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A host no longer replaces projected tables another host built in the same MorphDB project.** Two
+  durable hosts over different PostgreSQL schemas given one MorphDB project — under the same namespace
+  name or not — each rebuilt a table of the same name by dropping the other's, and the first host then
+  served the second one's rows as its own, with no error on either side. Every projected table now
+  carries the store id of the schema whose documents filled it (generated once with the schema's
+  namespace record), and a projection that would replace a table built from another schema answers
+  `409` `/problems/projection-table-owned-elsewhere` and leaves that table as it was. Tables built
+  before this carry no mark and are replaced as before; the rebuild marks them. A namespace record
+  written by an earlier version gains its store id on the next start, with no step to run.
+
+### Added
+
+- **`MorphDbProjectionStore` takes an owner** (`IProjectionTableOwnerSource`, `ProjectionTableOwner`)
+  whose mark it stores with every table it creates, refusing to drop a table carrying another owner's
+  mark (`ProjectionTableOwnedElsewhereException`). Without one it marks nothing and replaces any table
+  of the requested name, as before — right only when nothing else writes into the MorphDB project.
+
 ### Dependencies
 
-- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.23.0** (was 0.22.0), and the bundle and the live
-  fixtures run the MorphDB `0.23.0` image. The client is unchanged; MorphDB 0.23.0's wire changes are to
-  GraphQL, OData and values a fixed set of choices does not hold, which Formbase does not use. A REST
-  list read without an order now comes earliest first, so the paged reads Formbase makes to find records
-  by a field's value hold every matching row once.
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.24.0** (was 0.22.0), and the bundle and the live
+  fixtures run the MorphDB `0.24.0` image. Formbase uses 0.24.0's table metadata for the mark above. The
+  rest of 0.23.0 and 0.24.0 does not reach Formbase: their wire changes are to GraphQL, OData, values a
+  fixed set of choices does not hold and rollups, none of which Formbase uses. A REST list read without
+  an order now comes earliest first, so the paged reads Formbase makes to find records by a field's
+  value hold every matching row once.
 
 ## 0.25.0
 

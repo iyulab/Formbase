@@ -219,6 +219,23 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                     new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"));
             },
 
+            ["/problems/projection-table-owned-elsewhere"] = async t =>
+            {
+                // The store reports the table as another writer's the moment the rebuild asks to
+                // drop it — what the MorphDB store does when the table's mark names another owner.
+                using var factory = t.WithStore<IProjectionStore>(
+                    new ForeignTableProjectionStore(new InMemoryProjectionStore()));
+                using var client = factory.CreateClient();
+
+                var type = NewFormType();
+                factory.Services.GetRequiredService<InMemoryFieldHintSource>()
+                    .Declare(new FormTypeHints(FormTypeRef.Create(type), type, [new FieldHint("total", ColumnType.Integer)]));
+                (await client.PostAsync($"/formtypes/{type}/documents",
+                    new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"))).Dispose();
+
+                return await client.PostAsync($"/formtypes/{type}/projection", null);
+            },
+
             ["/problems/projection-unavailable"] = async t =>
             {
                 // Everything but the read succeeds, so the projection is genuinely there and only
@@ -390,6 +407,30 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
 
         public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("The projection store is not reachable.");
+    }
+
+    private sealed class ForeignTableProjectionStore(IProjectionStore inner) : IProjectionStore
+    {
+        public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) =>
+            inner.TableExistsAsync(tableName, cancellationToken);
+
+        public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) =>
+            throw new ProjectionTableOwnedElsewhereException(tableName, "writer A (owner 'a')", "writer B (owner 'b')");
+
+        public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
+            inner.CreateTableAsync(schema, cancellationToken);
+
+        public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) =>
+            inner.BulkInsertAsync(tableName, rows, cancellationToken);
+
+        public Task<int> ReplaceRowsAsync(string tableName, IReadOnlyCollection<RecordKey> removeKeys, IReadOnlyCollection<DocumentId> removeDocuments, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default)
+            => inner.ReplaceRowsAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken);
+
+        public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
+            inner.QueryAsync(tableName, spec, cancellationToken);
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
+            inner.AggregateAsync(tableName, spec, cancellationToken);
     }
 
     /// <summary>A schema proposer that fails exactly one way, every time — the failure under test.</summary>

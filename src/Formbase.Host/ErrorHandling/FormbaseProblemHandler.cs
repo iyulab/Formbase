@@ -55,6 +55,11 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
 
             // 409: the request is fine on its own; it conflicts with another form type's declaration,
             // and moving that one (or choosing another name) makes it acceptable.
+            ProjectionTableOwnedElsewhereException e => Problem(
+                StatusCodes.Status409Conflict,
+                "projection-table-owned-elsewhere",
+                "Another writer built this projected table",
+                e.Message),
             TableNameInUseException e => Problem(
                 StatusCodes.Status409Conflict,
                 "table-name-in-use",

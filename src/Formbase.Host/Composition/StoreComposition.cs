@@ -2,6 +2,7 @@ using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Host.Declarations;
 using Formbase.Host.Namespaces;
+using Formbase.MorphDb;
 
 namespace Formbase.Host.Composition;
 
@@ -113,6 +114,11 @@ internal static class StoreComposition
         // The schema records the namespace it holds, and a host serving another one is refused —
         // at startup when the database answers, ahead of the first request when it did not.
         services.AddSingleton<NamespaceBinding>();
+
+        // MorphDB projects are provisioned by the operator and may be shared, so the projected tables
+        // carry the identity of the raw stream they were built from, and a table built from another
+        // one is refused rather than replaced.
+        services.AddSingleton<IProjectionTableOwnerSource, NamespaceTableOwner>();
         services.AddHostedService<NamespaceBindingStartupCheck>();
 
         // A mistyped project id otherwise starts a host that reports ready and fails its first
@@ -142,4 +148,15 @@ internal static class StoreComposition
                 $"'{Section}:MorphDb:ProjectId' is '{raw}', which is not the id of a provisioned " +
                 "MorphDB project. Create one with POST /api/projects and use the id it returns.");
     }
+}
+
+/// <summary>
+/// The namespace binding as the owner of projected tables, resolved when a table is first touched
+/// rather than when the store is built: the binding needs the running host (its lifetime, the
+/// namespace selector), and building the projection store must not require it.
+/// </summary>
+internal sealed class NamespaceTableOwner(IServiceProvider services) : IProjectionTableOwnerSource
+{
+    public ValueTask<ProjectionTableOwner> GetOwnerAsync(CancellationToken cancellationToken) =>
+        services.GetRequiredService<NamespaceBinding>().GetOwnerAsync(cancellationToken);
 }

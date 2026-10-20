@@ -1,3 +1,4 @@
+using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
@@ -24,15 +25,58 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// <summary>MorphDB returns at most this many rows per request, so a wider window takes several.</summary>
     private const int MaxPageSize = 1000;
 
-    private readonly MorphDBClient _client;
+    /// <summary>The metadata key a table's owner id is stored under.</summary>
+    public const string OwnerKey = "formbase.owner";
 
-    public MorphDbProjectionStore(MorphDBClient client) => _client = client;
+    /// <summary>The metadata key the owner's readable description is stored under.</summary>
+    public const string OwnerLabelKey = "formbase.owner-label";
+
+    private readonly MorphDBClient _client;
+    private readonly IProjectionTableOwnerSource? _owner;
+
+    /// <summary>
+    /// Creates a store over <paramref name="client"/>. With an <paramref name="owner"/>, every table the
+    /// store creates carries the owner's mark, and a table carrying another owner's mark is refused
+    /// rather than dropped (<see cref="ProjectionTableOwnedElsewhereException"/>). Without one, tables
+    /// are unmarked and any table of the requested name is replaced — right only when nothing else
+    /// writes into the MorphDB project.
+    /// </summary>
+    public MorphDbProjectionStore(MorphDBClient client, IProjectionTableOwnerSource? owner = null)
+    {
+        _client = client;
+        _owner = owner;
+    }
 
     public async Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default)
         => await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false) is not null;
 
+    /// <summary>
+    /// Drops the table unless another owner built it. A table with no mark — built before marks
+    /// existed, or by a store with no owner — is dropped as before; the rebuild that follows marks it.
+    /// The check and the drop are two requests, so two owners racing for one unmarked table can still
+    /// both pass it; the mark makes every later collision visible.
+    /// </summary>
     public async Task DropTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
+        if (_owner is not null)
+        {
+            var owner = await _owner.GetOwnerAsync(cancellationToken).ConfigureAwait(false);
+            var existing = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+            if (existing is null)
+            {
+                return;
+            }
+
+            if (existing.Metadata.TryGetValue(OwnerKey, out var holder)
+                && !string.Equals(holder, owner.Id, StringComparison.Ordinal))
+            {
+                var holderLabel = existing.Metadata.TryGetValue(OwnerLabelKey, out var label) && label.Length > 0
+                    ? $"{label} (owner '{holder}')"
+                    : $"owner '{holder}'";
+                throw new ProjectionTableOwnedElsewhereException(tableName, holderLabel, $"{owner.Label} (owner '{owner.Id}')");
+            }
+        }
+
         try
         {
             await _client.Schema.DropTableAsync(tableName, cancellationToken).ConfigureAwait(false);
@@ -58,6 +102,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                     ? [Column(c.Name, c.Type, c.Nullable, Lookup(reference, reference.ValueColumn)), .. SourceColumns(c.Name, reference)]
                     : new[] { Column(c.Name, c.Type, c.Nullable, lookup: null) })
                 .ToList(),
+            Metadata = _owner is null ? null : OwnerMark(await _owner.GetOwnerAsync(cancellationToken).ConfigureAwait(false)),
         };
 
         await _client.Schema.CreateTableAsync(request, cancellationToken).ConfigureAwait(false);
@@ -70,6 +115,12 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             }
         }
     }
+
+    private static Dictionary<string, string> OwnerMark(ProjectionTableOwner owner) => new(StringComparer.Ordinal)
+    {
+        [OwnerKey] = owner.Id,
+        [OwnerLabelKey] = owner.Label,
+    };
 
     /// <summary>
     /// A reference computed by MorphDB when it is read: the target row whose matched column equals the

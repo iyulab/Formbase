@@ -66,7 +66,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
         // newer server releases is watched separately (the scheduled morphdb-drift workflow runs
         // this same suite with FORMBASE_MORPHDB_IMAGE=ghcr.io/iyulab/morphdb:latest).
         _morphdb = new ContainerBuilder(
-                Environment.GetEnvironmentVariable("FORMBASE_MORPHDB_IMAGE") ?? "ghcr.io/iyulab/morphdb:0.23.0")
+                Environment.GetEnvironmentVariable("FORMBASE_MORPHDB_IMAGE") ?? "ghcr.io/iyulab/morphdb:0.24.0")
             .WithNetwork(network)
             .WithEnvironment("ConnectionStrings__MorphDB", MorphDbPostgres.ServiceConnectionString)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")

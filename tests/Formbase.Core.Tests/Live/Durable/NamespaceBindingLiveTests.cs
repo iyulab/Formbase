@@ -128,6 +128,78 @@ public sealed class NamespaceBindingLiveTests(DurableFixture fixture)
         outcomes.Count(started => started).Should().Be(1);
     }
 
+    /// <summary>
+    /// The repro the table mark exists for: two hosts under the same namespace name, each over its own
+    /// schema, given one MorphDB project. Before the mark the second projection dropped the first
+    /// host's table and filled it with its own rows, and the first host then served them as its own.
+    /// </summary>
+    [Fact]
+    public async Task A_second_schema_projecting_the_same_table_into_a_shared_project_is_refused()
+    {
+        var type = $"nsown{Guid.NewGuid():N}"[..17];
+        await using var a = Host("default", NewSchema());
+        await using var b = Host("default", NewSchema());
+        using var clientA = a.CreateClient();
+        using var clientB = b.CreateClient();
+
+        await DeclareAndPostAsync(clientA, type, """{"total":1}""");
+        (await clientA.PostAsync($"/formtypes/{type}/projection", null, Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await DeclareAndPostAsync(clientB, type, """{"total":2}""");
+        var refused = await clientB.PostAsync($"/formtypes/{type}/projection", null, Ct);
+        refused.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await refused.Content.ReadAsStringAsync(Ct)).Should().Contain("/problems/projection-table-owned-elsewhere");
+
+        var records = await clientA.GetAsync($"/formtypes/{type}/records", Ct);
+        var body = await records.Content.ReadAsStringAsync(Ct);
+        body.Should().Contain("\"total\":1").And.NotContain("\"total\":2", "the other schema's rows must not replace these");
+    }
+
+    /// <summary>A binding row written before the store id existed gains one on the next start.</summary>
+    [Fact]
+    public async Task A_binding_row_from_before_the_store_id_gains_one()
+    {
+        var schema = NewSchema();
+        await using (var source = fixture.CreateIndependentDataSource())
+        await using (var command = source.CreateCommand(
+            $"""
+            CREATE SCHEMA "{schema}";
+            CREATE TABLE "{schema}".namespace_binding (
+                singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+                namespace text NOT NULL,
+                bound_at timestamptz NOT NULL DEFAULT now());
+            INSERT INTO "{schema}".namespace_binding (namespace) VALUES ('orders');
+            """))
+        {
+            await command.ExecuteNonQueryAsync(Ct);
+        }
+
+        await using (var host = Host("orders", schema))
+        {
+            using var client = host.CreateClient();
+            (await client.GetAsync("/health/ready", Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        await using var check = fixture.CreateIndependentDataSource();
+        await using var read = check.CreateCommand($"""SELECT store_id FROM "{schema}".namespace_binding""");
+        (await read.ExecuteScalarAsync(Ct)).Should().BeOfType<Guid>();
+    }
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private static async Task DeclareAndPostAsync(HttpClient client, string type, string document)
+    {
+        using var declared = await client.PutAsync($"/formtypes/{type}/declaration",
+            new StringContent(
+                $$"""{"tableName":"{{type}}","declarationVersion":1,"fields":[{"name":"total","type":"integer"}]}""",
+                Encoding.UTF8, "application/json"), Ct);
+        declared.IsSuccessStatusCode.Should().BeTrue(await declared.Content.ReadAsStringAsync(Ct));
+
+        using var posted = await client.PostAsync($"/formtypes/{type}/documents",
+            new StringContent(document, Encoding.UTF8, "application/json"), Ct);
+        posted.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
     private static bool TryStart(WebApplicationFactory<Program> factory)
     {
         try

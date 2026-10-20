@@ -1,6 +1,7 @@
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Host.Composition;
+using Formbase.MorphDb;
 using Npgsql;
 
 namespace Formbase.Host.Namespaces;
@@ -28,7 +29,7 @@ namespace Formbase.Host.Namespaces;
 /// written once and nothing in the host rewrites it.
 /// </para>
 /// </summary>
-internal sealed partial class NamespaceBinding : IDisposable
+internal sealed partial class NamespaceBinding : IProjectionTableOwnerSource, IDisposable
 {
     private static readonly FormTypeRef Probe = FormTypeRef.Create("formbase-namespace-probe");
 
@@ -40,6 +41,7 @@ internal sealed partial class NamespaceBinding : IDisposable
     private readonly ILogger<NamespaceBinding> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private volatile bool _bound;
+    private Guid _storeId;
     private volatile NamespaceBindingConflictException? _conflict;
 
     public NamespaceBinding(
@@ -95,7 +97,7 @@ internal sealed partial class NamespaceBinding : IDisposable
             // first, and this only ever adds a table to a schema that exists.
             await _state.GetAsync(Probe, cancellationToken).ConfigureAwait(false);
 
-            var holder = await ClaimAsync(cancellationToken).ConfigureAwait(false);
+            var (holder, storeId) = await ClaimAsync(cancellationToken).ConfigureAwait(false);
             if (!string.Equals(holder, _name, StringComparison.Ordinal))
             {
                 _conflict = new NamespaceBindingConflictException(_schema, holder, _name);
@@ -112,6 +114,7 @@ internal sealed partial class NamespaceBinding : IDisposable
                 throw _conflict;
             }
 
+            _storeId = storeId;
             _bound = true;
         }
         finally
@@ -121,10 +124,24 @@ internal sealed partial class NamespaceBinding : IDisposable
     }
 
     /// <summary>
-    /// Records this host's namespace if the schema holds none, and returns whichever one it holds.
-    /// Serialized per schema, so two hosts claiming a fresh schema at once agree on one winner.
+    /// The identity of the raw stream this schema holds, as an owner of projected tables: generated
+    /// once with the binding row and never rewritten, so it tells two schemas apart even when they are
+    /// configured under the same namespace name. Waits for the binding, as every store use does.
     /// </summary>
-    private async Task<string> ClaimAsync(CancellationToken cancellationToken)
+    public async ValueTask<ProjectionTableOwner> GetOwnerAsync(CancellationToken cancellationToken)
+    {
+        await EnsureAsync(cancellationToken).ConfigureAwait(false);
+        return new ProjectionTableOwner(
+            _storeId.ToString("D"),
+            $"the Formbase namespace '{_name}' in PostgreSQL schema '{_schema}'");
+    }
+
+    /// <summary>
+    /// Records this host's namespace if the schema holds none, and returns whichever one it holds with
+    /// the schema's store id. Serialized per schema, so two hosts claiming a fresh schema at once agree
+    /// on one winner. A binding row written before the store id existed gains one here, once.
+    /// </summary>
+    private async Task<(string Namespace, Guid StoreId)> ClaimAsync(CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -144,8 +161,11 @@ internal sealed partial class NamespaceBinding : IDisposable
             CREATE TABLE IF NOT EXISTS "{_schema}".namespace_binding (
                 singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
                 namespace text NOT NULL,
-                bound_at timestamptz NOT NULL DEFAULT now()
+                bound_at timestamptz NOT NULL DEFAULT now(),
+                store_id uuid NOT NULL DEFAULT gen_random_uuid()
             );
+            ALTER TABLE "{_schema}".namespace_binding
+                ADD COLUMN IF NOT EXISTS store_id uuid NOT NULL DEFAULT gen_random_uuid();
             INSERT INTO "{_schema}".namespace_binding (namespace) VALUES (@name) ON CONFLICT DO NOTHING;
             """,
             connection,
@@ -155,12 +175,19 @@ internal sealed partial class NamespaceBinding : IDisposable
             await claim.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await using var read = new NpgsqlCommand(
-            $"""SELECT namespace FROM "{_schema}".namespace_binding""", connection, transaction);
-        var holder = (string)(await read.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
+        string holder;
+        Guid storeId;
+        await using (var read = new NpgsqlCommand(
+            $"""SELECT namespace, store_id FROM "{_schema}".namespace_binding""", connection, transaction))
+        await using (var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            holder = reader.GetString(0);
+            storeId = reader.GetGuid(1);
+        }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return holder;
+        return (holder, storeId);
     }
 
     /// <summary>

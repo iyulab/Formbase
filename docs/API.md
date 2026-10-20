@@ -101,9 +101,14 @@ namespace there, and a host configured with another name over that schema refuse
 whose database could not be reached when it started makes the same check before its first request,
 answering `503` `/problems/namespace-unverified` until the check passes (`/settings` still answers),
 and stops if it finds the schema holding another name. Either way the process exits with code `78`
-(`EX_CONFIG`), the code every configuration the host refuses ends with. The MorphDB project is not
-checked this way: two namespaces given one project replace each other's projected tables when both
-project the same table name, so keep the project apart as well.
+(`EX_CONFIG`), the code every configuration the host refuses ends with. **The MorphDB project's tables
+remember the raw stream they were built from.** Every projected table carries the store id of the
+schema whose documents filled it (a value generated with the namespace record, so two schemas configured
+under the same namespace name still differ), and a host whose projection would replace a table built
+from another schema refuses with `409` `/problems/projection-table-owned-elsewhere` and leaves that table
+as it was. Tables built before this carry no mark and are replaced as before; the rebuild marks them.
+Keeping the project apart per namespace is still the configuration to use — the mark turns a mistake
+from silent replacement into an error.
 
 **Upgrading a deployment where two namespaces already share a schema.** Hosts from before the schema
 recorded its namespace could share one, each serving the other's documents. The first host to start
@@ -684,6 +689,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
+| 409 | `/problems/projection-table-owned-elsewhere` | The projection would replace a table another host built from its own raw stream in the same MorphDB project; nothing was dropped |
 | 409 | `/problems/table-name-in-use` | Another form type already projects into the table the declaration names |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
