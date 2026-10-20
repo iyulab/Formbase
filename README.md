@@ -50,9 +50,9 @@ A document's life:
 
 ## Install
 
-Current release: **0.27.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.27.0` pairs with MorphDB `0.24.x`**. Pin the MorphDB server image to
-that line (`ghcr.io/iyulab/morphdb:0.24.1`); the compatible pair is stated with every release in
+Current release: **0.28.0**. Formbase projects into MorphDB over its client, so the two move
+together — **`Formbase.* 0.28.0` pairs with MorphDB `0.25.x`**. Pin the MorphDB server image to
+that line (`ghcr.io/iyulab/morphdb:0.25.0`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
 Start with the core and the DI helpers, then add only the adapters you actually run:
@@ -87,8 +87,8 @@ A published image is the same artifact, built from the same Dockerfile the relea
 before it pushes — pull it instead of building from source:
 
 ```bash
-docker pull ghcr.io/iyulab/formbase:0.27.0
-docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.27.0
+docker pull ghcr.io/iyulab/formbase:0.28.0
+docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.28.0
 ```
 
 By default it composes the in-process stores, which needs nothing else running and loses everything

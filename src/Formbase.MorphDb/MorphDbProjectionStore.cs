@@ -507,15 +507,18 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var section = false;
         if (spec.RecordsPerGroup is { } limit)
         {
-            aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
-            aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.RecordKey, KeysAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
-
-            // A section's rows share their parent's document and key, so their positions ride along too.
+            // A section's rows share their parent's document, key and watermark, so their positions ride
+            // along too, and the position breaks the watermark's ties: every array then follows one total
+            // order — the order the other stores give — and a limit that cuts among one parent's rows keeps
+            // its first ones, not whichever the server reaches first.
             var table = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
             section = table?.Columns.Any(c => c.Name == ProjectionSystemColumns.Row) == true;
+            var order = section ? $"{ProjectionSystemColumns.Watermark}, {ProjectionSystemColumns.Row}" : ProjectionSystemColumns.Watermark;
+            aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: order));
+            aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.RecordKey, KeysAlias, limit, orderBy: order));
             if (section)
             {
-                aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.Row, RowsAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
+                aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.Row, RowsAlias, limit, orderBy: order));
             }
         }
 
@@ -582,10 +585,8 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// key in its place — pairing them anyway would name the wrong record for a document, so the answer
     /// is refused instead.
     /// <para>
-    /// A section's positions are ordered by the watermark like the other two, and the rows one parent
-    /// holds share it, so among them the server's order is its own. Those rows share their document and
-    /// key too, so any pairing names real rows; each run of one document is then put in position order,
-    /// the order the other stores give.
+    /// All three arrays follow the same total order (watermark, then a section row's position), so they
+    /// pair up index by index and come in the order the other stores give.
     /// </para>
     /// </summary>
     private static List<RecordRef> Records(object? documents, object? keys, object? positions, bool section)
@@ -600,31 +601,13 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 "they are read in the same order and must pair up.");
         }
 
-        var records = ids
-            .Select((id, i) => new RecordRef(
+        return
+        [
+            .. ids.Select((id, i) => new RecordRef(
                 DocumentId.From(id is Guid guid ? guid : Guid.Parse(Convert.ToString(id, CultureInfo.InvariantCulture)!)),
                 names[i] is { } key ? RecordKey.Create(Convert.ToString(key, CultureInfo.InvariantCulture)!) : null,
-                rows?[i] is { } position ? Convert.ToInt32(position, CultureInfo.InvariantCulture) : null))
-            .ToList();
-        if (rows is null)
-        {
-            return records;
-        }
-
-        var ordered = new List<RecordRef>(records.Count);
-        for (var start = 0; start < records.Count;)
-        {
-            var end = start;
-            while (end < records.Count && records[end].Document == records[start].Document)
-            {
-                end++;
-            }
-
-            ordered.AddRange(records.Skip(start).Take(end - start).OrderBy(r => r.Row));
-            start = end;
-        }
-
-        return ordered;
+                rows?[i] is { } position ? Convert.ToInt32(position, CultureInfo.InvariantCulture) : null)),
+        ];
     }
 
     private static List<object?> Elements(object? array) =>

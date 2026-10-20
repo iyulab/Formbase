@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.28.0
+
+A minor. Pairs with MorphDB `0.25.x`. Forms written in formdown come in through a new package,
+`Formbase.Formdown`: a form's `getSchema()` result becomes its declaration and a filled form a document
+typed by it. A field can declare the name a person reads it by (`BusinessName`). On MorphDB, the records
+behind an aggregate group now come in the order — and under a cut, the selection — the other stores
+give. Source-compatible: `FieldHint` gains an optional last parameter, so code compiled against 0.27.0
+recompiles without edits (a positional deconstruction of `FieldHint` takes one more variable). A bundle
+volume from 0.27.0 starts on the new images with no step to run, and no table is rebuilt.
 
 ### Added
 
@@ -22,6 +30,15 @@
 - **`VocabularyGap` and `VocabularyGapKind` are in `Formbase.Core.Schema`**, shared by every input
   adapter. They were part of the unpackaged M3L adapter; its property `Model` is now `Declaration`, and
   the M3L adapter now carries a field's label as its `BusinessName` instead of reporting it as a gap.
+
+### Fixed
+
+- **The records behind an aggregate group come in the same order on MorphDB as on the other stores,
+  and a cut keeps the same ones.** A repeated section's rows share their parent's watermark; MorphDB
+  ordered the records behind a group by the watermark alone, so among one parent's rows the order was
+  the server's and a `RecordsPerGroup` cut among them kept whichever rows it reached first. They are
+  now ordered by watermark and then row position on the server (MorphDB `0.25.0`'s multi-column
+  `arrayAgg` order), as SQLite and in-memory order them, and the client no longer re-sorts.
 
 ## 0.27.0
 
