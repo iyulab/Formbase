@@ -17,12 +17,14 @@ namespace Formbase.Host.Contracts;
 /// <param name="DeclarationVersion">The declaration's own version, as declared.</param>
 /// <param name="Fields">The declared fields, in declared order.</param>
 /// <param name="Relations">Declared links to other form types.</param>
+/// <param name="BusinessName">The name a person reads the form by, when one is declared.</param>
 public sealed record DeclarationResponse(
     string FormType,
     string TableName,
     int DeclarationVersion,
     IReadOnlyList<DeclaredFieldResponse> Fields,
-    IReadOnlyList<DeclaredRelationResponse> Relations);
+    IReadOnlyList<DeclaredRelationResponse> Relations,
+    string? BusinessName = null);
 
 /// <param name="Name">The projected column's name.</param>
 /// <param name="Type">The column's declared type.</param>
@@ -96,12 +98,17 @@ public sealed record DeclaredRelationResponse(
 /// </param>
 /// <param name="Fields">The declared fields, in the order they should appear.</param>
 /// <param name="Relations">Declared links to other form types.</param>
+/// <param name="BusinessName">
+/// The name a person reads the form by («설비 점검일지» for <c>inspection_log</c>) — declaration only,
+/// never part of the table, so changing it rebuilds nothing. Blank is refused.
+/// </param>
 public sealed record DeclarationRequest(
     string TableName,
     int DeclarationVersion,
     int? ExpectedDeclarationVersion,
     IReadOnlyList<DeclaredFieldRequest> Fields,
-    IReadOnlyList<DeclaredRelationRequest>? Relations);
+    IReadOnlyList<DeclaredRelationRequest>? Relations,
+    string? BusinessName = null);
 
 /// <param name="Name">The projected column's name.</param>
 /// <param name="Type">The column's declared type.</param>

@@ -805,6 +805,12 @@
             "items": {
               "$ref": "#/components/schemas/DeclaredRelationRequest"
             }
+          },
+          "businessName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -843,6 +849,12 @@
             "items": {
               "$ref": "#/components/schemas/DeclaredRelationResponse"
             }
+          },
+          "businessName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

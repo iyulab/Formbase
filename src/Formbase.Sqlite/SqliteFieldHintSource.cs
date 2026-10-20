@@ -26,7 +26,8 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
             table_name          TEXT NOT NULL,
             fields              TEXT NOT NULL,
             relations           TEXT NULL,
-            declaration_version INTEGER NOT NULL DEFAULT 1
+            declaration_version INTEGER NOT NULL DEFAULT 1,
+            business_name       TEXT NULL
         );
         """;
 
@@ -66,19 +67,21 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         command.Transaction = transaction;
         command.CommandText =
             """
-            INSERT INTO fb_field_hints (form_type, table_name, fields, relations, declaration_version)
-            VALUES ($type, $table, $fields, $relations, $version)
+            INSERT INTO fb_field_hints (form_type, table_name, fields, relations, declaration_version, business_name)
+            VALUES ($type, $table, $fields, $relations, $version, $business)
             ON CONFLICT (form_type) DO UPDATE SET
                 table_name = excluded.table_name,
                 fields = excluded.fields,
                 relations = excluded.relations,
-                declaration_version = excluded.declaration_version
+                declaration_version = excluded.declaration_version,
+                business_name = excluded.business_name
             """;
         command.Parameters.AddWithValue("$type", hints.Type.Value);
         command.Parameters.AddWithValue("$table", hints.TableName);
         command.Parameters.AddWithValue("$fields", DeclarationJson.SerializeFields(hints.Fields));
         command.Parameters.AddWithValue("$relations", hints.Relations is null ? DBNull.Value : DeclarationJson.SerializeRelations(hints.Relations));
         command.Parameters.AddWithValue("$version", hints.DeclarationVersion);
+        command.Parameters.AddWithValue("$business", (object?)hints.BusinessName ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -97,7 +100,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT table_name, fields, relations, declaration_version FROM fb_field_hints WHERE form_type = $type";
+        command.CommandText = "SELECT table_name, fields, relations, declaration_version, business_name FROM fb_field_hints WHERE form_type = $type";
         command.Parameters.AddWithValue("$type", type.Value);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -108,7 +111,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
 
         var fields = DeclarationJson.DeserializeFields(reader.GetString(1));
         var relations = reader.IsDBNull(2) ? null : DeclarationJson.DeserializeRelations(reader.GetString(2));
-        return new FormTypeHints(type, reader.GetString(0), fields, relations, reader.GetInt32(3));
+        return new FormTypeHints(type, reader.GetString(0), fields, relations, reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetString(4));
     }
 
     public async Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default)
@@ -127,7 +130,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         var declared = new List<FormTypeHints>();
         await using var read = connection.CreateCommand();
         read.Transaction = transaction;
-        read.CommandText = "SELECT form_type, table_name, fields, relations, declaration_version FROM fb_field_hints";
+        read.CommandText = "SELECT form_type, table_name, fields, relations, declaration_version, business_name FROM fb_field_hints";
         await using var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -136,7 +139,8 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
                 reader.GetString(1),
                 DeclarationJson.DeserializeFields(reader.GetString(2)),
                 reader.IsDBNull(3) ? null : DeclarationJson.DeserializeRelations(reader.GetString(3)),
-                reader.GetInt32(4)));
+                reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5)));
         }
 
         return declared;
@@ -149,8 +153,9 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     }
 
     /// <summary>
-    /// Brings a declarations table created before relations and versions were kept up to the current
-    /// shape. A declaration already in it reads back as version 1 with no relations — what it was stored as.
+    /// Brings a declarations table created before relations, versions and business names were kept up to
+    /// the current shape. A declaration already in it reads back as version 1 with no relations and no
+    /// business name — what it was stored as.
     /// </summary>
     private static async Task UpgradeAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
     {
@@ -170,6 +175,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         {
             ("relations", "TEXT NULL"),
             ("declaration_version", "INTEGER NOT NULL DEFAULT 1"),
+            ("business_name", "TEXT NULL"),
         })
         {
             if (columns.Contains(column))

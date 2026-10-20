@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- **A form type can declare the name a person reads it by**, as a field can. `FormTypeHints.BusinessName`
+  (wire: top-level `businessName` on a declaration) — «설비 점검일지» for `inspection_log`. Declaration
+  only: stored, read back and served, never part of the projected table, so naming or renaming it
+  rebuilds nothing. Blank is refused (`400` over HTTP). The M3L adapter fills it from a model's label
+  (`## Inspection(설비 점검일지)`), which it used to drop. The SQLite and PostgreSQL declaration tables
+  gain a nullable `business_name` column on first use; declarations stored before read back with none.
+  Source-compatible: `FormTypeHints` gains an optional last parameter (a positional deconstruction takes
+  one more variable).
+
 ### Dependencies
 
 - `MorphDB.Client` 0.25.0 → 0.26.0; the live MorphDB suite and the compose file run `ghcr.io/iyulab/morphdb:0.26.0`.

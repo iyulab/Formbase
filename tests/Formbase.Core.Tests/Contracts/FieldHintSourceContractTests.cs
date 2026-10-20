@@ -222,7 +222,7 @@ public abstract class FieldHintSourceContractTests
     /// kept only the fields would answer version 1 with no relations after a restart.
     /// </summary>
     [Fact]
-    public async Task The_declaration_version_relations_and_field_vocabulary_round_trip()
+    public async Task The_declaration_version_relations_business_name_and_field_vocabulary_round_trip()
     {
         var source = CreateSource();
         var hints = new FormTypeHints(Qc, "qc_table",
@@ -235,12 +235,14 @@ public abstract class FieldHintSourceContractTests
             new RelationHint("lines", RelationKind.Child, FormTypeRef.Create("qc-line"), "qc_serial"),
             new RelationHint("work", RelationKind.Reference, Work, "code"),
         ],
-        DeclarationVersion: 3);
+        DeclarationVersion: 3,
+        BusinessName: "품질 검사표");
 
         await DeclareAsync(source, hints);
 
         var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         read!.DeclarationVersion.Should().Be(3);
+        read.BusinessName.Should().Be("품질 검사표");
         read.Relations.Should().BeEquivalentTo(hints.Relations, options => options.WithStrictOrdering());
         read.Fields.Should().BeEquivalentTo(hints.Fields, options => options.WithStrictOrdering());
     }
@@ -255,6 +257,7 @@ public abstract class FieldHintSourceContractTests
         var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
         read!.DeclarationVersion.Should().Be(1);
         (read.Relations ?? []).Should().BeEmpty();
+        read.BusinessName.Should().BeNull();
     }
 
     private static FormTypeHints Equipment() => new(Work, "work_table",

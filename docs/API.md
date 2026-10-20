@@ -325,7 +325,8 @@ GET /formtypes/orders/declaration
   ],
   "relations": [
     { "name": "lines", "kind": "child", "target": "orderlines", "keyField": "orderId" }
-  ]
+  ],
+  "businessName": "Sales order"
 }
 ```
 
@@ -340,7 +341,8 @@ This is the shape the next projection run will build. A form type with no declar
 - **`businessName`** — the name a person reads the field by, when one is declared (ODCS v3.1
   `businessName`) — say a label in the language of the form, beside a column name in ASCII. It is
   declaration only: it never becomes part of the projected table, so changing it rebuilds nothing.
-  Blank is refused with `400`.
+  Blank is refused with `400`. The declaration has one too, top-level: the name a person reads the form
+  by, on the same terms.
 - **`binding`** — `stored` (the document's own value), `snapshot` (copied and fixed at write time),
   or `reference` (reads the target's current value). A `reference` whose target says which record it
   belongs to (`lookupKey` or `lookupRecord`, with `viaField`) is **computed when it is read**: the

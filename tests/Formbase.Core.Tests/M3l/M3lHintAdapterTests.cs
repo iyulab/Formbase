@@ -136,6 +136,26 @@ public class M3lHintAdapterTests
     }
 
     [Fact]
+    public void A_model_label_is_the_form_business_name()
+    {
+        var result = M3lHintAdapter.Adapt(
+            """
+            ## Inspection(설비 점검일지)
+
+            - id: identifier @pk @generated
+            - lot_no: string(50)
+
+            ## Defect
+
+            - id: identifier @pk @generated
+            """);
+
+        var forms = result.Hints.ToDictionary(h => h.Type.Value);
+        forms["inspection"].BusinessName.Should().Be("설비 점검일지");
+        forms["defect"].BusinessName.Should().BeNull("a model without a label has no name beyond its own");
+    }
+
+    [Fact]
     public void A_lookup_whose_target_model_is_not_in_the_document_stays_a_gap_that_says_so()
     {
         var result = M3lHintAdapter.Adapt(InspectionForm);

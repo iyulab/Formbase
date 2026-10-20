@@ -176,6 +176,26 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task A_form_business_name_is_stored_and_read_back_and_a_blank_one_is_refused()
+    {
+        var type = NewFormType();
+        var named = await _client.PutAsJsonAsync(
+            $"/formtypes/{type}/declaration",
+            new { tableName = $"t_{type}", declarationVersion = 1, businessName = "설비 점검일지", fields = new[] { new { name = "lot_no", type = "text" } } },
+            TestContext.Current.CancellationToken);
+        named.StatusCode.Should().Be(HttpStatusCode.Created, await named.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var read = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
+        read.GetProperty("businessName").GetString().Should().Be("설비 점검일지");
+
+        var blank = await _client.PutAsJsonAsync(
+            $"/formtypes/{NewFormType()}/declaration",
+            new { tableName = "t", declarationVersion = 1, businessName = " ", fields = new[] { new { name = "lot_no", type = "text" } } },
+            TestContext.Current.CancellationToken);
+        blank.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(blank)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+    }
+
+    [Fact]
     public async Task A_business_name_is_stored_and_read_back_and_a_blank_one_is_refused()
     {
         var type = NewFormType();

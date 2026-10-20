@@ -90,11 +90,15 @@ public static class M3lHintAdapter
             AdaptField(model, field, models, fields, relations, gaps);
         }
 
+        // Identity/display — FILLED: a model's label (`## Inspection(설비 점검일지)`) is the name a person reads the form by.
+        var businessName = !string.IsNullOrWhiteSpace(model.Label) && model.Label != model.Name ? model.Label.Trim() : null;
+
         return new FormTypeHints(
             FormTypeRef.Create(ToSnake(model.Name)),
             ToSnake(model.Name),
             fields,
-            relations.Count > 0 ? relations : null);
+            relations.Count > 0 ? relations : null,
+            BusinessName: businessName);
     }
 
     private static void AdaptField(ModelNode model, FieldNode field, IReadOnlyDictionary<string, ModelNode> models, List<FieldHint> fields, List<RelationHint> relations, List<VocabularyGap> gaps)

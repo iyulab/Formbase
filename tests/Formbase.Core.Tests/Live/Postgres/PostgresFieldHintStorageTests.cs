@@ -89,10 +89,12 @@ public sealed class PostgresFieldHintStorageTests
 
         read!.DeclarationVersion.Should().Be(1);
         read.Relations.Should().BeNull();
+        read.BusinessName.Should().BeNull();
         read.Fields.Should().ContainSingle().Which.Target.Should().Be(new EntityRef(FormTypeRef.Create("equipment"), "code"));
 
-        await source.DeclareAsync(read with { DeclarationVersion = 2 }, TestContext.Current.CancellationToken);
-        (await source.GetHintsAsync(FormTypeRef.Create("inspection"), TestContext.Current.CancellationToken))!
-            .DeclarationVersion.Should().Be(2);
+        await source.DeclareAsync(read with { DeclarationVersion = 2, BusinessName = "설비 점검일지" }, TestContext.Current.CancellationToken);
+        var upgraded = await source.GetHintsAsync(FormTypeRef.Create("inspection"), TestContext.Current.CancellationToken);
+        upgraded!.DeclarationVersion.Should().Be(2, "the upgraded table keeps what is declared into it now");
+        upgraded.BusinessName.Should().Be("설비 점검일지");
     }
 }

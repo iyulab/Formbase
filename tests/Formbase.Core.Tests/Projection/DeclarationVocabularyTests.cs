@@ -111,6 +111,30 @@ public class DeclarationVocabularyTests
     }
 
     [Fact]
+    public async Task A_form_business_name_does_not_change_the_projected_shape()
+    {
+        var hints = new InMemoryFieldHintSource();
+        var proposer = new HintSchemaProposer(hints);
+        hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
+        var unnamed = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)], BusinessName: "품질 검사표"));
+        var named = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        named!.Fingerprint().Should().Be(unnamed!.Fingerprint());
+    }
+
+    [Fact]
+    public void A_blank_form_business_name_is_refused_however_it_is_given()
+    {
+        var construct = () => new FormTypeHints(Qc, "qc", [], BusinessName: " ");
+        var with = () => new FormTypeHints(Qc, "qc", []) with { BusinessName = "" };
+
+        construct.Should().Throw<ArgumentException>().WithMessage("*business name*");
+        with.Should().Throw<ArgumentException>().WithMessage("*business name*");
+    }
+
+    [Fact]
     public void A_blank_business_name_is_refused_however_it_is_given()
     {
         var construct = () => new FieldHint("lot", ColumnType.Text, BusinessName: " ");
