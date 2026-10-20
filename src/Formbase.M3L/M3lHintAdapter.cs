@@ -110,6 +110,11 @@ public static class M3lHintAdapter
             return;
         }
 
+        // Identity/display — FILLED: M3L's label is the name a person reads the field by.
+        var businessName = field.Label is not null && field.Label != field.Name && !string.IsNullOrWhiteSpace(field.Label)
+            ? field.Label.Trim()
+            : null;
+
         if (field.Kind is FieldKind.Lookup)
         {
             // A lookup is "true now" across a relation, and it says both halves of the join: the field
@@ -119,7 +124,7 @@ public static class M3lHintAdapter
             if (TryResolveLookup(model, field, models, out var lookupTarget, out var unresolved))
             {
                 fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable,
-                    Binding: FieldBinding.Reference, Target: lookupTarget));
+                    Binding: FieldBinding.Reference, Target: lookupTarget, BusinessName: businessName));
             }
             else
             {
@@ -139,14 +144,6 @@ public static class M3lHintAdapter
                 "A field contributed by an extension keeps its column but loses its owner; the vocabulary has no provenance slot."));
         }
 
-        if (field.Label is not null && field.Label != field.Name)
-        {
-            // The vocabulary's SourceKey/Name split is extraction-key-vs-column-name, both machine
-            // names; M3L's label is a human display string with no home in it — still a gap.
-            gaps.Add(new VocabularyGap(model.Name, field.Name, VocabularyGapKind.IdentityDisplay,
-                $"label \"{field.Label}\"",
-                "A human display label has no slot; SourceKey/Name are machine names, not labels."));
-        }
 
         // Time binding — FILLED: hard binding fixes the value then (Snapshot), soft reads true now
         // (Reference). The declared target rides along as an EntityRef.
@@ -195,7 +192,7 @@ public static class M3lHintAdapter
                 "inline enum", "Enum membership degrades to Text; the value set drops."));
         }
 
-        fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable, Binding: binding, Target: target));
+        fields.Add(new FieldHint(field.Name, MapType(model, field, gaps), field.Nullable, Binding: binding, Target: target, BusinessName: businessName));
     }
 
     /// <summary>

@@ -8,8 +8,11 @@ namespace Formbase.Core.Schema;
 /// name/type/nullability it carries the measured declaration axes (design 2026-07-23, adopted
 /// §3.12-①): <paramref name="SourceKey"/> splits the raw extraction key (identity) from the
 /// projected <paramref name="Name"/> (display), and <paramref name="Binding"/> +
-/// <paramref name="Target"/> record the time-binding of a bound value. Defaults reproduce the
-/// pre-vocabulary behavior: a stored field whose name is its own extraction key.
+/// <paramref name="Target"/> record the time-binding of a bound value. <paramref name="BusinessName"/>
+/// is the name a person reads the field by («로트 번호» for <c>lot_no</c>) — ODCS v3.1's
+/// <c>businessName</c> beside the machine names. It is declaration only: it never reaches the projected
+/// table, so changing it rebuilds nothing. Defaults reproduce the pre-vocabulary behavior: a stored
+/// field whose name is its own extraction key.
 /// </summary>
 public sealed record FieldHint(
     string Name,
@@ -17,4 +20,15 @@ public sealed record FieldHint(
     bool Nullable = true,
     string? SourceKey = null,
     FieldBinding Binding = FieldBinding.Stored,
-    EntityRef? Target = null);
+    EntityRef? Target = null,
+    string? BusinessName = null)
+{
+    /// <summary>The name a person reads the field by, when one is declared.</summary>
+    /// <exception cref="ArgumentException">The name is given but blank.</exception>
+    public string? BusinessName { get; init => field = Checked(value); } = Checked(BusinessName);
+
+    private static string? Checked(string? businessName) =>
+        businessName is not null && string.IsNullOrWhiteSpace(businessName)
+            ? throw new ArgumentException("A business name, when given, must not be blank.", nameof(businessName))
+            : businessName;
+}

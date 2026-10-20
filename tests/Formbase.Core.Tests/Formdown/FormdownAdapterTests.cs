@@ -61,13 +61,13 @@ public class FormdownAdapterTests
     }
 
     [Fact]
-    public void A_written_label_is_a_gap_and_the_label_formdown_makes_from_the_name_is_not()
+    public void A_written_label_is_the_business_name_and_the_label_formdown_makes_from_the_name_is_not()
     {
-        var labels = Adapted().Gaps.Where(g => g.Kind == VocabularyGapKind.IdentityDisplay).ToList();
+        var fields = Adapted().Hints.Fields.ToDictionary(f => f.Name);
 
-        labels.Should().ContainSingle().Which.Should().Be(new VocabularyGap(
-            "inspection", "lot_no", VocabularyGapKind.IdentityDisplay, "label \"로트 번호\"",
-            "A human display label has no slot; SourceKey/Name are machine names, not labels."));
+        fields["lot_no"].BusinessName.Should().Be("로트 번호");
+        fields["lotCode"].BusinessName.Should().BeNull("«Lot Code» is the label formdown made from the name");
+        fields.Values.Where(f => f.BusinessName is not null).Should().ContainSingle();
     }
 
     [Theory]

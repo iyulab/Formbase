@@ -256,10 +256,10 @@ A reference declared without the lookup pair cannot be computed and projects emp
 ### A formdown form in
 
 `Formbase.Formdown` takes a form written in [formdown](https://github.com/iyulab/formdown): the
-schema formdown core's `getSchema()` returns becomes the form type's declaration, and a filled form —
-whose values formdown hands over as text — becomes a document typed by that declaration. What the
-declaration has no slot for (labels, option lists, ranges, patterns, formulas) comes back as gaps
-instead of being dropped silently.
+schema formdown core's `getSchema()` returns becomes the form type's declaration — a label someone
+wrote becomes the field's `BusinessName` — and a filled form, whose values formdown hands over as
+text, becomes a document typed by that declaration. What the declaration has no slot for (option
+lists, ranges, patterns, formulas) comes back as gaps instead of being dropped silently.
 
 <!-- snippet: compile packages="Formbase.Core Formbase.DependencyInjection Formbase.Formdown Microsoft.Extensions.DependencyInjection" -->
 ```csharp
@@ -488,7 +488,7 @@ Implemented:
 - **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows carried no such box at all (per-row distinction awaits the declaration-version work below)
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host
 - **LLM schema proposer** — `Formbase.SchemaIntelligence` implements `ISchemaProposer` over any `IChatClient` (provider-agnostic via Microsoft.Extensions.AI), with strict proposal parsing and a hallucination guard; graduated from its spike after live-model quality measurement (100% parse/projection survival, zero required-flag violations across a six-shape catalog). Registering it **composes** over the declared structure rather than replacing it — the declaration answers for what it states, the model for the rest, and the declaration wins on conflict, because a proposer that reads values never held the fact
-- **Declaration vocabulary** — a form type's hints carry four axes beyond name/type/nullability: identity-vs-display (`SourceKey`, so a renamed field keeps its data), time binding (`FieldBinding` Stored/Snapshot/Reference with a target), relations (`RelationHint`, each form type still its own table), and a declaration version. Each survives declaration → proposal → projection → fingerprint, and is readable back through the proposer (see [Reading a declaration back](#reading-a-declaration-back)); defaults reproduce the pre-vocabulary shape
+- **Declaration vocabulary** — a form type's hints carry four axes beyond name/type/nullability: identity-vs-display (`SourceKey`, so a renamed field keeps its data, and `BusinessName`, the name a person reads it by), time binding (`FieldBinding` Stored/Snapshot/Reference with a target), relations (`RelationHint`, each form type still its own table), and a declaration version. Each survives declaration → proposal → projection → fingerprint, and is readable back through the proposer (see [Reading a declaration back](#reading-a-declaration-back)); defaults reproduce the pre-vocabulary shape
 - **Tri-state projection integrity** — if a failed rebuild's state cleanup also fails, the stamp is marked unverified and a query throws `ProjectionUnverifiedException` rather than serving a half-built table as fresh
 
 Known gaps (audited 2026-07-20 against Formology):

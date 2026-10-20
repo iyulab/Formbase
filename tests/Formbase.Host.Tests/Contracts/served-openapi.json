@@ -914,6 +914,12 @@
                 "$ref": "#/components/schemas/DeclaredTargetResponse"
               }
             ]
+          },
+          "businessName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -954,6 +960,12 @@
               {
                 "$ref": "#/components/schemas/DeclaredTargetResponse"
               }
+            ]
+          },
+          "businessName": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }

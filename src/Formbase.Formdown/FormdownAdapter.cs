@@ -13,8 +13,9 @@ namespace Formbase.Formdown;
 /// adapter does not become a second one.
 /// </summary>
 /// <remarks>
-/// <para>The translation is lossy and says so. Everything the hint vocabulary has no slot for — a display
-/// label, an option list, a range, a pattern, a formula — is reported as a <see cref="VocabularyGap"/>
+/// <para>A label someone wrote becomes the field's <see cref="FieldHint.BusinessName"/>. The translation is
+/// lossy and says so: everything the hint vocabulary has no slot for — an option list, a range, a
+/// pattern, a formula — is reported as a <see cref="VocabularyGap"/>
 /// instead of being dropped silently.</para>
 /// <para>formdown hands values over as text (an input's value is a string, a computed field holds its
 /// number as text), while a projected <see cref="ColumnType.Integer"/> or <see cref="ColumnType.Decimal"/>
@@ -138,16 +139,15 @@ public static class FormdownAdapter
         var columnType = MapType(declaration, name, formdownType, hasOptions, validation, gaps);
         var nullable = !(schema.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.True);
 
+        // formdown fills a missing label from the name (snake_case and camelCase become capitalized
+        // words); only a label someone wrote is a name a person reads the field by.
+        string? businessName = null;
         if (schema.TryGetProperty("label", out var label) && label.ValueKind == JsonValueKind.String)
         {
             var text = label.GetString();
-            // formdown fills a missing label from the name (snake_case and camelCase become capitalized
-            // words); only a label someone wrote is a display string the vocabulary drops.
             if (!string.IsNullOrWhiteSpace(text) && text != DefaultLabel(name))
             {
-                gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.IdentityDisplay,
-                    $"label \"{text}\"",
-                    "A human display label has no slot; SourceKey/Name are machine names, not labels."));
+                businessName = text.Trim();
             }
         }
 
@@ -180,7 +180,7 @@ public static class FormdownAdapter
                 "The formula has no slot; the value the form worked out is stored, and is not recomputed when the fields it reads are corrected."));
         }
 
-        return new FieldHint(name, columnType, nullable);
+        return new FieldHint(name, columnType, nullable, BusinessName: businessName);
     }
 
     private static ColumnType MapType(string declaration, string name, string formdownType, bool hasOptions, JsonElement validation, List<VocabularyGap> gaps)

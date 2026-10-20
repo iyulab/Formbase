@@ -33,13 +33,15 @@ public sealed record DeclarationResponse(
 /// </param>
 /// <param name="Binding">When in time the value is read from.</param>
 /// <param name="Target">What a bound field points at, when it is bound to another form type.</param>
+/// <param name="BusinessName">The name a person reads the field by, when one is declared.</param>
 public sealed record DeclaredFieldResponse(
     string Name,
     DeclaredColumnType Type,
     bool Nullable,
     string? SourceKey,
     DeclaredBinding Binding,
-    DeclaredTargetResponse? Target);
+    DeclaredTargetResponse? Target,
+    string? BusinessName = null);
 
 /// <param name="FormType">The form type the bound field's value comes from.</param>
 /// <param name="ValueField">
@@ -107,13 +109,18 @@ public sealed record DeclarationRequest(
 /// <param name="SourceKey">The document key this field reads, when it differs from the column name.</param>
 /// <param name="Binding">When in time the value is read from. Defaults to <c>stored</c>.</param>
 /// <param name="Target">What a bound field points at.</param>
+/// <param name="BusinessName">
+/// The name a person reads the field by («로트 번호» for <c>lot_no</c>) — declaration only, never a
+/// column, so changing it rebuilds nothing. Blank is refused.
+/// </param>
 public sealed record DeclaredFieldRequest(
     string Name,
     DeclaredColumnType Type,
     bool Nullable = true,
     string? SourceKey = null,
     DeclaredBinding Binding = DeclaredBinding.Stored,
-    DeclaredTargetResponse? Target = null);
+    DeclaredTargetResponse? Target = null,
+    string? BusinessName = null);
 
 /// <param name="Name">The relation's declared name.</param>
 /// <param name="Kind">Whether the target is owned or merely referenced.</param>

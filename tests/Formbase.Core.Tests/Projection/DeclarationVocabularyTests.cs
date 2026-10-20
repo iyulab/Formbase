@@ -92,6 +92,34 @@ public class DeclarationVocabularyTests
             "a change on any axis must read as a different shape, or redeclaration staleness cannot see it");
     }
 
+    /// <summary>
+    /// A business name is how a person reads the field, not a shape: naming a field «로트 번호» after the
+    /// fact must not read as a different table, or relabelling would rebuild every projection.
+    /// </summary>
+    [Fact]
+    public async Task A_business_name_does_not_change_the_projected_shape()
+    {
+        var hints = new InMemoryFieldHintSource();
+        var proposer = new HintSchemaProposer(hints);
+        hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text)]));
+        var unnamed = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        hints.Declare(new FormTypeHints(Qc, "qc", [new FieldHint("lot", ColumnType.Text, BusinessName: "로트 번호")]));
+        var named = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        named!.Fingerprint().Should().Be(unnamed!.Fingerprint());
+    }
+
+    [Fact]
+    public void A_blank_business_name_is_refused_however_it_is_given()
+    {
+        var construct = () => new FieldHint("lot", ColumnType.Text, BusinessName: " ");
+        var with = () => new FieldHint("lot", ColumnType.Text) with { BusinessName = "" };
+
+        construct.Should().Throw<ArgumentException>().WithMessage("*business name*");
+        with.Should().Throw<ArgumentException>().WithMessage("*business name*");
+    }
+
     [Fact]
     public async Task Declared_relations_reach_the_projection_store_with_resolved_target_tables()
     {

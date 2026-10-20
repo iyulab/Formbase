@@ -124,12 +124,15 @@ public class M3lHintAdapterTests
     }
 
     [Fact]
-    public void The_display_label_drops_and_is_measured()
+    public void The_display_label_is_the_business_name()
     {
         var result = M3lHintAdapter.Adapt(InspectionForm);
 
-        result.Gaps.Should().Contain(g =>
-            g.Field == "lot_no" && g.Kind == VocabularyGapKind.IdentityDisplay && g.Construct.Contains("로트 번호"));
+        var fields = result.Hints[0].Fields.ToDictionary(f => f.Name);
+        fields["lot_no"].BusinessName.Should().Be("로트 번호");
+        fields["qty"].BusinessName.Should().BeNull("a field without a label has no name beyond its own");
+        result.Gaps.Should().NotContain(g => g.Field == "lot_no" && g.Construct.Contains("로트 번호"),
+            "the label is carried now, not dropped");
     }
 
     [Fact]
@@ -275,12 +278,11 @@ public class M3lHintAdapterTests
         var result = M3lHintAdapter.Adapt(InspectionForm);
 
         // After the vocabulary absorbed relations and time-binding, what remains a gap is what the
-        // declaration vocabulary genuinely does not carry — human labels, derived fields, declared
+        // declaration vocabulary genuinely does not carry — derived fields, declared
         // value constraints — and what the document does not say: which target record a soft binding
         // reads, or a lookup whose target model is declared elsewhere.
         result.Gaps.Select(g => g.Kind).Distinct().Should().OnlyContain(k =>
-            k == VocabularyGapKind.IdentityDisplay
-            || k == VocabularyGapKind.Derived
+            k == VocabularyGapKind.Derived
             || k == VocabularyGapKind.Constraint
             || k == VocabularyGapKind.Unresolved
             || k == VocabularyGapKind.ReferenceLookup);

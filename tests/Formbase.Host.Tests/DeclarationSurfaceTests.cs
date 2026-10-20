@@ -49,7 +49,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
             FormTypeRef.Create(type),
             $"{type}_table",
             [
-                new FieldHint("total", ColumnType.Integer, Nullable: false),
+                new FieldHint("total", ColumnType.Integer, Nullable: false, BusinessName: "합계"),
                 new FieldHint("openedAt", ColumnType.Timestamp, SourceKey: "opened_at"),
             ],
             DeclarationVersion: 7));
@@ -66,6 +66,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
         fields[0].GetProperty("type").GetString().Should().Be("integer");
         fields[0].GetProperty("nullable").GetBoolean().Should().BeFalse();
         fields[0].GetProperty("binding").GetString().Should().Be("stored");
+        fields[0].GetProperty("businessName").GetString().Should().Be("합계");
 
         fields[1].GetProperty("sourceKey").GetString().Should().Be("opened_at",
             "a field that reads a differently-named document key is unreadable without knowing which key");

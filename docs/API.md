@@ -315,12 +315,13 @@ GET /formtypes/orders/declaration
   "declarationVersion": 1,
   "fields": [
     { "name": "total", "type": "integer", "nullable": false, "sourceKey": null,
-      "binding": "stored", "target": null },
+      "binding": "stored", "target": null, "businessName": "Order total" },
     { "name": "customerName", "type": "text", "nullable": true, "sourceKey": null,
       "binding": "reference", "target": { "formType": "customers", "valueField": "name",
-                                          "lookupKey": "id", "viaField": "customerId" } },
+                                          "lookupKey": "id", "viaField": "customerId" },
+      "businessName": null },
     { "name": "customerId", "type": "text", "nullable": true, "sourceKey": null,
-      "binding": "stored", "target": null }
+      "binding": "stored", "target": null, "businessName": null }
   ],
   "relations": [
     { "name": "lines", "kind": "child", "target": "orderlines", "keyField": "orderId" }
@@ -336,6 +337,10 @@ This is the shape the next projection run will build. A form type with no declar
   UTC, in documents and in query filters alike; a value with an offset keeps it.
 - **`sourceKey`** — the document key the field reads when it differs from the column name. A rename
   that keeps already-stored documents readable.
+- **`businessName`** — the name a person reads the field by, when one is declared (ODCS v3.1
+  `businessName`) — say a label in the language of the form, beside a column name in ASCII. It is
+  declaration only: it never becomes part of the projected table, so changing it rebuilds nothing.
+  Blank is refused with `400`.
 - **`binding`** — `stored` (the document's own value), `snapshot` (copied and fixed at write time),
   or `reference` (reads the target's current value). A `reference` whose target says which record it
   belongs to (`lookupKey` or `lookupRecord`, with `viaField`) is **computed when it is read**: the

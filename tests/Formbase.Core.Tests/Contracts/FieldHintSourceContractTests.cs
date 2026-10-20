@@ -227,7 +227,7 @@ public abstract class FieldHintSourceContractTests
         var source = CreateSource();
         var hints = new FormTypeHints(Qc, "qc_table",
         [
-            new FieldHint("serial", ColumnType.Text, Nullable: false, SourceKey: "Serial No"),
+            new FieldHint("serial", ColumnType.Text, Nullable: false, SourceKey: "Serial No", BusinessName: "일련번호"),
             new FieldHint("equipment", ColumnType.Text, Binding: FieldBinding.Reference, Target: new EntityRef(Work, "code", TargetLookup.Record, "serial")),
             new FieldHint("equipment_name", ColumnType.Text, Binding: FieldBinding.Snapshot, Target: new EntityRef(Work, "name")),
         ],

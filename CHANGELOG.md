@@ -4,6 +4,10 @@
 
 ### Added
 
+- **A field can declare the name a person reads it by.** `FieldHint.BusinessName` (wire:
+  `fields[].businessName`, ODCS v3.1's `businessName`) — «로트 번호» for `lot_no`. Declaration only: it
+  is stored, read back and served, and never reaches the projected table, so naming or renaming it
+  rebuilds nothing. Blank is refused (`400` over HTTP). Declarations stored before read back with none.
 - **`Formbase.Formdown` — a new package for forms written in formdown.** `FormdownAdapter.AdaptSchema`
   turns the JSON formdown core's `getSchema()` returns into the form type's `FormTypeHints`: one field
   per data field in form order (buttons are not fields), required fields not nullable, types from the
@@ -12,11 +16,12 @@
   `FormdownAdapter.AdaptData` turns a filled form into a document typed by those hints: formdown hands
   values over as text, so a number field's text becomes a JSON number and an empty number or date field
   becomes null; text that is not a plain invariant number is kept as sent, so the projection reports it
-  instead of storing a misread value. What the hints cannot carry — a written label, an option list, a
-  validation rule, a formula — is reported as a `VocabularyGap`. No package dependencies beyond
+  instead of storing a misread value. A label someone wrote becomes the field's `BusinessName`; what the
+  hints cannot carry — an option list, a validation rule, a formula — is reported as a `VocabularyGap`. No package dependencies beyond
   `Formbase.Core`; trim- and AOT-compatible.
 - **`VocabularyGap` and `VocabularyGapKind` are in `Formbase.Core.Schema`**, shared by every input
-  adapter. They were part of the unpackaged M3L adapter; its property `Model` is now `Declaration`.
+  adapter. They were part of the unpackaged M3L adapter; its property `Model` is now `Declaration`, and
+  the M3L adapter now carries a field's label as its `BusinessName` instead of reporting it as a gap.
 
 ## 0.27.0
 
