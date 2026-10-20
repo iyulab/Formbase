@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.26.0
+
+A minor. Pairs with MorphDB `0.24.x` (was `0.22.x`). Hosts sharing one MorphDB project no longer
+replace each other's projected tables: a table carries the store id of the schema whose documents
+built it, and a projection that would replace another schema's table answers `409`. A MorphDB project
+deleted while a host runs, and a store that cannot be reached during a projection run, answer `503`
+instead of an unhandled `500`. One breaking change: `AffixVocabulary` is removed, below. A bundle
+volume from 0.25.0 starts on the new images with no step to run; existing projected tables carry no
+mark and are marked on their next rebuild.
 
 ### Fixed
 
