@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- `MorphDB.Client` 0.25.0 → 0.26.0; the live MorphDB suite and the compose file run `ghcr.io/iyulab/morphdb:0.26.0`.
+  Nothing Formbase uses changed: 0.26.0 adds OData atomic groups and per-subscriber real-time delivery.
+
 ## 0.28.0
 
 A minor. Pairs with MorphDB `0.25.x`. Forms written in formdown come in through a new package,
