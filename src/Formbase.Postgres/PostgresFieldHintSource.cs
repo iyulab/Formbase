@@ -78,7 +78,9 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
     /// <summary>
     /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
     /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
-    /// type already projects into throws <see cref="TableNameInUseException"/>; neither stores anything.
+    /// type already projects into throws <see cref="TableNameInUseException"/>, and a target naming a field
+    /// that does not exist (<see cref="DeclaredTargets"/>) or a repeated section that breaks a rule
+    /// (<see cref="DeclaredSections"/>) throws <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
     public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
     {
@@ -100,26 +102,11 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
             await lockTable.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var declared = new List<(FormTypeRef, string)>();
-        var declaredFields = new Dictionary<FormTypeRef, string>();
-        await using (var read = new NpgsqlCommand(
-            $"""SELECT form_type, table_name, fields::text FROM "{_bootstrap.Schema}".field_hints""",
-            connection,
-            transaction))
-        await using (var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
-        {
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var type = FormTypeRef.Create(reader.GetString(0));
-                declared.Add((type, reader.GetString(1)));
-                declaredFields[type] = reader.GetString(2);
-            }
-        }
+        var declared = await ReadAllAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
 
-        DeclaredTableName.EnsureUnclaimed(hints, declared);
-        DeclaredTargets.EnsureResolvable(hints, type => declaredFields.TryGetValue(type, out var json)
-            ? DeclarationJson.DeserializeFields(json)
-            : null);
+        DeclaredTableName.EnsureUnclaimed(hints, declared.Select(d => (d.Type, d.TableName)));
+        DeclaredTargets.EnsureResolvable(hints, type => declared.FirstOrDefault(d => d.Type == type)?.Fields);
+        DeclaredSections.EnsureWellFormed(hints, declared);
 
         await using var command = new NpgsqlCommand(
             $"""
@@ -171,6 +158,39 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         var fields = DeclarationJson.DeserializeFields(reader.GetString(1));
         var relations = reader.IsDBNull(2) ? null : DeclarationJson.DeserializeRelations(reader.GetString(2));
         return new FormTypeHints(type, tableName, fields, relations, reader.GetInt32(3));
+    }
+
+    public async Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var declared = await ReadAllAsync(connection, transaction: null, cancellationToken).ConfigureAwait(false);
+        return SectionSource.Find(section, declared);
+    }
+
+    /// <summary>Every declaration held. Declarations are few — one per form type — so they are read whole.</summary>
+    private async Task<List<FormTypeHints>> ReadAllAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var declared = new List<FormTypeHints>();
+        await using var read = new NpgsqlCommand(
+            $"""SELECT form_type, table_name, fields::text, relations::text, declaration_version FROM "{_bootstrap.Schema}".field_hints""",
+            connection,
+            transaction);
+        await using var reader = await read.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            declared.Add(new FormTypeHints(
+                FormTypeRef.Create(reader.GetString(0)),
+                reader.GetString(1),
+                DeclarationJson.DeserializeFields(reader.GetString(2)),
+                reader.IsDBNull(3) ? null : DeclarationJson.DeserializeRelations(reader.GetString(3)),
+                reader.GetInt32(4)));
+        }
+
+        return declared;
     }
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)

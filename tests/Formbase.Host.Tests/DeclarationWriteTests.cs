@@ -268,6 +268,52 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         target.GetProperty("viaField").GetString().Should().Be("equipment_number");
     }
 
+    [Fact]
+    public async Task A_repeated_section_is_declared_on_the_parent_and_reads_back()
+    {
+        var parent = NewFormType();
+        var section = NewFormType();
+        var ct = TestContext.Current.CancellationToken;
+
+        var lines = await DeclareAsync(section, new
+        {
+            tableName = $"declared_{section}",
+            declarationVersion = 1,
+            fields = new object[] { new { name = "order_no", type = "text" }, new { name = "product", type = "text" } },
+        });
+        lines.StatusCode.Should().Be(HttpStatusCode.Created, await lines.Content.ReadAsStringAsync(ct));
+
+        var order = await DeclareAsync(parent, new
+        {
+            tableName = $"declared_{parent}",
+            declarationVersion = 1,
+            fields = new object[] { new { name = "order_no", type = "text" } },
+            relations = new object[] { new { name = "lines", kind = "child", target = section, keyField = "order_no", sectionField = "lines" } },
+        });
+        order.StatusCode.Should().Be(HttpStatusCode.Created, await order.Content.ReadAsStringAsync(ct));
+
+        var relation = (await ReadAsync(await _client.GetAsync($"/formtypes/{parent}/declaration", ct)))
+            .GetProperty("relations")[0];
+        relation.GetProperty("sectionField").GetString().Should().Be("lines");
+    }
+
+    [Fact]
+    public async Task A_section_field_that_is_also_a_column_is_an_invalid_declaration()
+    {
+        var parent = NewFormType();
+
+        var refused = await DeclareAsync(parent, new
+        {
+            tableName = $"declared_{parent}",
+            declarationVersion = 1,
+            fields = new object[] { new { name = "lines", type = "text" } },
+            relations = new object[] { new { name = "lines", kind = "child", target = NewFormType(), keyField = "order_no", sectionField = "lines" } },
+        });
+
+        refused.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(refused)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+    }
+
     private static object Declaration(string type, int version, int? expected = null, string? extraField = null, string? tableName = null)
     {
         var fields = new List<object> { new { name = "total", type = "integer", nullable = false } };

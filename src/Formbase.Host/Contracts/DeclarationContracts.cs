@@ -65,11 +65,17 @@ public sealed record DeclaredTargetResponse(string FormType, string ValueField, 
 /// <param name="Kind">Whether the target is owned or merely referenced.</param>
 /// <param name="Target">The form type the relation points at.</param>
 /// <param name="KeyField">The field carrying the link.</param>
+/// <param name="SectionField">
+/// For a child relation: the array field of this form type's documents that holds the target's rows.
+/// Given, the target is a repeated section — it accepts no documents of its own, and each array item is
+/// projected as one of its rows, carrying this document's <paramref name="KeyField"/> value.
+/// </param>
 public sealed record DeclaredRelationResponse(
     string Name,
     DeclaredRelationKind Kind,
     string Target,
-    string KeyField);
+    string KeyField,
+    string? SectionField = null);
 
 
 /// <summary>
@@ -113,11 +119,17 @@ public sealed record DeclaredFieldRequest(
 /// <param name="Kind">Whether the target is owned or merely referenced.</param>
 /// <param name="Target">The form type the relation points at.</param>
 /// <param name="KeyField">The field carrying the link.</param>
+/// <param name="SectionField">
+/// For a child relation: the array field of this form type's documents that holds the target's rows.
+/// Given, the target is a repeated section — it accepts no documents of its own, and each array item is
+/// projected as one of its rows, carrying this document's <paramref name="KeyField"/> value.
+/// </param>
 public sealed record DeclaredRelationRequest(
     string Name,
     DeclaredRelationKind Kind,
     string Target,
-    string KeyField);
+    string KeyField,
+    string? SectionField = null);
 
 /// <summary>
 /// What a write answers: the declaration now in force, and what it did to the projection.

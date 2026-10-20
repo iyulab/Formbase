@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A child relation can name a repeated section.** `RelationHint.SectionField` (wire:
+  `relations[].sectionField`) names the array field of the parent's documents whose items are the
+  target's rows. Declarations are checked the same way on every store: only a child relation may name
+  one, the parent may not also declare the array as a field, a section has one parent and no sections
+  of its own, and the section has to declare the relation's key field. `IFieldHintSource.GetSectionSourceAsync`
+  answers which declaration a section's rows come from. Declarations stored before read back unchanged.
+
+### Breaking
+
+- `IFieldHintSource` gains `GetSectionSourceAsync`. An implementation outside this repository has to add
+  it; a store that holds no section declarations answers null.
+
 ## 0.26.0
 
 A minor. Pairs with MorphDB `0.24.x` (was `0.22.x`). Hosts sharing one MorphDB project no longer

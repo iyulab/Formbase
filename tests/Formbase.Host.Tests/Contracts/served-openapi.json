@@ -964,6 +964,12 @@
           },
           "keyField": {
             "type": "string"
+          },
+          "sectionField": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -987,6 +993,12 @@
           },
           "keyField": {
             "type": "string"
+          },
+          "sectionField": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

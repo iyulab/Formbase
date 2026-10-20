@@ -50,4 +50,22 @@ public class DeclarationJsonTests
         DeclarationJson.DeserializeRelations("null").Should().BeNull();
         DeclarationJson.DeserializeFields("null").Should().BeEmpty();
     }
+
+    /// <summary>Relations stored before a relation could name a repeated section read back without one.</summary>
+    [Fact]
+    public void A_relation_stored_before_section_fields_reads_back_without_one()
+    {
+        const string stored = """[{"Name":"lines","Kind":"Child","Target":"order_line","KeyField":"order_no"}]""";
+
+        DeclarationJson.DeserializeRelations(stored).Should().ContainSingle()
+            .Which.Should().Be(new RelationHint("lines", RelationKind.Child, FormTypeRef.Create("order_line"), "order_no"));
+    }
+
+    [Fact]
+    public void A_section_field_round_trips()
+    {
+        IReadOnlyList<RelationHint> relations = [new RelationHint("lines", RelationKind.Child, FormTypeRef.Create("order_line"), "order_no", "lines")];
+
+        DeclarationJson.DeserializeRelations(DeclarationJson.SerializeRelations(relations)).Should().Equal(relations);
+    }
 }

@@ -247,7 +247,7 @@ internal static class DeclarationEndpoints
             request.Relations is null
                 ? null
                 : [.. request.Relations.Select(r => new RelationHint(
-                    r.Name, r.Kind.ToEngine(), FormTypeRef.Create(r.Target), r.KeyField))],
+                    r.Name, r.Kind.ToEngine(), FormTypeRef.Create(r.Target), r.KeyField, r.SectionField))],
             request.DeclarationVersion);
 
     /// <summary>The engine lookup a wire target names: a field, the record identity, or none.</summary>
@@ -281,7 +281,8 @@ internal static class DeclarationEndpoints
                 r.Name,
                 r.Kind.ToWire(),
                 r.Target.Value,
-                r.KeyField))]);
+                r.KeyField,
+                r.SectionField))]);
 
     private static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
         new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value, LastRunResponse.FromTracked(lastRun));

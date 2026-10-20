@@ -11,4 +11,11 @@ namespace Formbase.Core.Ports;
 public interface IFieldHintSource
 {
     Task<FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The declaration that names <paramref name="section"/> as a repeated section
+    /// (<see cref="RelationHint.SectionField"/>), or null when none does — the source a section form
+    /// type's rows are projected from.
+    /// </summary>
+    Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default);
 }

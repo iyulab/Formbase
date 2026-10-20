@@ -402,4 +402,139 @@ public abstract class FieldHintSourceContractTests
         await ((Func<Task>)(() => DeclareAsync(source, refused))).Should().ThrowAsync<ArgumentException>();
         await DeclareAsync(source, accepted);
     }
+
+    private static readonly FormTypeRef Order = FormTypeRef.Create("order");
+    private static readonly FormTypeRef OrderLine = FormTypeRef.Create("order-line");
+
+    private static FormTypeHints OrderWithLines(string sectionField = "lines", RelationKind kind = RelationKind.Child, FormTypeRef? parent = null, FormTypeRef? target = null, string table = "orders") =>
+        new(parent ?? Order, table,
+        [
+            new FieldHint("order_no", ColumnType.Text),
+            new FieldHint("customer", ColumnType.Text),
+        ],
+        [new RelationHint("lines", kind, target ?? OrderLine, "order_no", sectionField)]);
+
+    private static FormTypeHints Lines(FormTypeRef? type = null, string table = "order_lines", IReadOnlyList<RelationHint>? relations = null) =>
+        new(type ?? OrderLine, table,
+        [
+            new FieldHint("order_no", ColumnType.Text),
+            new FieldHint("product", ColumnType.Text),
+            new FieldHint("qty", ColumnType.Integer),
+        ],
+        relations);
+
+    [Fact]
+    public async Task A_repeated_section_round_trips_and_names_its_source()
+    {
+        var source = CreateSource();
+        var ct = TestContext.Current.CancellationToken;
+        await DeclareAsync(source, Lines());
+        await DeclareAsync(source, OrderWithLines());
+
+        var read = await source.GetHintsAsync(Order, ct);
+        read!.Relations.Should().ContainSingle().Which.SectionField.Should().Be("lines");
+
+        var section = await source.GetSectionSourceAsync(OrderLine, ct);
+        section.Should().NotBeNull();
+        section!.Parent.Type.Should().Be(Order);
+        section.SectionField.Should().Be("lines");
+        section.Relation.KeyField.Should().Be("order_no");
+
+        (await source.GetSectionSourceAsync(Order, ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_child_relation_without_a_section_field_gives_no_section_source()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, OrderWithLines(sectionField: null!));
+
+        (await source.GetSectionSourceAsync(OrderLine, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_section_field_on_a_reference_relation_is_refused()
+    {
+        var source = CreateSource();
+        var act = () => DeclareAsync(source, OrderWithLines(kind: RelationKind.Reference));
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*child relation*");
+        (await source.GetHintsAsync(Order, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_section_field_that_is_also_a_declared_field_is_refused()
+    {
+        var source = CreateSource();
+        var act = () => DeclareAsync(source, OrderWithLines(sectionField: "customer"));
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*customer*both*");
+    }
+
+    [Fact]
+    public async Task A_section_already_named_by_another_parent_is_refused()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, OrderWithLines());
+        var act = () => DeclareAsync(source, OrderWithLines(parent: FormTypeRef.Create("quote"), table: "quotes"));
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*already a repeated section of 'order'*");
+    }
+
+    [Fact]
+    public async Task Redeclaring_the_parent_with_its_section_is_not_a_second_source()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, OrderWithLines());
+        await DeclareAsync(source, OrderWithLines() with { DeclarationVersion = 2 });
+
+        (await source.GetHintsAsync(Order, TestContext.Current.CancellationToken))!.DeclarationVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_section_cannot_declare_sections_of_its_own()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, OrderWithLines());
+        var nested = Lines(relations: [new RelationHint("parts", RelationKind.Child, FormTypeRef.Create("part"), "order_no", "parts")]);
+
+        var act = () => DeclareAsync(source, nested);
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*one level deep*");
+    }
+
+    [Fact]
+    public async Task A_form_type_with_sections_cannot_become_a_section()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, Lines(relations: [new RelationHint("parts", RelationKind.Child, FormTypeRef.Create("part"), "order_no", "parts")]));
+
+        var act = () => DeclareAsync(source, OrderWithLines());
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*one level deep*");
+    }
+
+    private static readonly FormTypeHints LinesWithoutKey = new(OrderLine, "order_lines", [new FieldHint("product", ColumnType.Text)]);
+
+    [Fact]
+    public async Task A_parent_naming_a_declared_section_that_lacks_the_key_field_is_refused()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, LinesWithoutKey);
+
+        var act = () => DeclareAsync(source, OrderWithLines());
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*order_no*does not declare*");
+    }
+
+    [Fact]
+    public async Task A_section_declared_after_its_parent_without_the_key_field_is_refused()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, OrderWithLines());
+
+        var act = () => DeclareAsync(source, LinesWithoutKey);
+
+        (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*order_no*does not declare*");
+    }
 }
