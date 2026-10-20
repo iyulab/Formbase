@@ -183,6 +183,7 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                 {
                     row[ProjectionSystemColumns.SourceDocumentOf(column.Name)] = read?.GetValueOrDefault(ProjectionSystemColumns.DocumentId);
                     row[ProjectionSystemColumns.SourceKeyOf(column.Name)] = read?.GetValueOrDefault(ProjectionSystemColumns.RecordKey);
+                    row[ProjectionSystemColumns.SourceRowOf(column.Name)] = read?.GetValueOrDefault(ProjectionSystemColumns.Row);
                     row[ProjectionSystemColumns.SourceAnswersOf(column.Name)] = target is not null;
                 }
             }
@@ -199,7 +200,10 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             && target.Schema.Columns.Any(c => c.Name == matched);
     }
 
-    /// <summary>The target row <paramref name="via"/> identifies — the latest accepted when several do — or null.</summary>
+    /// <summary>
+    /// The target row <paramref name="via"/> identifies — the latest accepted when several do, and of a
+    /// section's rows sharing that document, the first by position — or null.
+    /// </summary>
     private static Dictionary<string, object?>? Read(Table target, ReferenceDef reference, object? via)
     {
         if (via is null)
@@ -210,14 +214,20 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         Dictionary<string, object?>? latest = null;
         foreach (var candidate in target.Rows)
         {
-            if (Identifies(candidate, reference.Lookup, via)
-                && (latest is null || ValueOrder.Compare(candidate.GetValueOrDefault(ProjectionSystemColumns.Watermark), latest.GetValueOrDefault(ProjectionSystemColumns.Watermark)) > 0))
+            if (Identifies(candidate, reference.Lookup, via) && (latest is null || Later(candidate, latest)))
             {
                 latest = candidate;
             }
         }
 
         return latest;
+    }
+
+    private static bool Later(Dictionary<string, object?> candidate, Dictionary<string, object?> latest)
+    {
+        var byWatermark = ValueOrder.Compare(candidate.GetValueOrDefault(ProjectionSystemColumns.Watermark), latest.GetValueOrDefault(ProjectionSystemColumns.Watermark));
+        return byWatermark > 0
+            || (byWatermark == 0 && ValueOrder.Compare(candidate.GetValueOrDefault(ProjectionSystemColumns.Row), latest.GetValueOrDefault(ProjectionSystemColumns.Row)) < 0);
     }
 
     /// <summary>
@@ -262,10 +272,12 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         limit is { } n
             ? rows
                 .OrderBy(row => row.GetValueOrDefault(ProjectionSystemColumns.Watermark), ValueOrder.Comparer)
+                .ThenBy(row => row.GetValueOrDefault(ProjectionSystemColumns.Row), ValueOrder.Comparer)
                 .Take(n)
                 .Select(row => new RecordRef(
                     DocumentId.From((Guid)row[ProjectionSystemColumns.DocumentId]!),
-                    row.GetValueOrDefault(ProjectionSystemColumns.RecordKey) is string key ? RecordKey.Create(key) : null))
+                    row.GetValueOrDefault(ProjectionSystemColumns.RecordKey) is string key ? RecordKey.Create(key) : null,
+                    row.GetValueOrDefault(ProjectionSystemColumns.Row) is long position ? (int)position : null))
                 .ToList()
             : null;
 

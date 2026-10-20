@@ -267,7 +267,11 @@ public sealed class SqliteProjectionStore : IProjectionStore
 
         // The rows counted: the table, filtered — and, when the records behind each group are asked
         // for, each row numbered within its group in the order it was accepted, so the records are
-        // read by the same statement as the count and the limit cuts the same ones every time.
+        // read by the same statement as the count and the limit cuts the same ones every time. A
+        // section's rows share their parent's watermark, so their position follows it.
+        var section = types.ContainsKey(ProjectionSystemColumns.Row);
+        var acceptedOrder = SqliteValues.Quote(ProjectionSystemColumns.Watermark) +
+            (section ? ", " + SqliteValues.Quote(ProjectionSystemColumns.Row) : string.Empty);
         var source = new StringBuilder();
         var records = spec.RecordsPerGroup;
         if (records is null)
@@ -277,10 +281,9 @@ public sealed class SqliteProjectionStore : IProjectionStore
         }
         else
         {
-            var watermark = SqliteValues.Quote(ProjectionSystemColumns.Watermark);
             source.Append("(SELECT *, ROW_NUMBER() OVER (")
                 .Append(keys.Count > 0 ? "PARTITION BY " + string.Join(", ", keys) + " " : string.Empty)
-                .Append("ORDER BY ").Append(watermark).Append(") AS ").Append(SqliteValues.Quote(RowNumberColumn))
+                .Append("ORDER BY ").Append(acceptedOrder).Append(") AS ").Append(SqliteValues.Quote(RowNumberColumn))
                 .Append(" FROM ").Append(table);
             AppendWhere(source, command, spec.Filters, types);
             source.Append(')');
@@ -295,10 +298,12 @@ public sealed class SqliteProjectionStore : IProjectionStore
         sql.Append("COUNT(*)");
         if (records is { } limit)
         {
-            // Each record as a [document, key] pair, so a null key keeps its place beside its document.
+            // Each record as a [document, key] pair — and a section's row as [document, key, position] —
+            // so a null key keeps its place beside its document.
             sql.Append(", json_group_array(json_array(").Append(SqliteValues.Quote(ProjectionSystemColumns.DocumentId))
                 .Append(", ").Append(SqliteValues.Quote(ProjectionSystemColumns.RecordKey))
-                .Append(") ORDER BY ").Append(SqliteValues.Quote(ProjectionSystemColumns.Watermark))
+                .Append(section ? ", " + SqliteValues.Quote(ProjectionSystemColumns.Row) : string.Empty)
+                .Append(") ORDER BY ").Append(acceptedOrder)
                 .Append(") FILTER (WHERE ").Append(SqliteValues.Quote(RowNumberColumn)).Append(" <= ")
                 .Append(limit.ToString(CultureInfo.InvariantCulture)).Append(')');
         }
@@ -401,19 +406,28 @@ public sealed class SqliteProjectionStore : IProjectionStore
             var answers = targetColumns.Contains(reference.Value) && targetColumns.Contains(matched);
             var via = $"base.{SqliteValues.Quote(reference.Via)}";
             var match = $"target.{SqliteValues.Quote(matched)} = {via}";
+            // A section's rows share their parent's watermark; among them the first by position is read.
+            var section = targetColumns.Contains(ProjectionSystemColumns.Row);
+            var order = $"target.{SqliteValues.Quote(ProjectionSystemColumns.Watermark)} DESC" +
+                (section ? $", target.{SqliteValues.Quote(ProjectionSystemColumns.Row)} ASC" : string.Empty);
             string Read(string targetColumn, string alias) => answers
                 ? $"(SELECT target.{SqliteValues.Quote(targetColumn)} FROM {SqliteValues.Quote(reference.Target)} AS target WHERE {match} " +
-                  $"ORDER BY target.{SqliteValues.Quote(ProjectionSystemColumns.Watermark)} DESC LIMIT 1) AS {SqliteValues.Quote(alias)}"
+                  $"ORDER BY {order} LIMIT 1) AS {SqliteValues.Quote(alias)}"
                 : $"NULL AS {SqliteValues.Quote(alias)}";
 
             selected.Add(Read(reference.Value, column.Name));
             if (sources)
             {
-                // The watermark is unique, so the same match and order read the same target row.
+                // The order is total — the watermark, and a section's position after it — so the same match
+                // and order read the same target row.
                 selected.Add(Read(ProjectionSystemColumns.DocumentId, ProjectionSystemColumns.SourceDocumentOf(column.Name)));
                 selected.Add(targetColumns.Contains(ProjectionSystemColumns.RecordKey)
                     ? Read(ProjectionSystemColumns.RecordKey, ProjectionSystemColumns.SourceKeyOf(column.Name))
                     : $"NULL AS {SqliteValues.Quote(ProjectionSystemColumns.SourceKeyOf(column.Name))}");
+                if (section)
+                {
+                    selected.Add(Read(ProjectionSystemColumns.Row, ProjectionSystemColumns.SourceRowOf(column.Name)));
+                }
                 selected.Add($"{(answers ? 1 : 0)} AS {SqliteValues.Quote(ProjectionSystemColumns.SourceAnswersOf(column.Name))}");
             }
         }
@@ -446,7 +460,8 @@ public sealed class SqliteProjectionStore : IProjectionStore
         return array.RootElement.EnumerateArray()
             .Select(pair => new RecordRef(
                 DocumentId.From(Guid.Parse(pair[0].GetString()!)),
-                pair[1].ValueKind == JsonValueKind.Null ? null : RecordKey.Create(pair[1].GetString()!)))
+                pair[1].ValueKind == JsonValueKind.Null ? null : RecordKey.Create(pair[1].GetString()!),
+                pair.GetArrayLength() > 2 && pair[2].ValueKind == JsonValueKind.Number ? pair[2].GetInt32() : null))
             .ToList();
     }
 

@@ -70,6 +70,12 @@ public static class ProjectionSystemColumns
     public static string SourceKeyOf(string referenceColumn) => "fb_src_key__" + referenceColumn;
 
     /// <summary>
+    /// The target row's position in its parent's section (<see cref="Row"/>), beside <see cref="SourceDocumentOf"/>
+    /// — answered only when the target is a repeated section; absent or null otherwise.
+    /// </summary>
+    public static string SourceRowOf(string referenceColumn) => "fb_src_row__" + referenceColumn;
+
+    /// <summary>
     /// Whether the target can answer the reference at all — its table exists with the column read and
     /// the column matched — beside <see cref="SourceDocumentOf"/>: a boolean, or an integer 1 or 0.
     /// </summary>

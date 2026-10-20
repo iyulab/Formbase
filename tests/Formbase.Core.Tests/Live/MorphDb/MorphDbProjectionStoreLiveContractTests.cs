@@ -33,3 +33,18 @@ public sealed class MorphDbReferenceResolutionLiveContractTests : ReferenceResol
 
     protected override IProjectionStore CreateStore() => new MorphDbProjectionStore(_fixture.CreateClient());
 }
+
+/// <summary>
+/// Runs the section contract against a real MorphDB service: a section's position ordering, its records
+/// behind an aggregate, and a reference into it computed by a MorphDB lookup. Requires Docker (category: Live).
+/// </summary>
+[Collection(MorphDbCollection.Name)]
+[Trait("Category", "Live.MorphDb")]
+public sealed class MorphDbSectionStoreLiveContractTests : SectionStoreContractTests
+{
+    private readonly MorphDbFixture _fixture;
+
+    public MorphDbSectionStoreLiveContractTests(MorphDbFixture fixture) => _fixture = fixture;
+
+    protected override IProjectionStore CreateStore() => new MorphDbProjectionStore(_fixture.CreateClient());
+}

@@ -69,6 +69,16 @@ public sealed class SqliteProjectionStoreContractTests : ProjectionStoreContract
     public void Dispose() => _file.Dispose();
 }
 
+/// <summary>Runs the section contract against the SQLite adapter.</summary>
+public sealed class SqliteSectionStoreContractTests : SectionStoreContractTests, IDisposable
+{
+    private readonly TemporarySqliteFile _file = new();
+
+    protected override IProjectionStore CreateStore() => new SqliteProjectionStore(_file.Database);
+
+    public void Dispose() => _file.Dispose();
+}
+
 /// <summary>Runs the reference-resolution contract against the SQLite adapter.</summary>
 public sealed class SqliteReferenceResolutionContractTests : ReferenceResolutionContractTests, IDisposable
 {

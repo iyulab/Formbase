@@ -49,6 +49,11 @@ public sealed record TableSchema(
                     .Append(Sep).Append(reference.ValueColumn)
                     .Append(Sep).Append(reference.Lookup)
                     .Append(Sep).Append(reference.ViaColumn);
+                if (reference.TargetIsSection)
+                {
+                    // Only when set: a reference into a table that is not a section keeps its fingerprint.
+                    canonical.Append(Sep).Append('§');
+                }
             }
         }
 

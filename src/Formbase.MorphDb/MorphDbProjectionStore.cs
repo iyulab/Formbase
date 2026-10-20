@@ -189,7 +189,11 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         TargetTable = reference.TargetTable,
         TargetColumn = targetColumn,
         MatchColumn = reference.Lookup is TargetLookup.FieldLookup field ? field.Name : ProjectionSystemColumns.Record,
-        OrderBy = $"{ProjectionSystemColumns.Watermark} desc",
+        // A section's rows share their parent's watermark; among them the first by position is read.
+        // Only for a section: ordering by a column the target lacks reads as a target that cannot answer.
+        OrderBy = reference.TargetIsSection
+            ? $"{ProjectionSystemColumns.Watermark} desc, {ProjectionSystemColumns.Row} asc"
+            : $"{ProjectionSystemColumns.Watermark} desc",
         WhenTargetMissing = "null",
     };
 
@@ -211,6 +215,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     [
         Column(ProjectionSystemColumns.SourceDocumentOf(column), ColumnType.Uuid, nullable: true, Lookup(reference, ProjectionSystemColumns.DocumentId)),
         Column(ProjectionSystemColumns.SourceKeyOf(column), ColumnType.Text, nullable: true, Lookup(reference, ProjectionSystemColumns.RecordKey)),
+        .. reference.TargetIsSection
+            ? new[] { Column(ProjectionSystemColumns.SourceRowOf(column), ColumnType.Integer, nullable: true, Lookup(reference, ProjectionSystemColumns.Row)) }
+            : [],
     ];
 
     /// <summary>
@@ -225,7 +232,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var columns = table?.Columns ?? [];
         var sources = columns
             .Where(c => c.Lookup is not null)
-            .SelectMany(c => new[] { ProjectionSystemColumns.SourceDocumentOf(c.Name), ProjectionSystemColumns.SourceKeyOf(c.Name) })
+            .SelectMany(c => new[] { ProjectionSystemColumns.SourceDocumentOf(c.Name), ProjectionSystemColumns.SourceKeyOf(c.Name), ProjectionSystemColumns.SourceRowOf(c.Name) })
             .ToHashSet(StringComparer.Ordinal);
         return columns.Any(c => sources.Contains(c.Name))
             ? columns.Select(c => c.Name).Where(name => !sources.Contains(name)).ToList()
@@ -497,10 +504,19 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         // place in the keys and the two arrays pair up index by index.
         // Each measure rides it too, as its value and COUNT(column) — the rows that had one.
         List<AggregationColumn> aggregations = [AggregationColumn.Count(CountAlias)];
+        var section = false;
         if (spec.RecordsPerGroup is { } limit)
         {
             aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.DocumentId, DocumentsAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
             aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.RecordKey, KeysAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
+
+            // A section's rows share their parent's document and key, so their positions ride along too.
+            var table = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+            section = table?.Columns.Any(c => c.Name == ProjectionSystemColumns.Row) == true;
+            if (section)
+            {
+                aggregations.Add(AggregationColumn.ArrayAgg(ProjectionSystemColumns.Row, RowsAlias, limit, orderBy: ProjectionSystemColumns.Watermark));
+            }
         }
 
         for (var i = 0; i < measures.Count; i++)
@@ -532,7 +548,11 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 Convert.ToInt64(row[CountAlias], CultureInfo.InvariantCulture),
                 spec.RecordsPerGroup is null
                     ? null
-                    : Records(row.TryGetValue(DocumentsAlias, out var documents) ? documents : null, row.TryGetValue(KeysAlias, out var keys) ? keys : null),
+                    : Records(
+                        row.TryGetValue(DocumentsAlias, out var documents) ? documents : null,
+                        row.TryGetValue(KeysAlias, out var keys) ? keys : null,
+                        section ? (row.TryGetValue(RowsAlias, out var positions) ? positions : null) : null,
+                        section),
                 measures
                     .Select((measure, i) => new MeasureValue(
                         measure,
@@ -554,26 +574,57 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// <summary>The record keys' alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
     private const string KeysAlias = "fb_record_keys";
 
+    /// <summary>A section's row positions' alias; prefixed like <see cref="CountAlias"/> so no grouping column shares it.</summary>
+    private const string RowsAlias = "fb_rows";
+
     /// <summary>
-    /// Pairs the two arrays index by index. Arrays of different lengths mean the server did not keep a
-    /// null key in its place — pairing them anyway would name the wrong record for a document, so the
-    /// answer is refused instead.
+    /// Pairs the arrays index by index. Arrays of different lengths mean the server did not keep a null
+    /// key in its place — pairing them anyway would name the wrong record for a document, so the answer
+    /// is refused instead.
+    /// <para>
+    /// A section's positions are ordered by the watermark like the other two, and the rows one parent
+    /// holds share it, so among them the server's order is its own. Those rows share their document and
+    /// key too, so any pairing names real rows; each run of one document is then put in position order,
+    /// the order the other stores give.
+    /// </para>
     /// </summary>
-    private static List<RecordRef> Records(object? documents, object? keys)
+    private static List<RecordRef> Records(object? documents, object? keys, object? positions, bool section)
     {
         var ids = Elements(documents);
         var names = Elements(keys);
-        if (ids.Count != names.Count)
+        var rows = section ? Elements(positions) : null;
+        if (ids.Count != names.Count || (rows is not null && rows.Count != ids.Count))
         {
             throw new InvalidOperationException(
-                $"MorphDB answered {ids.Count} documents but {names.Count} record keys for one group; the two are read in the same order and must pair up.");
+                $"MorphDB answered {ids.Count} documents, {names.Count} record keys and {rows?.Count.ToString(CultureInfo.InvariantCulture) ?? "no"} row positions for one group; " +
+                "they are read in the same order and must pair up.");
         }
 
-        return ids
+        var records = ids
             .Select((id, i) => new RecordRef(
                 DocumentId.From(id is Guid guid ? guid : Guid.Parse(Convert.ToString(id, CultureInfo.InvariantCulture)!)),
-                names[i] is { } key ? RecordKey.Create(Convert.ToString(key, CultureInfo.InvariantCulture)!) : null))
+                names[i] is { } key ? RecordKey.Create(Convert.ToString(key, CultureInfo.InvariantCulture)!) : null,
+                rows?[i] is { } position ? Convert.ToInt32(position, CultureInfo.InvariantCulture) : null))
             .ToList();
+        if (rows is null)
+        {
+            return records;
+        }
+
+        var ordered = new List<RecordRef>(records.Count);
+        for (var start = 0; start < records.Count;)
+        {
+            var end = start;
+            while (end < records.Count && records[end].Document == records[start].Document)
+            {
+                end++;
+            }
+
+            ordered.AddRange(records.Skip(start).Take(end - start).OrderBy(r => r.Row));
+            start = end;
+        }
+
+        return ordered;
     }
 
     private static List<object?> Elements(object? array) =>

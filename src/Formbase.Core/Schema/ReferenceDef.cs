@@ -14,13 +14,20 @@ namespace Formbase.Core.Schema;
 /// <param name="ValueColumn">The column of <paramref name="TargetTable"/> whose value is read.</param>
 /// <param name="Lookup">How a target row is found: a column of <paramref name="TargetTable"/>, or the record identity.</param>
 /// <param name="ViaColumn">The column of this table whose value identifies the target row.</param>
+/// <param name="TargetIsSection">
+/// Whether the target is a repeated section (<see cref="TableSchema.Section"/>): the rows one parent
+/// document holds share its watermark, so among them the one read is the first by position
+/// (<see cref="Projection.ProjectionSystemColumns.Row"/>), and the source names the row.
+/// </param>
 /// <remarks>
 /// When several target rows match, the one read is the latest accepted (the highest
-/// <see cref="Projection.ProjectionSystemColumns.Watermark"/>); when none does, the column reads null.
+/// <see cref="Projection.ProjectionSystemColumns.Watermark"/>) — of a section's, the first by position
+/// among those; when none does, the column reads null.
 /// </remarks>
 public sealed record ReferenceDef(
     FormTypeRef TargetType,
     string TargetTable,
     string ValueColumn,
     TargetLookup Lookup,
-    string ViaColumn);
+    string ViaColumn,
+    bool TargetIsSection = false);

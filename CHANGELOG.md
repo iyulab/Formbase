@@ -27,8 +27,13 @@
   stream and are not projected. Intake otherwise still needs no declaration; when the declarations cannot
   be read, intake fails as `IntakeException` (`503`), as it does when the raw store cannot be written.
 - `RecordRef.Row` (wire: `record.row`, absent otherwise) is a section row's position, so the rows one
-  parent document holds are told apart; record queries over a section page by position after the
-  watermark.
+  parent document holds are told apart — in a record query, in the records behind an aggregate, and in
+  the source of a reference that reads a section row. Record queries over a section page by position
+  after the watermark, and the records behind an aggregate come in the same order, on every store.
+- **A reference can read a section's rows.** By record (`lookupRecord`, the row's identity `o-1/0`) or
+  by field. When several rows of one parent match a field, the first by position is read — the same row
+  on every store. `ReferenceDef.TargetIsSection` carries this to a store that fixes its lookups when the
+  table is created; a reference whose target becomes a section reads as a new shape and rebuilds.
 
 ### Changed
 

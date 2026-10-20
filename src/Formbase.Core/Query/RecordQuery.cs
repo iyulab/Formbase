@@ -249,7 +249,10 @@ public sealed class RecordQuery : IRecordQuery
         return row.GetValueOrDefault(ProjectionSystemColumns.SourceDocumentOf(column)) is null
             ? new ReferenceSource(null, ReferenceOutcome.NoTarget)
             : new ReferenceSource(
-                IdentityOf(row, ProjectionSystemColumns.SourceDocumentOf(column), ProjectionSystemColumns.SourceKeyOf(column)),
+                IdentityOf(row, ProjectionSystemColumns.SourceDocumentOf(column), ProjectionSystemColumns.SourceKeyOf(column)) with
+                {
+                    Row = row.TryGetValue(ProjectionSystemColumns.SourceRowOf(column), out var position) ? RowOf(position) : null,
+                },
                 ReferenceOutcome.Resolved);
     }
 
