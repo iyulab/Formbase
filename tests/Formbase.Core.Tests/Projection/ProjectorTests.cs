@@ -196,8 +196,8 @@ public class ProjectorTests
     {
         // An array in a text column may be one value (a list of codes) or rows of their own (a
         // repeated section). Pointing only at Jsonb steers the second kind the wrong way: into one
-        // column holding every row. Projection does not split an array, so the other way out is
-        // the input adapter's — one document per row, of the form type the rows belong to.
+        // column holding every row. The other way out is a child relation naming the array as its
+        // section field, which projects each item as a row of the child.
         var h = new Harness();
         h.DeclareQcHints();
         await h.Accept("""{"lot":[{"item":"pressure","value":12.3}],"qty":1}""");
@@ -206,8 +206,8 @@ public class ProjectorTests
         var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
 
         result.Skipped.Should().HaveCount(2);
-        result.Skipped[0].Reason.Should().Contain("Jsonb").And.Contain("its own form type");
-        result.Skipped[1].Reason.Should().Contain("Jsonb").And.NotContain("form type");
+        result.Skipped[0].Reason.Should().Contain("Jsonb").And.Contain("section field of a child relation");
+        result.Skipped[1].Reason.Should().Contain("Jsonb").And.NotContain("section");
     }
 
     [Fact]

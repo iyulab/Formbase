@@ -37,7 +37,8 @@ public sealed class WatermarkLagTrigger : IProjectionTrigger
     {
         var stamp = await _projectionState.GetAsync(type, cancellationToken).ConfigureAwait(false);
         var schema = await _proposer.ProposeAsync(type, cancellationToken).ConfigureAwait(false);
-        var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var stream = ProjectionStream.Of(type, schema);
+        var rawHead = await _rawStore.HeadAsync(stream, cancellationToken).ConfigureAwait(false);
         var status = ProjectionStatus.Evaluate(stamp, rawHead, schema);
 
         var reason = status.State switch
@@ -56,7 +57,7 @@ public sealed class WatermarkLagTrigger : IProjectionTrigger
             // shaped wrong — no threshold applies. Data lag is quantitative and waits for the knob.
             ProjectionState.Stale when stamp!.SchemaFingerprint != ProjectedShape.Fingerprint(schema!)
                 => ProjectionTriggerReason.ShapeDrift,
-            ProjectionState.Stale when await IsBehindAsync(type, status.ProjectedWatermark, rawHead, cancellationToken).ConfigureAwait(false)
+            ProjectionState.Stale when await IsBehindAsync(stream, status.ProjectedWatermark, rawHead, cancellationToken).ConfigureAwait(false)
                 => ProjectionTriggerReason.DataLag,
 
             _ => ProjectionTriggerReason.None,
@@ -66,13 +67,13 @@ public sealed class WatermarkLagTrigger : IProjectionTrigger
     }
 
     /// <summary>
-    /// Whether at least <c>lagThreshold</c> of this form type's documents lie after the projected
+    /// Whether at least <c>lagThreshold</c> of the projection's stream's documents lie after the projected
     /// watermark. Reads no more than that many, so the check costs the threshold, not the backlog.
     /// </summary>
-    private async Task<bool> IsBehindAsync(FormTypeRef type, Watermark projected, Watermark rawHead, CancellationToken cancellationToken)
+    private async Task<bool> IsBehindAsync(FormTypeRef stream, Watermark projected, Watermark rawHead, CancellationToken cancellationToken)
     {
         long behind = 0;
-        await foreach (var document in _rawStore.StreamAsync(type, projected, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in _rawStore.StreamAsync(stream, projected, cancellationToken).ConfigureAwait(false))
         {
             if (document.Watermark > rawHead)
             {

@@ -18,7 +18,8 @@ public static class ProjectionSystemColumns
 
     /// <summary>
     /// Column holding the source document's <see cref="Primitives.RecordKey"/> — which record a row is —
-    /// or NULL for a document that is a record of its own.
+    /// or NULL for a document that is a record of its own. A repeated section's row carries its parent's
+    /// (<see cref="Schema.TableSchema.Section"/>): the row is part of the parent's record, and goes when it does.
     /// </summary>
     public const string RecordKey = "fb_record_key";
 
@@ -28,9 +29,17 @@ public static class ProjectionSystemColumns
     /// <see cref="Primitives.RecordKey"/> when the document has one, else its
     /// <see cref="Primitives.DocumentId"/> in canonical form (<c>D</c>, lower case). Stored rather than
     /// computed so every store matches a reference against one column with one equality — a store
-    /// whose lookups compare a column to a column (MorphDB) cannot fold the two identities itself.
+    /// whose lookups compare a column to a column (MorphDB) cannot fold the two identities itself. A
+    /// repeated section's row is its parent's identity, a slash, and its position (<see cref="SectionRow.Record"/>).
     /// </summary>
     public const string Record = "fb_record";
+
+    /// <summary>
+    /// Column holding a repeated section row's position in its parent's section array, from 0 — present
+    /// only on a section's table (<see cref="Schema.TableSchema.Section"/>). The rows a parent holds share its
+    /// document and watermark, so this is what orders them and tells them apart.
+    /// </summary>
+    public const string Row = "fb_row";
 
     /// <summary>The system columns, prepended to every projected table's domain columns.</summary>
     public static IReadOnlyList<ColumnDef> All { get; } =
@@ -40,6 +49,15 @@ public static class ProjectionSystemColumns
         new ColumnDef(RecordKey, ColumnType.Text, Nullable: true),
         new ColumnDef(Record, ColumnType.Text, Nullable: false),
     ];
+
+    private static IReadOnlyList<ColumnDef> WithRow { get; } = [.. All, new ColumnDef(Row, ColumnType.Integer, Nullable: false)];
+
+    /// <summary>
+    /// The system columns <paramref name="schema"/>'s table carries: <see cref="All"/>, and <see cref="Row"/>
+    /// when it is a repeated section. A table that is not a section has the columns it always had.
+    /// </summary>
+    public static IReadOnlyList<ColumnDef> Of(TableSchema schema) =>
+        (schema ?? throw new ArgumentNullException(nameof(schema))).Section is null ? All : WithRow;
 
     /// <summary>
     /// The read-only column a store answers a reference field's source in, when a query asks for it

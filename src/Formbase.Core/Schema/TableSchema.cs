@@ -8,22 +8,24 @@ namespace Formbase.Core.Schema;
 /// Produced by an <see cref="Ports.ISchemaProposer"/>; consumed by the projector.
 /// <paramref name="Relations"/> carries declared links to other tables to the projection store
 /// (stage-1: delivered, materialized by stores that can), and <paramref name="DeclarationVersion"/>
-/// travels with the shape so its identity moves when the declaration does.
+/// travels with the shape so its identity moves when the declaration does. <paramref name="Section"/>
+/// is set when the table is a repeated section: its rows are cut out of another form type's documents.
 /// </summary>
 public sealed record TableSchema(
     string TableName,
     IReadOnlyList<ColumnDef> Columns,
     IReadOnlyList<RelationDef>? Relations = null,
-    int DeclarationVersion = 1)
+    int DeclarationVersion = 1,
+    SectionDef? Section = null)
 {
     // Unit separator between fields of a record; newline between records.
     private const char Sep = '';
 
     /// <summary>
     /// The identity of this shape — table name, declaration version, every column's full definition
-    /// (name, type, nullability, source key, binding, binding target) in declared order, and every
-    /// declared relation — as a stable SHA-256 hex string. Two proposals fingerprint equal exactly
-    /// when they would materialize the same table. Recorded in
+    /// (name, type, nullability, source key, binding, binding target) in declared order, every declared
+    /// relation, and the section the rows are cut from — as a stable SHA-256 hex string. Two proposals
+    /// fingerprint equal exactly when they would materialize the same table. Recorded in
     /// <see cref="Projection.ProjectionStamp"/> so staleness evaluation can tell a redeclared shape
     /// from a current one; a change on any declaration axis therefore reads as a new shape.
     /// </summary>
@@ -56,6 +58,16 @@ public sealed record TableSchema(
                 .Append(Sep).Append(relation.Kind)
                 .Append(Sep).Append(relation.TargetTable)
                 .Append(Sep).Append(relation.KeyColumn);
+        }
+
+        if (Section is { } section)
+        {
+            // Appended only when present, so a table that is not a section keeps the fingerprint it had
+            // before sections existed. Where the rows come from is part of what the table holds.
+            canonical.Append('\n').Append('§').Append(section.ParentType.Value)
+                .Append(Sep).Append(section.SectionField)
+                .Append(Sep).Append(section.ParentKey ?? string.Empty)
+                .Append(Sep).Append(section.RowKey);
         }
 
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString())));

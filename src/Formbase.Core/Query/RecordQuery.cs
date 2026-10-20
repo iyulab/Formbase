@@ -38,7 +38,7 @@ public sealed class RecordQuery : IRecordQuery
         var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
 
         RefuseUnanswerable(type, spec.Filters, (spec.OrderBy ?? []).Select(k => k.Column), schema);
-        var coerced = WithDeterministicOrder(spec with { Filters = Coerce(spec.Filters, schema) });
+        var coerced = WithDeterministicOrder(spec with { Filters = Coerce(spec.Filters, schema) }, schema);
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
         try
@@ -125,7 +125,7 @@ public sealed class RecordQuery : IRecordQuery
             throw new NotProjectedException(type, hasSchema: schema is not null);
         }
 
-        var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var rawHead = await _rawStore.HeadAsync(ProjectionStream.Of(type, schema), cancellationToken).ConfigureAwait(false);
         var status = ProjectionStatus.Evaluate(stamp, rawHead, schema);
 
         if (status.State == ProjectionState.NotProjected)
@@ -161,7 +161,7 @@ public sealed class RecordQuery : IRecordQuery
                 return true;
             }
 
-            var head = await _rawStore.HeadAsync(target, cancellationToken).ConfigureAwait(false);
+            var head = await _rawStore.HeadAsync(ProjectionStream.Of(target, targetSchema), cancellationToken).ConfigureAwait(false);
             if (ProjectionStatus.Evaluate(stamp, head, targetSchema).State != ProjectionState.Projected)
             {
                 return true;
@@ -261,7 +261,18 @@ public sealed class RecordQuery : IRecordQuery
     /// it as some other record would hand the caller a wrong identity, so it is refused.
     /// </summary>
     private static RecordRef IdentityOf(IReadOnlyDictionary<string, object?> row) =>
-        IdentityOf(row, ProjectionSystemColumns.DocumentId, ProjectionSystemColumns.RecordKey);
+        IdentityOf(row, ProjectionSystemColumns.DocumentId, ProjectionSystemColumns.RecordKey) with
+        {
+            Row = row.TryGetValue(ProjectionSystemColumns.Row, out var position) ? RowOf(position) : null,
+        };
+
+    /// <summary>A section row's position as its store read it back: an integer of some width, or its text over a JSON wire.</summary>
+    private static int? RowOf(object? position) => position switch
+    {
+        null => null,
+        string text => int.Parse(text, CultureInfo.InvariantCulture),
+        _ => Convert.ToInt32(position, CultureInfo.InvariantCulture),
+    };
 
     private static RecordRef IdentityOf(IReadOnlyDictionary<string, object?> row, string documentColumn, string keyColumn)
     {
@@ -367,14 +378,20 @@ public sealed class RecordQuery : IRecordQuery
         _ => false,
     };
 
-    private static QuerySpec WithDeterministicOrder(QuerySpec spec)
+    private static QuerySpec WithDeterministicOrder(QuerySpec spec, TableSchema schema)
     {
         // fb_watermark is unique and monotonic per document, so appending it as the final key gives a
-        // total order — record queries page deterministically whether or not the caller ordered.
+        // total order — record queries page deterministically whether or not the caller ordered. The
+        // rows of a repeated section share their parent's watermark, so its position follows.
         var keys = new List<OrderKey>(spec.OrderBy ?? [])
         {
             new OrderKey(ProjectionSystemColumns.Watermark),
         };
+        if (schema.Section is not null)
+        {
+            keys.Add(new OrderKey(ProjectionSystemColumns.Row));
+        }
+
         return spec with { OrderBy = keys };
     }
 

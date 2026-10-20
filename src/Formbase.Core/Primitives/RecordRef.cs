@@ -14,4 +14,9 @@ namespace Formbase.Core.Primitives;
 /// </summary>
 /// <param name="Document">The document the record stands on now.</param>
 /// <param name="Key">The record's key, or null when the document is a record of its own.</param>
-public readonly record struct RecordRef(DocumentId Document, RecordKey? Key);
+/// <param name="Row">
+/// For a row of a repeated section, its position in the section array of <paramref name="Document"/>, from
+/// 0 — the rows a parent document holds share its document and key, and this tells them apart. Null for a
+/// row that is a record of its own.
+/// </param>
+public readonly record struct RecordRef(DocumentId Document, RecordKey? Key, int? Row = null);

@@ -20,6 +20,35 @@ internal static class DocumentMapper
         out IReadOnlyDictionary<string, object?> row,
         out IReadOnlyList<string> absentFields,
         out IReadOnlyList<ProjectionFieldSkip> fieldSkips,
+        out string reason) =>
+        // Only a standing record reaches here (RecordFold drops retirements), so a body is always present.
+        TryMap(
+            document,
+            (document.Body ?? throw new ArgumentException("A retirement has no row to map.", nameof(document))).Root,
+            ProjectionSystemColumns.RecordOf(document.Id, document.Key),
+            sectionRow: null,
+            domainColumns,
+            out row,
+            out absentFields,
+            out fieldSkips,
+            out reason);
+
+    /// <summary>
+    /// Maps <paramref name="root"/> — a document's body, or a row cut out of it (<see cref="SectionRows"/>)
+    /// — as a row with <paramref name="record"/> as its record identity and, for a section row,
+    /// <paramref name="sectionRow"/> as its position. The other system columns are the document's: a
+    /// section row traces back to the parent document it was cut from, and shares its record key, so
+    /// replacing the parent's record replaces every row it held.
+    /// </summary>
+    public static bool TryMap(
+        StoredDocument document,
+        JsonElement root,
+        string record,
+        int? sectionRow,
+        IReadOnlyList<ColumnDef> domainColumns,
+        out IReadOnlyDictionary<string, object?> row,
+        out IReadOnlyList<string> absentFields,
+        out IReadOnlyList<ProjectionFieldSkip> fieldSkips,
         out string reason)
     {
         var mapped = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -27,13 +56,15 @@ internal static class DocumentMapper
             [ProjectionSystemColumns.DocumentId] = document.Id.Value,
             [ProjectionSystemColumns.Watermark] = document.Watermark.Value,
             [ProjectionSystemColumns.RecordKey] = document.Key?.Value,
-            [ProjectionSystemColumns.Record] = ProjectionSystemColumns.RecordOf(document.Id, document.Key),
+            [ProjectionSystemColumns.Record] = record,
         };
+        if (sectionRow is { } position)
+        {
+            mapped[ProjectionSystemColumns.Row] = (long)position;
+        }
 
         List<string>? absent = null;
         List<ProjectionFieldSkip>? emptied = null;
-        // Only a standing record reaches here (RecordFold drops retirements), so a body is always present.
-        var root = (document.Body ?? throw new ArgumentException("A retirement has no row to map.", nameof(document))).Root;
         foreach (var column in domainColumns)
         {
             if (!TryConvert(root, column, out var value, out var fieldAbsent, out var unconvertible, out reason))
@@ -142,11 +173,11 @@ internal static class DocumentMapper
                 // JSON into a text column produced a plausible value ('["ITA"]') where every other
                 // column type records a skip for the same input -- a wrong value is never found, an
                 // empty one can be filled. A caller who wants the structure kept declares Jsonb. An
-                // array may instead be a repeated section — rows of their own — which projection does
-                // not split: the input adapter appends each row as a document of its own form type.
+                // array may instead be a repeated section — rows of their own — which a child relation
+                // names (RelationHint.SectionField) rather than a column.
                 if (field.ValueKind == JsonValueKind.Array)
                 {
-                    reason = $"field '{column.Name}' is a JSON array, not a scalar, and cannot be projected as Text; declare the column as Jsonb to keep the array as one value, or, if its items are rows of their own (a repeated section), append each item as a document of its own form type — projection does not split an array into rows";
+                    reason = $"field '{column.Name}' is a JSON array, not a scalar, and cannot be projected as Text; declare the column as Jsonb to keep the array as one value, or, if its items are rows of their own (a repeated section), remove the column and name the array as the section field of a child relation — each item is then a row of the child";
                     return false;
                 }
 

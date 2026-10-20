@@ -109,7 +109,7 @@ public sealed class FormbaseEngine
     {
         var stamp = await _projectionState.GetAsync(type, cancellationToken).ConfigureAwait(false);
         var schema = await _proposer.ProposeAsync(type, cancellationToken).ConfigureAwait(false);
-        var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var rawHead = await _rawStore.HeadAsync(ProjectionStream.Of(type, schema), cancellationToken).ConfigureAwait(false);
         return ProjectionStatus.Evaluate(stamp, rawHead, schema);
     }
 

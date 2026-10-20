@@ -22,7 +22,7 @@ public static class ProjectedShape
     {
         ArgumentNullException.ThrowIfNull(schema);
         var canonical = new StringBuilder(schema.Fingerprint());
-        foreach (var column in ProjectionSystemColumns.All)
+        foreach (var column in ProjectionSystemColumns.Of(schema))
         {
             canonical.Append('\n').Append(column.Name)
                 .Append(Sep).Append(column.Type)

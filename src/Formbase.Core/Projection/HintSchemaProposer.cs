@@ -53,7 +53,11 @@ public sealed class HintSchemaProposer : ISchemaProposer
             }
         }
 
-        return new TableSchema(hints.TableName, columns, relations, hints.DeclarationVersion);
+        var section = await _hintSource.GetSectionSourceAsync(type, cancellationToken).ConfigureAwait(false) is { } source
+            ? SectionDef.From(source, hints)
+            : null;
+
+        return new TableSchema(hints.TableName, columns, relations, hints.DeclarationVersion, section);
     }
 
     /// <summary>The target's declared table name, or its form-type name when it declares no hints yet.</summary>

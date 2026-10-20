@@ -75,7 +75,14 @@ public sealed record ReferenceSourceResponse(RecordRefResponse? Target, Referenc
 /// The record's key, the same through every correction — or null for a document sent without one,
 /// which is a record of its own and whose document is its identity.
 /// </param>
-public sealed record RecordRefResponse(Guid Document, string? Key)
+/// <param name="Row">
+/// For a row of a repeated section, its position in the section of <paramref name="Document"/>, from 0 —
+/// the rows one document holds share its document and key. Absent for a record of its own.
+/// </param>
+public sealed record RecordRefResponse(
+    Guid Document,
+    string? Key,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Row = null)
 {
-    internal static RecordRefResponse From(RecordRef record) => new(record.Document.Value, record.Key?.Value);
+    internal static RecordRefResponse From(RecordRef record) => new(record.Document.Value, record.Key?.Value, record.Row);
 }

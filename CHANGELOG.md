@@ -10,6 +10,24 @@
   one, the parent may not also declare the array as a field, a section has one parent and no sections
   of its own, and the section has to declare the relation's key field. `IFieldHintSource.GetSectionSourceAsync`
   answers which declaration a section's rows come from. Declarations stored before read back unchanged.
+- **A repeated section projects as rows of its own table.** Projecting the section's form type reads
+  the parent's documents: each array item is one row, with the relation's key field set to the
+  parent's value of the same name (or, when the parent declares none, to the parent's record identity),
+  `fb_doc_id` and `fb_record_key` the parent's, `fb_record` the parent's record identity, a slash and
+  the item's position, and a new system column `fb_row` holding that position — present only on a
+  section's table, so other tables keep their shape and are not rebuilt. Correcting or retiring the
+  parent replaces every row it held, incrementally as a rebuild would. A parent with no section, or a
+  null one, holds no rows; a section that is not an array of objects skips the parent document, and a
+  row that cannot be mapped is a skip of the parent naming the row. The section's projection status and
+  trigger follow the parent's stream, and changing the section field rebuilds the section's table.
+- `RecordRef.Row` (wire: `record.row`, absent otherwise) is a section row's position, so the rows one
+  parent document holds are told apart; record queries over a section page by position after the
+  watermark.
+
+### Changed
+
+- The skip reason for an array in a text column now points at a child relation's section field as the
+  way to project its items as rows, instead of appending each item as a document of its own.
 
 ### Breaking
 

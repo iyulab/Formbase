@@ -88,14 +88,15 @@ public sealed class Projector : IProjector
             return ProjectionResult.NoSchema();
         }
 
-        var rawHead = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var stream = ProjectionStream.Of(type, schema);
+        var rawHead = await _rawStore.HeadAsync(stream, cancellationToken).ConfigureAwait(false);
         var stamp = await _projectionState.GetAsync(type, cancellationToken).ConfigureAwait(false);
         if (stamp is not null && await CanBringForwardAsync(stamp, schema, rawHead, cancellationToken).ConfigureAwait(false))
         {
-            return await BringForwardAsync(type, schema, stamp, rawHead, cancellationToken).ConfigureAwait(false);
+            return await BringForwardAsync(type, stream, schema, stamp, rawHead, cancellationToken).ConfigureAwait(false);
         }
 
-        return await RebuildAsync(type, schema, rawHead, cancellationToken).ConfigureAwait(false);
+        return await RebuildAsync(type, stream, schema, rawHead, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -111,14 +112,14 @@ public sealed class Projector : IProjector
         && stamp.Watermark <= rawHead
         && await _projectionStore.TableExistsAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
 
-    private async Task<ProjectionResult> RebuildAsync(FormTypeRef type, TableSchema schema, Watermark rawHead, CancellationToken cancellationToken)
+    private async Task<ProjectionResult> RebuildAsync(FormTypeRef type, FormTypeRef stream, TableSchema schema, Watermark rawHead, CancellationToken cancellationToken)
     {
         try
         {
             await _projectionStore.DropTableAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
             await _projectionStore.CreateTableAsync(PhysicalSchema(schema), cancellationToken).ConfigureAwait(false);
 
-            var documents = await ReadAsync(type, Watermark.Zero, rawHead, cancellationToken).ConfigureAwait(false);
+            var documents = await ReadAsync(stream, Watermark.Zero, rawHead, cancellationToken).ConfigureAwait(false);
             var mapped = Map(documents, schema);
             var inserted = await _projectionStore.BulkInsertAsync(schema.TableName, mapped.Rows, cancellationToken).ConfigureAwait(false);
 
@@ -150,16 +151,18 @@ public sealed class Projector : IProjector
         }
     }
 
-    private async Task<ProjectionResult> BringForwardAsync(FormTypeRef type, TableSchema schema, ProjectionStamp stamp, Watermark rawHead, CancellationToken cancellationToken)
+    private async Task<ProjectionResult> BringForwardAsync(FormTypeRef type, FormTypeRef stream, TableSchema schema, ProjectionStamp stamp, Watermark rawHead, CancellationToken cancellationToken)
     {
         try
         {
-            var documents = await ReadAsync(type, stamp.Watermark, rawHead, cancellationToken).ConfigureAwait(false);
+            var documents = await ReadAsync(stream, stamp.Watermark, rawHead, cancellationToken).ConfigureAwait(false);
             var mapped = Map(documents, schema);
 
             // Every key among the new documents is won by one of them, so whatever the key's earlier
             // documents left goes; every new document's own id is removed too, so applying the same
-            // documents again after a failure below leaves the table as applying them once.
+            // documents again after a failure below leaves the table as applying them once. A section's
+            // rows carry their parent's key and document id, so the same removal takes every row the
+            // parent's earlier document held.
             var keys = documents.Where(d => d.Key is not null).Select(d => d.Key!.Value).Distinct().ToList();
             var ids = documents.Select(d => d.Id).ToList();
             var inserted = await _projectionStore.ReplaceRowsAsync(schema.TableName, keys, ids, mapped.Rows, cancellationToken).ConfigureAwait(false);
@@ -210,7 +213,7 @@ public sealed class Projector : IProjector
     {
         Columns =
         [
-            .. ProjectionSystemColumns.All,
+            .. ProjectionSystemColumns.Of(schema),
             .. schema.Columns.Select(c => c.Binding == FieldBinding.Reference && !c.Nullable
                 ? c with { Nullable = true }
                 : c),
@@ -254,27 +257,53 @@ public sealed class Projector : IProjector
     /// Folds before mapping: a record's superseded documents neither become rows nor count as skips —
     /// only the document that stands for the record is the projection's business.
     /// </summary>
+    /// <remarks>
+    /// A section's table folds its parent's documents, then cuts each standing one into rows
+    /// (<see cref="SectionRows"/>): a parent whose section cannot be read is one skip, and a row that
+    /// cannot be mapped is a skip of the parent document naming the row.
+    /// </remarks>
     private static Mapped Map(IReadOnlyList<StoredDocument> documents, TableSchema schema)
     {
         var mapped = new Mapped([], [], [], new Dictionary<string, int>(StringComparer.Ordinal));
         foreach (var document in RecordFold.Latest(documents))
         {
-            if (DocumentMapper.TryMap(document, schema.Columns, out var row, out var absentFields, out var emptied, out var reason))
+            if (schema.Section is not { } section)
             {
-                mapped.Rows.Add(row);
-                mapped.FieldSkips.AddRange(emptied);
-                foreach (var field in absentFields)
-                {
-                    mapped.AbsentCounts[field] = mapped.AbsentCounts.GetValueOrDefault(field) + 1;
-                }
+                MapOne(mapped, schema, document, document.Body!.Root, ProjectionSystemColumns.RecordOf(document.Id, document.Key), row: null, reasonPrefix: null);
+                continue;
             }
-            else
+
+            var expansion = SectionRows.Expand(document, section);
+            if (expansion.Refusal is { } refusal)
             {
-                mapped.Skips.Add(new ProjectionSkip(document.Id, reason, document.Key));
+                mapped.Skips.Add(new ProjectionSkip(document.Id, refusal, document.Key));
+                continue;
+            }
+
+            foreach (var row in expansion.Rows)
+            {
+                MapOne(mapped, schema, document, row.Body, row.Record, row.Position, $"row {row.Position} of section '{section.SectionField}': ");
             }
         }
 
         return mapped;
+    }
+
+    private static void MapOne(Mapped mapped, TableSchema schema, StoredDocument document, System.Text.Json.JsonElement root, string record, int? row, string? reasonPrefix)
+    {
+        if (DocumentMapper.TryMap(document, root, record, row, schema.Columns, out var mappedRow, out var absentFields, out var emptied, out var reason))
+        {
+            mapped.Rows.Add(mappedRow);
+            mapped.FieldSkips.AddRange(emptied);
+            foreach (var field in absentFields)
+            {
+                mapped.AbsentCounts[field] = mapped.AbsentCounts.GetValueOrDefault(field) + 1;
+            }
+        }
+        else
+        {
+            mapped.Skips.Add(new ProjectionSkip(document.Id, reasonPrefix + reason, document.Key));
+        }
     }
 
     private static ProjectionResult Completed(TableSchema schema, Mapped mapped, int inserted, Watermark rawHead, ProjectionMode mode)
