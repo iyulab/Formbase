@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`FormdownAdapter.AdaptSchema` declares every formdown `number` and `range` field `Decimal`.** It used
+  to declare a field `Integer` when its step (or the step of 1 an input has without one) admitted only
+  whole numbers, so a document that reached the store another way than through the form — an import, a
+  file another tool wrote — had its fractions left out of ranges and sums (each reported as a
+  projection field skip). `step`, `min` and `max` stay what they were: input rules, reported as
+  constraint gaps. Migration: a declaration made by 0.28.x/0.29.x from the same schema now differs in
+  those fields' type, so declaring it again rebuilds the table as any type change does; a host whose
+  numbers are whole by its own guarantee sets `Type = ColumnType.Integer` on those hints.
+- **`toggle` is no longer read as a formdown field type.** formdown 0.22.0 writes a switch as a
+  `checkbox` (with `switch: true`), which is a `Boolean` as before; a schema from an older formdown that
+  still says `toggle` degrades to `Text` with an unresolved gap, like any unknown type.
+
 ## 0.29.0
 
 A minor. Pairs with MorphDB `0.26.x`. A form type can declare the name a person reads it by

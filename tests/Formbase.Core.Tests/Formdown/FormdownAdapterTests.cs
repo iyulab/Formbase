@@ -40,9 +40,9 @@ public class FormdownAdapterTests
 
         types["lot_no"].Should().Be(ColumnType.Text);
         types["inspected_on"].Should().Be(ColumnType.Timestamp);
-        types["qty"].Should().Be(ColumnType.Integer, "a number input with no step takes whole numbers");
-        types["unit_price"].Should().Be(ColumnType.Decimal, "a fractional step admits fractions");
-        types["total"].Should().Be(ColumnType.Integer);
+        types["qty"].Should().Be(ColumnType.Decimal, "a step is an input rule, not the type of what is stored");
+        types["unit_price"].Should().Be(ColumnType.Decimal);
+        types["total"].Should().Be(ColumnType.Decimal);
         types["passed"].Should().Be(ColumnType.Boolean, "a single checkbox is on or off");
         types["result"].Should().Be(ColumnType.Text);
         types["defects"].Should().Be(ColumnType.Jsonb, "a checkbox group hands over the list checked");
@@ -122,9 +122,9 @@ public class FormdownAdapterTests
             Adapted().Hints);
 
         var root = body.Root;
-        root.GetProperty("qty").GetInt64().Should().Be(12);
+        root.GetProperty("qty").GetDecimal().Should().Be(12m);
         root.GetProperty("unit_price").GetDecimal().Should().Be(2.50m);
-        root.GetProperty("total").GetInt64().Should().Be(30);
+        root.GetProperty("total").GetDecimal().Should().Be(30m);
         root.GetProperty("passed").GetBoolean().Should().BeTrue();
         root.GetProperty("defects")[0].GetString().Should().Be("dent");
         root.GetProperty("note").GetString().Should().BeEmpty("an empty text is a text");
@@ -136,14 +136,13 @@ public class FormdownAdapterTests
     public void An_empty_number_or_date_is_no_value_and_an_unreadable_number_is_kept_as_sent()
     {
         var body = FormdownAdapter.AdaptData(
-            """{"qty":"","inspected_on":" ","unit_price":"1,234.5","total":"7.5"}""",
+            """{"qty":"","inspected_on":" ","unit_price":"1,234.5"}""",
             Adapted().Hints);
 
         var root = body.Root;
         root.GetProperty("qty").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
         root.GetProperty("inspected_on").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
         root.GetProperty("unit_price").GetString().Should().Be("1,234.5", "a grouping separator is not read as a number");
-        root.GetProperty("total").GetString().Should().Be("7.5", "a whole-number field does not round a fraction");
     }
 
     [Fact]
@@ -173,6 +172,45 @@ public class FormdownAdapterTests
         var measures = totals.Groups.Should().ContainSingle().Which.Measures;
         measures[0].Value.Should().Be(20m);
         measures[1].Value.Should().Be(5.50m);
+    }
+
+    [Fact]
+    public async Task A_fraction_in_a_document_that_did_not_come_through_the_form_is_kept_in_ranges_and_sums()
+    {
+        // qty has no step, so the form itself takes only whole numbers; an imported document is not
+        // held to the form's rules, and its 2.5 is a value the table must still count.
+        var ct = TestContext.Current.CancellationToken;
+        var services = new ServiceCollection();
+        services.AddFormbaseInMemory();
+        await using var provider = services.BuildServiceProvider();
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        var hints = provider.GetRequiredService<InMemoryFieldHintSource>();
+
+        var adapted = Adapted();
+        hints.Declare(adapted.Hints);
+        await engine.AcceptAsync(Inspection, FormdownAdapter.AdaptData(
+            """{"lot_no":"L-1","inspected_on":"2026-10-20","qty":"12"}""", adapted.Hints), cancellationToken: ct);
+        await engine.AcceptAsync(Inspection, DocumentBody.Parse(
+            """{"lot_no":"L-2","inspected_on":"2026-10-21","qty":2.5}"""), cancellationToken: ct);
+        await engine.ProjectAsync(Inspection, ct);
+
+        (await engine.GetProjectionFieldSkipsAsync(Inspection, ct)).Should().BeEmpty();
+        var totals = await engine.AggregateAsync(Inspection, new AggregateSpec(
+            Measures: [AggregateMeasure.Sum("qty")]), ct);
+        totals.Groups.Should().ContainSingle().Which.Measures[0].Value.Should().Be(14.5m);
+    }
+
+    [Fact]
+    public void A_toggle_is_not_a_formdown_type_and_degrades_like_any_unknown_one()
+    {
+        // formdown 0.22.0 writes a switch as a checkbox (`switch: true`); `toggle` is no longer a type.
+        var adapted = FormdownAdapter.AdaptSchema(
+            """{"on":{"type":"checkbox","switch":true},"old":{"type":"toggle"}}""", Inspection, "inspections");
+        var types = adapted.Hints.Fields.ToDictionary(f => f.Name, f => f.Type);
+
+        types["on"].Should().Be(ColumnType.Boolean);
+        types["old"].Should().Be(ColumnType.Text);
+        adapted.Gaps.Should().Contain(g => g.Field == "old" && g.Kind == VocabularyGapKind.Unresolved && g.Construct == "type toggle");
     }
 
     [Theory]

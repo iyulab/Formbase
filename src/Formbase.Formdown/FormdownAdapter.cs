@@ -21,6 +21,10 @@ namespace Formbase.Formdown;
 /// number as text), while a projected <see cref="ColumnType.Integer"/> or <see cref="ColumnType.Decimal"/>
 /// column takes a JSON number. <see cref="AdaptData"/> is the step that closes that distance, so a filled
 /// form is stored with the types its schema declares.</para>
+/// <para>A number field is declared <see cref="ColumnType.Decimal"/> whatever its step: the form's rules
+/// (<c>step</c>, <c>min</c>, <c>max</c>) check a value while the form is filled, and a document can reach
+/// the store another way — an import, a file another tool wrote. A host whose numbers are whole by its
+/// own guarantee declares that on the hint (<c>field with { Type = ColumnType.Integer }</c>).</para>
 /// </remarks>
 public static class FormdownAdapter
 {
@@ -136,7 +140,7 @@ public static class FormdownAdapter
 
         var validation = schema.TryGetProperty("validation", out var v) && v.ValueKind == JsonValueKind.Object ? v : default;
         var hasOptions = schema.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array && options.GetArrayLength() > 0;
-        var columnType = MapType(declaration, name, formdownType, hasOptions, validation, gaps);
+        var columnType = MapType(declaration, name, formdownType, hasOptions, gaps);
         var nullable = !(schema.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.True);
 
         // formdown fills a missing label from the name (snake_case and camelCase become capitalized
@@ -183,21 +187,25 @@ public static class FormdownAdapter
         return new FieldHint(name, columnType, nullable, BusinessName: businessName);
     }
 
-    private static ColumnType MapType(string declaration, string name, string formdownType, bool hasOptions, JsonElement validation, List<VocabularyGap> gaps)
+    private static ColumnType MapType(string declaration, string name, string formdownType, bool hasOptions, List<VocabularyGap> gaps)
     {
         switch (formdownType)
         {
             case "text" or "email" or "password" or "tel" or "url" or "textarea" or "color" or "select" or "radio":
                 return ColumnType.Text;
             case "number" or "range":
-                return IsWholeNumber(validation) ? ColumnType.Integer : ColumnType.Decimal;
+                // A step (or the step of 1 an input has without one) is an input rule like min and max:
+                // reported as a gap, not made the column's type. A document that reaches the store
+                // another way than through the form carries whatever number it holds, and a whole-number
+                // column would leave a fraction out of every range and sum.
+                return ColumnType.Decimal;
             case "checkbox" when hasOptions:
                 // A checkbox group hands over the list of the values checked.
                 gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
                     "checkbox group",
                     "Several checked values are one JSONB array; the element type (one of the options) drops."));
                 return ColumnType.Jsonb;
-            case "checkbox" or "toggle":
+            case "checkbox":
                 return ColumnType.Boolean;
             case "date" or "datetime-local":
                 return ColumnType.Timestamp;
@@ -217,35 +225,6 @@ public static class FormdownAdapter
                 return ColumnType.Text;
         }
     }
-
-    /// <summary>
-    /// A number input takes whole numbers unless its step says otherwise: with no step the step is 1,
-    /// counted from <c>min</c> (HTML <c>input type=number</c>), so a whole step from a whole (or absent)
-    /// minimum admits only whole numbers. A fractional step, <c>step="any"</c>, or a fractional minimum
-    /// admits fractions.
-    /// </summary>
-    private static bool IsWholeNumber(JsonElement validation)
-    {
-        if (validation.ValueKind != JsonValueKind.Object)
-        {
-            return true;
-        }
-
-        if (validation.TryGetProperty("step", out var step) && !IsWhole(step))
-        {
-            return false;
-        }
-
-        return !validation.TryGetProperty("min", out var min) || IsWhole(min);
-    }
-
-    private static bool IsWhole(JsonElement value) =>
-        value.ValueKind switch
-        {
-            JsonValueKind.Number => value.TryGetDecimal(out var d) && d == decimal.Truncate(d),
-            JsonValueKind.String => decimal.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d == decimal.Truncate(d),
-            _ => false,
-        };
 
     private static void WriteTyped(Utf8JsonWriter writer, JsonElement value, ColumnType type)
     {
