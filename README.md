@@ -42,16 +42,17 @@ Three things make this different from "define a table, then insert rows":
 A document's life:
 
 1. **Intake** — `AcceptAsync(formType, body)` appends the document to the raw store and returns immediately. First-seen form types auto-register; a caller-supplied id makes re-submission idempotent. Success means the data is durable, whether or not a projection exists. `AcceptManyAsync(formType, documents)` accepts a batch in one durable write — all of it or none — which is how to fill a store: each single accept waits for its own commit. Send a large import as several batches of a few thousand — other writers wait while a batch commits.
+   A repeated block inside one form — the lines of an order, the items of a checklist — is declared as its own form type, named on the parent's child relation as its section field (`RelationHint.SectionField`). The parent's documents carry it; projecting the section's form type cuts each array item into a row of its own table, carrying the parent's key, and a correction of the parent replaces every row it held. The section accepts no documents of its own.
 2. **Projection** — when a form type has declared field hints, `ProjectAsync(formType)` drops any existing table, recreates it from the proposed schema, streams the raw documents through deterministic value mapping (recording — never discarding — any that can't be mapped, and counting per column how many documents never carried the field at all, as opposed to answering `null`), and records the watermark it reached. Because raw is the source of truth, a schema change needs no `ALTER` diffing: the table is simply rebuilt. When to re-project is a pluggable policy (`IProjectionTrigger`): the built-in trigger fires immediately on a shape change and at a configurable document-lag threshold for new data; drive `ProjectionSupervisor.RunOnceAsync` from whatever cadence your host owns.
 3. **Reading** — there are two questions with two paths:
    - *"Show me this document"* → the raw store, always available.
-   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); Each row says which record it is (`RecordRow.Record`: the document it stands on now, and its record key when it has one — the key is what stays the same across corrections) beside its declared fields (`RecordRow.Fields`). `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees — and, when asked (`RecordsPerGroup`), each group carries the records its count is made of, as the same identities the rows carry, read with the count so the two cannot disagree; `AggregateSpec.RecordsOf(group)` is the query for all of a group's records. `AggregateSpec.Measures` adds a sum, average, minimum or maximum of a numeric column (minimum and maximum also of a timestamp, a reference column included) to each group, with how many of its records had a value there — a record with the column empty takes no part, and a group with no values gets no value rather than a zero.
+   - *"Query / aggregate these records"* → the projected table. If there is no projection yet you get a distinct `NotProjectedException` (never a misleading empty result); if raw has advanced past the projection the result is flagged `Stale`; if the backing store is down you get `ProjectionUnavailableException`. Results carry a total order (any `QuerySpec.OrderBy` keys, then the system watermark as a tie-breaker — and, in a repeated section's table, the row's position), so `Limit`/`Offset` paging is deterministic. Filters compare with equality, ranges (numbers and instants) or case-insensitive text matching (`Contains`, `StartsWith`), or ask whether a column is empty (`IsNull`, `IsNotNull`); Each row says which record it is (`RecordRow.Record`: the document it stands on now, and its record key when it has one — the key is what stays the same across corrections) beside its declared fields (`RecordRow.Fields`). `AggregateAsync` counts the records a filter keeps, optionally per group, with the same guarantees — and, when asked (`RecordsPerGroup`), each group carries the records its count is made of, as the same identities the rows carry, read with the count so the two cannot disagree; `AggregateSpec.RecordsOf(group)` is the query for all of a group's records. `AggregateSpec.Measures` adds a sum, average, minimum or maximum of a numeric column (minimum and maximum also of a timestamp, a reference column included) to each group, with how many of its records had a value there — a record with the column empty takes no part, and a group with no values gets no value rather than a zero.
 
 ## Install
 
-Current release: **0.26.0**. Formbase projects into MorphDB over its client, so the two move
-together — **`Formbase.* 0.26.0` pairs with MorphDB `0.24.x`**. Pin the MorphDB server image to
-that line (`ghcr.io/iyulab/morphdb:0.24.0`); the compatible pair is stated with every release in
+Current release: **0.27.0**. Formbase projects into MorphDB over its client, so the two move
+together — **`Formbase.* 0.27.0` pairs with MorphDB `0.24.x`**. Pin the MorphDB server image to
+that line (`ghcr.io/iyulab/morphdb:0.24.1`); the compatible pair is stated with every release in
 [CHANGELOG.md](CHANGELOG.md).
 
 Start with the core and the DI helpers, then add only the adapters you actually run:
@@ -85,8 +86,8 @@ A published image is the same artifact, built from the same Dockerfile the relea
 before it pushes — pull it instead of building from source:
 
 ```bash
-docker pull ghcr.io/iyulab/formbase:0.26.0
-docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.26.0
+docker pull ghcr.io/iyulab/formbase:0.27.0
+docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.27.0
 ```
 
 By default it composes the in-process stores, which needs nothing else running and loses everything

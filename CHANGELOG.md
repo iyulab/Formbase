@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.27.0
+
+A minor. Pairs with MorphDB `0.24.x`. A repeated block inside one form — the lines of an order, the
+items of an inspection checklist — is declared as a form type of its own and named on the parent's
+child relation as its section field; projecting it cuts each item of the parent's array into a row of
+its own table, carrying the parent's key, and a correction or retirement of the parent replaces every
+row it held, incrementally as a rebuild would. Before, an input adapter had to split each document and
+append its rows under the child's form type itself. A section accepts no documents of its own (`409`).
+Its rows are told apart by position wherever a row is named — `RecordRef.Row`, the records behind an
+aggregate, the source of a reference — on every store. Two breaking changes, below: `IFieldHintSource`
+gains a member and `IntakeService` takes the hint source. A bundle volume from 0.26.0 starts on the
+new images with no step to run; tables that are not sections keep their shape and are not rebuilt.
 
 ### Added
 
@@ -47,6 +58,12 @@
 - `IntakeService` takes the `IFieldHintSource` as a second constructor argument. Registration through
   `AddFormbaseCore` is unchanged; code that constructs it directly passes the same hint source the engine
   reads.
+
+### Dependencies
+
+- `MorphDB.Client` 0.24.1, and the compose file and README pin the `0.24.1` server image. The client now
+  reports a deleted MorphDB project on the first read rather than on the next table it creates; the host
+  answers it as before (`503` `/problems/projection-store-missing`).
 
 ## 0.26.0
 
