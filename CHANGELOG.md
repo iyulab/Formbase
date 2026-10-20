@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.30.0
+
+A minor. Pairs with MorphDB `0.26.x`. The formdown adapter declares every number field `Decimal`, so a
+document that reached the store without passing through its form keeps its fractions in ranges and
+sums; a declaration made by the 0.28.x/0.29.x adapter from the same schema differs in those fields'
+type, and declaring it again rebuilds the table as any type change does.
 
 ### Changed
 
@@ -15,6 +20,8 @@
 - **`toggle` is no longer read as a formdown field type.** formdown 0.22.0 writes a switch as a
   `checkbox` (with `switch: true`), which is a `Boolean` as before; a schema from an older formdown that
   still says `toggle` degrades to `Text` with an unresolved gap, like any unknown type.
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.26.1** (was 0.26.0); the live MorphDB suite and the
+  compose file run `ghcr.io/iyulab/morphdb:0.26.1`.
 
 ## 0.29.0
 
