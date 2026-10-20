@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.29.0
+
+A minor. Pairs with MorphDB `0.26.x`. A form type can declare the name a person reads it by
+(`FormTypeHints.BusinessName`), as a field already could, and the M3L adapter now carries a model's
+label there instead of dropping it. Source-compatible: `FormTypeHints` gains an optional last parameter,
+so code compiled against 0.28.0 recompiles without edits (a positional deconstruction of `FormTypeHints`
+takes one more variable). The SQLite and PostgreSQL declaration tables gain a nullable column on first
+use; a bundle volume from 0.28.0 starts on the new images with no step to run, and no table is rebuilt.
 
 ### Added
 
@@ -15,7 +22,7 @@
 
 ### Dependencies
 
-- `MorphDB.Client` 0.25.0 → 0.26.0; the live MorphDB suite and the compose file run `ghcr.io/iyulab/morphdb:0.26.0`.
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.26.0** (was 0.25.0); the live MorphDB suite and the compose file run `ghcr.io/iyulab/morphdb:0.26.0`.
   Nothing Formbase uses changed: 0.26.0 adds OData atomic groups and per-subscriber real-time delivery.
 
 ## 0.28.0
