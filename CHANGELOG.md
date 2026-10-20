@@ -24,6 +24,15 @@
   queries already did, instead of an unhandled `500`. The run leaves the projection reporting
   `notProjected` (or `unverified`), so nothing stale is served.
 
+### Removed
+
+- **Breaking: `AffixVocabulary`.** It read a modality tag from a form type's name by its suffix, and
+  nothing in the engine used it. Formology classifies forms by their purpose and by whether people
+  fill them in or they are computed from other documents — a suffix is one language's way of saying
+  that, not the test: the same suffix names a register people write and a history computed from
+  other documents. A caller that needs the classification declares it rather than reading it from
+  the name. The constitution's §1 says so.
+
 ### Added
 
 - **`MorphDbProjectionStore` takes an owner** (`IProjectionTableOwnerSource`, `ProjectionTableOwner`)
