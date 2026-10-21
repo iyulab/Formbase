@@ -29,10 +29,11 @@ namespace Formbase.Core.Tests.Live.JsonBench;
 /// <c>FORMBASE_JSONBENCH_FILE</c> names the event file, <c>FORMBASE_JSONBENCH_OUT</c> the directory for the
 /// report, <c>FORMBASE_JSONBENCH_WORK</c> the directory for the SQLite file (default: the output directory —
 /// keep it on a local disk: SQLite over a network share times the share, not the engine), and
-/// <c>FORMBASE_JSONBENCH_LIMIT</c> how many events to load (default: all). <c>FORMBASE_JSONBENCH_INDEX=1</c> adds,
-/// after the projection, one SQLite index over the queried columns — the counterpart of the expression index
-/// JSONBench's DDL gives PostgreSQL. Formbase declares no such index itself; this measures what one would buy.
-/// Needs Docker for PostgreSQL.
+/// <c>FORMBASE_JSONBENCH_LIMIT</c> how many events to load (default: all). <c>FORMBASE_JSONBENCH_INDEXES=1</c>
+/// declares an index for each query's filter and grouping (<see cref="QueryIndexes"/>) — the counterpart of the
+/// expression index JSONBench's DDL gives PostgreSQL, but one per query, since one column order does not serve
+/// them all. <c>FORMBASE_JSONBENCH_ANALYZE=1</c> runs SQLite's <c>ANALYZE</c> after the projection, which the
+/// store does not, to show what planner statistics add. Needs Docker for PostgreSQL.
 /// </para>
 /// </summary>
 public sealed class JsonBenchMeasurement
@@ -41,6 +42,18 @@ public sealed class JsonBenchMeasurement
     private const int BatchSize = 10_000;
 
     private static readonly FormTypeRef Events = FormTypeRef.Create("bluesky");
+
+    /// <summary>
+    /// One index per query shape, leading with its equality filters and then its grouping: Q1 groups by
+    /// collection; Q2 and Q4 filter on kind, operation (and collection) and read did and time_us; Q3 groups
+    /// the same filter by hour of day.
+    /// </summary>
+    private static readonly IndexHint[] QueryIndexes =
+    [
+        new(["collection"]),
+        new(["kind", "operation", "collection", "did", "time_us"]),
+        new(["kind", "operation", "collection", "hour_of_day"]),
+    ];
 
     [Fact]
     public async Task Measure_jsonbench_queries_against_postgres_jsonb()
@@ -72,6 +85,7 @@ public sealed class JsonBenchMeasurement
         }
 
         var connection = $"Data Source={dbPath}";
+        var indexed = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_INDEXES") == "1";
         var services = new ServiceCollection().AddFormbaseCore().AddSqliteRawStore(connection).AddSqliteProjection(connection);
         await using var provider = services.BuildServiceProvider();
         var engine = provider.GetRequiredService<FormbaseEngine>();
@@ -84,7 +98,8 @@ public sealed class JsonBenchMeasurement
                 new FieldHint("collection", ColumnType.Text, SourceKey: "/commit/collection"),
                 new FieldHint("operation", ColumnType.Text, SourceKey: "/commit/operation"),
                 new FieldHint("hour_of_day", ColumnType.Integer, SourceKey: "time_us", Derivation: FieldDerivation.PartOf(TimePart.Hour, EpochUnit.Microseconds)),
-            ]),
+            ],
+            Indexes: indexed ? QueryIndexes : null),
             cancellation);
 
         var append = Stopwatch.StartNew();
@@ -105,23 +120,24 @@ public sealed class JsonBenchMeasurement
         while (status.State != ProjectionState.Projected);
 
         project.Stop();
-        var indexed = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_INDEX") == "1";
-        long indexMs = 0;
-        if (indexed)
+        var analyzed = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_ANALYZE") == "1";
+        long analyzeMs = 0;
+        if (analyzed)
         {
             var clock = Stopwatch.StartNew();
             await using var sqlite = new Microsoft.Data.Sqlite.SqliteConnection(connection);
             await sqlite.OpenAsync(cancellation);
             await using var command = sqlite.CreateCommand();
-            command.CommandText = "CREATE INDEX jsonbench_ix ON bluesky (kind, operation, collection, did, time_us); ANALYZE;";
+            command.CommandText = "ANALYZE;";
             await command.ExecuteNonQueryAsync(cancellation);
-            indexMs = clock.ElapsedMilliseconds;
+            analyzeMs = clock.ElapsedMilliseconds;
         }
 
         var skips = await engine.GetProjectionFieldSkipsAsync(Events, cancellation);
-        var indexNote = indexed
-            ? string.Create(CultureInfo.InvariantCulture, $"index on (kind, operation, collection, did, time_us) + ANALYZE {indexMs:N0} ms")
-            : "no index on the declared columns";
+        var indexNote = (indexed
+                ? "declared indexes " + string.Join(" · ", QueryIndexes.Select(i => $"({string.Join(", ", i.Fields)})"))
+                : "no declared index")
+            + (analyzed ? string.Create(CultureInfo.InvariantCulture, $" · ANALYZE {analyzeMs:N0} ms") : " · no ANALYZE");
         report.AppendLine(CultureInfo.InvariantCulture, $"- Formbase load: raw append {append.ElapsedMilliseconds:N0} ms ({BatchSize:N0} per batch) · projection {project.ElapsedMilliseconds:N0} ms · field skips {skips.Count} · SQLite file {new FileInfo(dbPath).Length / 1024 / 1024:N0} MiB · {indexNote}");
 
         // --- PostgreSQL JSONB (JSONBench's DDL, same machine) ---
