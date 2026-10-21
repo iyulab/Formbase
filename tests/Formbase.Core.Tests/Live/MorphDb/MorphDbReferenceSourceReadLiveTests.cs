@@ -35,7 +35,7 @@ public sealed class MorphDbReferenceSourceReadLiveTests
     {
         var recorder = new Recorder { InnerHandler = new HttpClientHandler() };
         using var http = new HttpClient(recorder) { BaseAddress = new Uri(_fixture.BaseUrl) };
-        await using var client = new MorphDBClient(http, new MorphDBClientOptions { ProjectId = _fixture.ProjectId });
+        await using var client = new MorphDBClient(http, new MorphDBClientOptions { ProjectId = _fixture.ProjectId, Secret = _fixture.Secret });
         var store = new MorphDbProjectionStore(client);
         var engine = Engine(store);
 

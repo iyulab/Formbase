@@ -25,7 +25,7 @@ public class MorphDbProjectStartupCheckTests
             return answer(request);
         }))
         { BaseAddress = new Uri("http://morphdb.test") };
-        var client = new MorphDBClient(http, new MorphDBClientOptions { ProjectId = ProjectId, RetryCount = 0 });
+        var client = new MorphDBClient(http, new MorphDBClientOptions { ProjectId = ProjectId });
         var selection = new StoreProfileSelection(StoreProfile.Durable, new DurableStoreLocation("formbase", ProjectId));
         return new MorphDbProjectStartupCheck(client, selection, NullLogger<MorphDbProjectStartupCheck>.Instance);
     }
@@ -56,6 +56,22 @@ public class MorphDbProjectStartupCheckTests
         var start = () => check.StartingAsync(TestContext.Current.CancellationToken);
 
         await start.Should().NotThrowAsync();
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "UNAUTHENTICATED", "401")]
+    [InlineData(HttpStatusCode.Forbidden, "FORBIDDEN", "403")]
+    public async Task A_refused_secret_refuses_the_start(HttpStatusCode status, string code, string named)
+    {
+        var check = Check(_ => new HttpResponseMessage(status)
+        {
+            Content = new StringContent($$"""{"error":"x","message":"refused","code":"{{code}}"}""", System.Text.Encoding.UTF8, "application/json")
+        }, out _);
+
+        var start = () => check.StartingAsync(TestContext.Current.CancellationToken);
+
+        (await start.Should().ThrowAsync<HostConfigurationException>("a refused secret is configuration, not an outage"))
+            .Which.Message.Should().Contain("Formbase:MorphDb:Secret").And.Contain(named);
     }
 
     [Fact]

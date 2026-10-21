@@ -121,6 +121,9 @@ services:
       ConnectionStrings__Formbase: Host=postgres;Port=5432;Database=formbase;Username=formbase;Password=formbase
       Formbase__MorphDb__Url: ${FORMBASE_MORPHDB_URL:-http://morphdb:8080}
       Formbase__MorphDb__ProjectId: ${FORMBASE_MORPHDB_PROJECT_ID}
+      # The secret presented to MorphDB. Needed once MorphDB is started with a master secret; a host
+      # whose secret MorphDB refuses does not start.
+      Formbase__MorphDb__Secret: ${FORMBASE_MORPHDB_SECRET:-}
       # Optional, like a database extension. Leave unset and the host starts without them.
       FORMBASE_LLM_ENDPOINT: ${FORMBASE_LLM_ENDPOINT:-}
       FORMBASE_LLM_API_KEY: ${FORMBASE_LLM_API_KEY:-}

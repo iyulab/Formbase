@@ -24,6 +24,13 @@ public sealed class MorphDbFixture : IAsyncLifetime
     /// <summary>Points the live suite at an external MorphDB instead of starting one.</summary>
     public const string BaseUrlVariable = "FORMBASE_MORPHDB_URL";
 
+    /// <summary>The secret to present to a MorphDB given by <see cref="BaseUrlVariable"/>, when it enforces one.</summary>
+    public const string SecretVariable = "FORMBASE_MORPHDB_SECRET";
+
+    // The container this fixture starts enforces secrets, as a production deployment should: every
+    // live test then goes through the secret the client presents, and one that forgot it fails.
+    private const string ContainerMasterSecret = "formbase-live-master-secret";
+
     /// <summary>Bounds the readiness wait so an unreachable service fails the run instead of stalling it.</summary>
     private static readonly TimeSpan ReadinessTimeout = TimeSpan.FromMinutes(2);
 
@@ -35,6 +42,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
     {
         BaseUrl = Environment.GetEnvironmentVariable(BaseUrlVariable)?.TrimEnd('/') ?? string.Empty;
         _network = BaseUrl.Length == 0 ? new NetworkBuilder().Build() : null;
+        Secret = _network is null ? Environment.GetEnvironmentVariable(SecretVariable) : ContainerMasterSecret;
     }
 
     public string BaseUrl { get; private set; }
@@ -42,7 +50,10 @@ public sealed class MorphDbFixture : IAsyncLifetime
     /// <summary>The provisioned project every client is scoped to.</summary>
     public Guid ProjectId { get; private set; }
 
-    public MorphDBClient CreateClient() => new(BaseUrl, new MorphDBClientOptions { ProjectId = ProjectId });
+    /// <summary>The secret requests present, or null for a MorphDB that does not enforce one.</summary>
+    public string? Secret { get; }
+
+    public MorphDBClient CreateClient() => new(BaseUrl, new MorphDBClientOptions { ProjectId = ProjectId, Secret = Secret });
 
     public async ValueTask InitializeAsync()
     {
@@ -70,6 +81,7 @@ public sealed class MorphDbFixture : IAsyncLifetime
             .WithNetwork(network)
             .WithEnvironment("ConnectionStrings__MorphDB", MorphDbPostgres.ServiceConnectionString)
             .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Production")
+            .WithEnvironment("Security__MasterSecret", ContainerMasterSecret)
             .WithPortBinding(8080, assignRandomHostPort: true)
             .WithWaitStrategy(Wait.ForUnixContainer()
                 .UntilHttpRequestIsSucceeded(r => r.ForPort(8080).ForPath("/health"), o => o.WithTimeout(ReadinessTimeout)))
@@ -86,6 +98,10 @@ public sealed class MorphDbFixture : IAsyncLifetime
     private async Task<Guid> ProvisionProjectAsync()
     {
         using var http = new HttpClient { BaseAddress = new Uri(BaseUrl), Timeout = ReadinessTimeout };
+        if (Secret is not null)
+        {
+            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Secret);
+        }
 
         var response = await http.PostAsJsonAsync(
             "/api/projects",

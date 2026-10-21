@@ -26,6 +26,11 @@
   type. The formdown adapter declares a `date` field with it, the M3L adapter a `date` field, and the
   LLM proposer a `"format": "date"` string.
 
+- **The durable host presents a MorphDB secret: `Formbase:MorphDb:Secret`** (and the third argument of
+  `AddMorphDbProjectionStore(url, projectId, secret)`), sent as `Authorization: Bearer` on every MorphDB
+  request. A host could not run in front of a MorphDB that enforces secrets. A host whose secret MorphDB
+  refuses — none, a wrong one, or one confined to another project — now refuses to start (exit `78`),
+  as a mistyped project id does, instead of starting and failing its first projection.
 - **A declaration can name the indexes its projected table is built with: `FormTypeHints.Indexes`**
   (`indexes` on the wire, each `{"fields": [...]}`) — declared field names in index order, one composite
   index per entry. The SQLite and MorphDB stores build them with the table, so a rebuilt projection has them again;

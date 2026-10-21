@@ -228,6 +228,7 @@ public sealed class NamespaceBindingLiveTests(DurableFixture fixture)
         start.Environment["Formbase__Schema"] = schema;
         start.Environment["ConnectionStrings__Formbase"] = fixture.PostgresConnectionString;
         start.Environment["Formbase__MorphDb__Url"] = fixture.MorphDbUrl;
+        start.Environment["Formbase__MorphDb__Secret"] = fixture.MorphDbSecret;
         start.Environment["Formbase__MorphDb__ProjectId"] = fixture.MorphDbProjectId.ToString();
         start.Environment.Remove("FORMBASE_MORPHDB_URL");
 
@@ -261,6 +262,7 @@ public sealed class NamespaceBindingLiveTests(DurableFixture fixture)
             builder.UseSetting("Formbase:Schema", schema);
             builder.UseSetting("ConnectionStrings:Formbase", fixture.PostgresConnectionString);
             builder.UseSetting("Formbase:MorphDb:Url", fixture.MorphDbUrl);
+            builder.UseSetting("Formbase:MorphDb:Secret", fixture.MorphDbSecret);
             builder.UseSetting("Formbase:MorphDb:ProjectId", fixture.MorphDbProjectId.ToString());
         });
 }

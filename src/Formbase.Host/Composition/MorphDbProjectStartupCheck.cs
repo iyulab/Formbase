@@ -9,9 +9,10 @@ namespace Formbase.Host.Composition;
 /// <para>
 /// The engine never administers MorphDB — provisioning the project is the operator's step — so this
 /// only reads it. Like the namespace check it runs in <see cref="IHostedLifecycleService.StartingAsync"/>,
-/// ahead of every service, and only an answer that the project is absent stops the start: a MorphDB
-/// that cannot be reached is an outage, which the host starts through and its projection answers
-/// report.
+/// ahead of every service. Two answers stop the start, both configuration the operator fixes: the
+/// project is absent, or MorphDB refuses the secret (<c>Formbase:MorphDb:Secret</c> missing, wrong, or
+/// confined to another project). A MorphDB that cannot be reached is an outage, which the host starts
+/// through and its projection answers report.
 /// </para>
 /// </summary>
 internal sealed partial class MorphDbProjectStartupCheck(
@@ -30,6 +31,12 @@ internal sealed partial class MorphDbProjectStartupCheck(
         try
         {
             project = await client.Projects.GetAsync(location.MorphDbProjectId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is MorphDBAuthenticationException or MorphDBAuthorizationException)
+        {
+            var refused = exception is MorphDBAuthenticationException ? 401 : 403;
+            LogSecretRefused(logger, refused);
+            throw new MorphDbSecretRefusedException(refused);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -61,6 +68,10 @@ internal sealed partial class MorphDbProjectStartupCheck(
         Message = "MorphDB has no project '{ProjectId}' (Formbase:MorphDb:ProjectId). Create one with POST /api/projects and set Formbase:MorphDb:ProjectId to the id it returns.")]
     private static partial void LogMissing(ILogger logger, Guid projectId);
 
+    [LoggerMessage(Level = LogLevel.Critical,
+        Message = "MorphDB refused the secret ({Status}) — set Formbase:MorphDb:Secret to a secret it accepts for this project.")]
+    private static partial void LogSecretRefused(ILogger logger, int status);
+
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "The MorphDB project could not be verified at startup ({ExceptionType}); projections will report the store while it stays unreachable.")]
     private static partial void LogUnverified(ILogger logger, string exceptionType);
@@ -70,3 +81,11 @@ internal sealed partial class MorphDbProjectStartupCheck(
 internal sealed class MorphDbProjectMissingException(Guid projectId) : HostConfigurationException(
     $"MorphDB has no project '{projectId}' (Formbase:MorphDb:ProjectId) — it was never created, or it was deleted. " +
     "Create one with POST /api/projects and set Formbase:MorphDb:ProjectId to the id it returns.");
+
+/// <summary>MorphDB refused the secret the host presents, or the host presented none.</summary>
+internal sealed class MorphDbSecretRefusedException(int status) : HostConfigurationException(
+    status == 401
+        ? "MorphDB refused the request for want of a valid secret (401). Set Formbase:MorphDb:Secret to a secret MorphDB accepts — " +
+          "one it issued, or its master secret."
+        : "MorphDB refused the secret for this project (403) — it is confined to another project. " +
+          "Set Formbase:MorphDb:Secret to a secret issued for Formbase:MorphDb:ProjectId, or one not confined to a project.");

@@ -42,6 +42,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
             builder.UseSetting("Formbase:Store", "Durable");
             builder.UseSetting("ConnectionStrings:Formbase", _fixture.PostgresConnectionString);
             builder.UseSetting("Formbase:MorphDb:Url", _fixture.MorphDbUrl);
+            builder.UseSetting("Formbase:MorphDb:Secret", _fixture.MorphDbSecret);
             builder.UseSetting("Formbase:MorphDb:ProjectId", _fixture.MorphDbProjectId.ToString());
         });
 
@@ -236,6 +237,7 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
             builder.UseSetting("Formbase:Store", "Durable");
             builder.UseSetting("ConnectionStrings:Formbase", _fixture.PostgresConnectionString);
             builder.UseSetting("Formbase:MorphDb:Url", _fixture.MorphDbUrl);
+            builder.UseSetting("Formbase:MorphDb:Secret", _fixture.MorphDbSecret);
             builder.UseSetting("Formbase:MorphDb:ProjectId", _fixture.MorphDbProjectId.ToString());
         });
         using var client = restarted.CreateClient();
@@ -382,6 +384,10 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
     private async Task<IReadOnlyList<string>> QueryRelationNamesAsync(string tableName, CancellationToken ct)
     {
         using var http = new HttpClient { BaseAddress = new Uri(_fixture.MorphDbUrl) };
+        if (_fixture.MorphDbSecret is { } secret)
+        {
+            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", secret);
+        }
         http.DefaultRequestHeaders.Add("X-Project-Id", _fixture.MorphDbProjectId.ToString());
         var response = await http.PostAsJsonAsync("/graphql", new
         {

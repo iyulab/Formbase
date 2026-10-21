@@ -20,7 +20,7 @@ public sealed class DeletedProjectLiveTests(DurableFixture fixture)
     [Fact]
     public async Task A_projection_into_a_deleted_project_says_so_and_documents_are_still_accepted()
     {
-        await using var admin = new MorphDBClient(fixture.MorphDbUrl);
+        await using var admin = new MorphDBClient(fixture.MorphDbUrl, new MorphDBClientOptions { Secret = fixture.MorphDbSecret });
         var projectId = Guid.NewGuid();
         await admin.Projects.CreateAsync(new CreateProjectRequest
         {
@@ -63,6 +63,7 @@ public sealed class DeletedProjectLiveTests(DurableFixture fixture)
             builder.UseSetting("Formbase:Schema", "fb_gone_" + Guid.NewGuid().ToString("N")[..8]);
             builder.UseSetting("ConnectionStrings:Formbase", fixture.PostgresConnectionString);
             builder.UseSetting("Formbase:MorphDb:Url", fixture.MorphDbUrl);
+            builder.UseSetting("Formbase:MorphDb:Secret", fixture.MorphDbSecret);
             builder.UseSetting("Formbase:MorphDb:ProjectId", projectId.ToString());
         });
 }

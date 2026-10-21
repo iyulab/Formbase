@@ -97,7 +97,7 @@ public sealed class JsonBenchMeasurement
 
             // Registered after the SQLite projection, so the projection store resolved is MorphDB's; the
             // projection state and the declarations stay beside the raw store.
-            services.AddMorphDbProjectionStore(morphDb.BaseUrl, morphDb.ProjectId);
+            services.AddMorphDbProjectionStore(morphDb.BaseUrl, morphDb.ProjectId, morphDb.Secret);
         }
 
         var store = onMorphDb ? "MorphDB" : "SQLite";

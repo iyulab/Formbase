@@ -98,12 +98,15 @@ internal static class StoreComposition
 
         var projectId = RequiredProjectId(morphDb["ProjectId"]);
 
+        // Optional: a MorphDB that does not enforce secrets takes requests without one.
+        var secret = morphDb["Secret"] is { Length: > 0 } configuredSecret ? configuredSecret : null;
+
         services.AddSingleton(new StoreProfileSelection(StoreProfile.Durable, new DurableStoreLocation(schema, projectId)));
 
         services.AddPostgresRawStore(connectionString, schema);
         services.AddPostgresProjectionState(connectionString, schema);
         services.AddPostgresFieldHints(connectionString, schema);
-        services.AddMorphDbProjectionStore(url, projectId);
+        services.AddMorphDbProjectionStore(url, projectId, secret);
 
         // The concrete PostgresFieldHintSource is already resolvable — AddPostgresFieldHints
         // registers it and points IFieldHintSource at it. Registering it again here, by casting the

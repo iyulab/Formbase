@@ -35,8 +35,13 @@ public static class MorphDbServiceCollectionExtensions
     /// with the server's <c>MISSING_PROJECT</c>. Provisioning the project (a one-time
     /// <c>POST /api/projects</c>) stays the consumer's responsibility — the engine never
     /// administers MorphDB.
+    /// <para>
+    /// <paramref name="secret"/> is the MorphDB secret the client presents on every request. A MorphDB
+    /// started with a master secret refuses requests without one; leave it null only for a service that
+    /// does not enforce secrets.
+    /// </para>
     /// </summary>
-    public static IServiceCollection AddMorphDbProjectionStore(this IServiceCollection services, string baseUrl, Guid projectId)
+    public static IServiceCollection AddMorphDbProjectionStore(this IServiceCollection services, string baseUrl, Guid projectId, string? secret = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
@@ -48,7 +53,7 @@ public static class MorphDbServiceCollectionExtensions
         }
 
         return services.AddMorphDbProjectionStore(
-            _ => new MorphDBClient(baseUrl, new MorphDBClientOptions { ProjectId = projectId }));
+            _ => new MorphDBClient(baseUrl, new MorphDBClientOptions { ProjectId = projectId, Secret = secret }));
     }
 
     /// <summary>

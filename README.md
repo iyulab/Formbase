@@ -95,7 +95,7 @@ By default it composes the in-process stores, which needs nothing else running a
 on restart. A deployment selects the durable profile instead:
 
 ```bash
-Formbase__Store=Durable ConnectionStrings__Formbase='Host=db;Database=formbase;Username=formbase;Password=…' Formbase__MorphDb__Url=http://morphdb:8080 Formbase__MorphDb__ProjectId=<the id POST /api/projects returned> dotnet run --project src/Formbase.Host
+Formbase__Store=Durable ConnectionStrings__Formbase='Host=db;Database=formbase;Username=formbase;Password=…' Formbase__MorphDb__Url=http://morphdb:8080 Formbase__MorphDb__ProjectId=<the id POST /api/projects returned> Formbase__MorphDb__Secret=<a MorphDB secret, when it enforces them> dotnet run --project src/Formbase.Host
 ```
 
 PostgreSQL then holds the raw stream, the projection state and the declarations; MorphDB holds the
@@ -388,7 +388,7 @@ services.AddFormbaseCore();
 services.AddPostgresRawStore(connectionString);        // raw = source of truth
 services.AddPostgresProjectionState(connectionString); // the engine's own ledger
 services.AddPostgresFieldHints(connectionString);      // what a form type projects into
-services.AddMorphDbProjectionStore(morphDbUrl, provisionedProjectId);
+services.AddMorphDbProjectionStore(morphDbUrl, provisionedProjectId, morphDbSecret); // secret: null when MorphDB does not enforce them
 ```
 
 The bare `AddMorphDbProjectionStore(morphDbUrl)` overload leaves the client unscoped: intake

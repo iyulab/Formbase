@@ -34,6 +34,8 @@ public sealed class DurableFixture : IAsyncLifetime
     /// <inheritdoc cref="PostgresConnectionString"/>
     public Guid MorphDbProjectId => _morphdb.ProjectId;
 
+    public string? MorphDbSecret => _morphdb.Secret;
+
     public async ValueTask InitializeAsync()
     {
         await _postgres.InitializeAsync();
