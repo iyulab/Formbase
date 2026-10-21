@@ -21,9 +21,8 @@ namespace Formbase.Core.Tests.Live.JsonBench;
 /// One event file (newline-delimited JSON, gzip) is loaded twice: into Formbase over SQLite (raw append,
 /// then projection to declared columns, the nested keys read through JSON Pointer source keys), and into a
 /// PostgreSQL <c>jsonb</c> table with JSONBench's DDL and index. Then each query Formbase can state runs three
-/// times on both, and the answers are compared. Q3's hour of day is a computed field; its three-collection
-/// <c>IN</c> is applied to the groups after the aggregate, so Formbase's time there includes the groups of
-/// the other collections. Q5 (a span between two measures) has no Formbase form and is reported as such.
+/// times on both, and the answers are compared. Q3's hour of day is a computed field and its three
+/// collections an <c>IN</c> filter. Q5 (a span between two measures) has no Formbase form and is reported as such.
 /// </para>
 /// <para>
 /// <c>FORMBASE_JSONBENCH_FILE</c> names the event file, <c>FORMBASE_JSONBENCH_OUT</c> the directory for the
@@ -33,7 +32,10 @@ namespace Formbase.Core.Tests.Live.JsonBench;
 /// declares an index for each query's filter and grouping (<see cref="QueryIndexes"/>) — the counterpart of the
 /// expression index JSONBench's DDL gives PostgreSQL, but one per query, since one column order does not serve
 /// them all. <c>FORMBASE_JSONBENCH_ANALYZE=1</c> runs SQLite's <c>ANALYZE</c> after the projection, which the
-/// store does not, to show what planner statistics add. Needs Docker for PostgreSQL.
+/// store does not, to show what planner statistics add. <c>FORMBASE_JSONBENCH_STORE=morphdb</c> projects into
+/// MorphDB instead — a MorphDB container the live fixture starts, beside its PostgreSQL — while the raw store
+/// and the projection state stay in the SQLite file; build with <c>IncludeMorphDbLiveTests</c> as well.
+/// Needs Docker for PostgreSQL (and MorphDB).
 /// </para>
 /// </summary>
 public sealed class JsonBenchMeasurement
@@ -70,7 +72,7 @@ public sealed class JsonBenchMeasurement
         Directory.CreateDirectory(outDirectory);
         var lines = ReadLines(file, limit);
         var report = new StringBuilder();
-        report.AppendLine(CultureInfo.InvariantCulture, $"# JSONBench queries — Formbase (SQLite) and PostgreSQL JSONB, {lines.Count:N0} events");
+        report.AppendLine(CultureInfo.InvariantCulture, $"# JSONBench queries — Formbase ({(Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_STORE") == "morphdb" ? "MorphDB" : "SQLite")}) and PostgreSQL JSONB, {lines.Count:N0} events");
         report.AppendLine();
         report.AppendLine(CultureInfo.InvariantCulture, $"Event file `{Path.GetFileName(file)}` · {Runs} runs per query · times in ms (min / median of runs).");
         report.AppendLine();
@@ -86,7 +88,19 @@ public sealed class JsonBenchMeasurement
 
         var connection = $"Data Source={dbPath}";
         var indexed = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_INDEXES") == "1";
+        var onMorphDb = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_STORE") == "morphdb";
         var services = new ServiceCollection().AddFormbaseCore().AddSqliteRawStore(connection).AddSqliteProjection(connection);
+        await using var morphDb = onMorphDb ? MorphDbStore() : null;
+        if (morphDb is not null)
+        {
+            await morphDb.InitializeAsync();
+
+            // Registered after the SQLite projection, so the projection store resolved is MorphDB's; the
+            // projection state and the declarations stay beside the raw store.
+            services.AddMorphDbProjectionStore(morphDb.BaseUrl, morphDb.ProjectId);
+        }
+
+        var store = onMorphDb ? "MorphDB" : "SQLite";
         await using var provider = services.BuildServiceProvider();
         var engine = provider.GetRequiredService<FormbaseEngine>();
         await provider.GetRequiredService<SqliteFieldHintSource>().DeclareAsync(
@@ -138,7 +152,7 @@ public sealed class JsonBenchMeasurement
                 ? "declared indexes " + string.Join(" · ", QueryIndexes.Select(i => $"({string.Join(", ", i.Fields)})"))
                 : "no declared index")
             + (analyzed ? string.Create(CultureInfo.InvariantCulture, $" · ANALYZE {analyzeMs:N0} ms") : " · no ANALYZE");
-        report.AppendLine(CultureInfo.InvariantCulture, $"- Formbase load: raw append {append.ElapsedMilliseconds:N0} ms ({BatchSize:N0} per batch) · projection {project.ElapsedMilliseconds:N0} ms · field skips {skips.Count} · SQLite file {new FileInfo(dbPath).Length / 1024 / 1024:N0} MiB · {indexNote}");
+        report.AppendLine(CultureInfo.InvariantCulture, $"- Formbase load: raw append {append.ElapsedMilliseconds:N0} ms ({BatchSize:N0} per batch) · projection {project.ElapsedMilliseconds:N0} ms · field skips {skips.Count} · SQLite file {new FileInfo(dbPath).Length / 1024 / 1024:N0} MiB · projection store {store} · {indexNote}");
 
         // --- PostgreSQL JSONB (JSONBench's DDL, same machine) ---
         await using var postgres = new PostgreSqlBuilder("postgres:16-alpine").Build();
@@ -164,7 +178,7 @@ public sealed class JsonBenchMeasurement
         load.Stop();
         report.AppendLine(CultureInfo.InvariantCulture, $"- PostgreSQL load: COPY + index + VACUUM ANALYZE {load.ElapsedMilliseconds:N0} ms (postgres:16-alpine, default settings)");
         report.AppendLine();
-        report.AppendLine("| Query | Formbase (SQLite) | PostgreSQL JSONB | Formbase / PostgreSQL | Same answer |");
+        report.AppendLine(CultureInfo.InvariantCulture, $"| Query | Formbase ({store}) | PostgreSQL JSONB | Formbase / PostgreSQL | Same answer |");
         report.AppendLine("|---|---|---|---|---|");
 
         var created = new[] { FieldFilter.Equal("kind", "commit"), FieldFilter.Equal("operation", "create") };
@@ -177,8 +191,8 @@ public sealed class JsonBenchMeasurement
             ("Q2 created events and distinct users per collection",
                 new AggregateSpec(GroupBy: ["collection"], Filters: created, Measures: [AggregateMeasure.CountDistinct("did")], OrderBy: [GroupOrder.ByCount(descending: true)]),
                 "SELECT data -> 'commit' ->> 'collection' AS event, COUNT(*) AS count, COUNT(DISTINCT data ->> 'did') AS users FROM bluesky WHERE data ->> 'kind' = 'commit' AND data -> 'commit' ->> 'operation' = 'create' GROUP BY event ORDER BY count DESC"),
-            ("Q3 created posts, reposts and likes per hour of day (IN applied to the groups)",
-                new AggregateSpec(GroupBy: ["collection", "hour_of_day"], Filters: created, OrderBy: [GroupOrder.ByKey("hour_of_day"), GroupOrder.ByKey("collection")]),
+            ("Q3 created posts, reposts and likes per hour of day",
+                new AggregateSpec(GroupBy: ["collection", "hour_of_day"], Filters: [.. created, FieldFilter.In("collection", q3Collections)], OrderBy: [GroupOrder.ByKey("hour_of_day"), GroupOrder.ByKey("collection")]),
                 "SELECT data->'commit'->>'collection' AS event, EXTRACT(HOUR FROM TO_TIMESTAMP((data->>'time_us')::BIGINT / 1000000)) AS hour_of_day, COUNT(*) AS count FROM bluesky WHERE data->>'kind' = 'commit' AND data->'commit'->>'operation' = 'create' AND data->'commit'->>'collection' IN ('app.bsky.feed.post', 'app.bsky.feed.repost', 'app.bsky.feed.like') GROUP BY event, hour_of_day ORDER BY hour_of_day, event"),
             ("Q4 first three posters",
                 new AggregateSpec(GroupBy: ["did"], Filters: [.. created, FieldFilter.Equal("collection", "app.bsky.feed.post")], Measures: [AggregateMeasure.Min("time_us")], OrderBy: [GroupOrder.ByMeasure(0)], Limit: 3),
@@ -193,10 +207,6 @@ public sealed class JsonBenchMeasurement
             {
                 var clock = Stopwatch.StartNew();
                 answer = await engine.AggregateAsync(Events, spec, cancellation);
-                if (spec.GroupBy is ["collection", "hour_of_day"])
-                {
-                    answer = answer with { Groups = [.. answer.Groups.Where(g => q3Collections.Contains(g.Key["collection"] as string))] };
-                }
 
                 formbaseTimes.Add(clock.Elapsed.TotalMilliseconds);
             }
@@ -219,6 +229,10 @@ public sealed class JsonBenchMeasurement
         await File.WriteAllTextAsync(Path.Combine(outDirectory, "report.md"), report.ToString(), cancellation);
         TestContext.Current.SendDiagnosticMessage(report.ToString());
     }
+
+    // The live fixture's MorphDB: a container beside its own PostgreSQL, or the one
+    // FORMBASE_MORPHDB_URL names.
+    private static Formbase.Core.Tests.Live.MorphDb.MorphDbFixture MorphDbStore() => new();
 
     private static List<string> ReadLines(string file, int limit)
     {
