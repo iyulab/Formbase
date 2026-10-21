@@ -395,8 +395,8 @@ This is the shape the next projection run will build. A form type with no declar
 - **`indexes`** — the indexes the projected table is built with, each `{"fields": [...]}`: declared field
   names in index order, the leading one first (`[{"fields": ["kind", "collection", "time_us"]}]` serves
   filters on `kind`, on `kind` and `collection`, and those plus a range of `time_us`). An index changes how
-  fast a query is answered, never what it answers. The SQLite store builds each one with the table, so a
-  rebuilt projection has it again; the in-memory store has nothing to index. A field may
+  fast a query is answered, never what it answers. The SQLite and MorphDB stores build each one with the
+  table, so a rebuilt projection has it again; the in-memory store has nothing to index. A field may
   appear once per index; a field that is not declared, a `reference` field (its value is looked up when
   the row is read) and two indexes over the same fields in the same order are refused with `400`. The
   document id and record key columns are indexed already and are not declared. Changing the set changes

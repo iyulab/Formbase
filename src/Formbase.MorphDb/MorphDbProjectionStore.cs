@@ -156,6 +156,17 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
         await _client.Schema.CreateTableAsync(request, cancellationToken).ConfigureAwait(false);
 
+        // Declared indexes, numbered in declared order: MorphDB keys an index's physical name by its
+        // table, so the number only has to be unique here, and a redeclared set rebuilds the table.
+        var indexes = schema.Indexes ?? [];
+        for (var ordinal = 0; ordinal < indexes.Count; ordinal++)
+        {
+            await _client.Schema.CreateIndexAsync(
+                schema.TableName,
+                new CreateIndexRequest { Name = $"fb_dx_{ordinal}", Columns = [.. indexes[ordinal].Columns] },
+                cancellationToken).ConfigureAwait(false);
+        }
+
         if (schema.Relations is { Count: > 0 })
         {
             foreach (var relation in schema.Relations)

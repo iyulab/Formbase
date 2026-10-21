@@ -6,7 +6,7 @@
 
 - **A declaration can name the indexes its projected table is built with: `FormTypeHints.Indexes`**
   (`indexes` on the wire, each `{"fields": [...]}`) — declared field names in index order, one composite
-  index per entry. The SQLite store builds them with the table, so a rebuilt projection has them again;
+  index per entry. The SQLite and MorphDB stores build them with the table, so a rebuilt projection has them again;
   the in-memory store keeps nothing to index, and a query answers the same with or without them. A field
   that is not declared, a reference field, a field named twice in one index and two indexes over the same
   fields in the same order are refused by every declaration writer (`ArgumentException`; `400` from the
