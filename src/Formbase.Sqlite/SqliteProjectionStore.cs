@@ -210,6 +210,18 @@ public sealed class SqliteProjectionStore : IProjectionStore
         }
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        // Without statistics the planner guesses which index a query should use, and with several declared
+        // indexes on one table it can guess wrong by a factor of two. SQLite's own advice after a change this
+        // size: PRAGMA optimize, which analyzes only a table whose row count has moved tenfold since it was
+        // last analyzed, under a bounded sample — so a projection pays for a few analyses as its table grows,
+        // not one per batch. 0x10002 checks every table, not only those this connection has queried.
+        await using (var optimize = connection.CreateCommand())
+        {
+            optimize.CommandText = "PRAGMA optimize=0x10002";
+            await optimize.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         return rows.Count;
     }
 

@@ -48,6 +48,33 @@ public sealed class SqliteDeclaredIndexTests : IDisposable
         steps.Should().Contain(step => step.Contains("fb_dx_events_0", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The planner chooses between declared indexes from statistics; a table filled by a projection has
+    /// them once rows have been written, without anyone running ANALYZE.
+    /// </summary>
+    [Fact]
+    public async Task Writing_rows_leaves_planner_statistics_for_the_declared_indexes()
+    {
+        var store = new SqliteProjectionStore(_file.Database);
+        var schema = new TableSchema(
+            "events",
+            [new ColumnDef("kind", ColumnType.Text, Nullable: true), new ColumnDef("time_us", ColumnType.Integer, Nullable: true)],
+            Indexes: [new IndexDef(["kind", "time_us"])]);
+        await store.CreateTableAsync(schema, TestContext.Current.CancellationToken);
+
+        await store.BulkInsertAsync(
+            "events",
+            [.. Enumerable.Range(0, 50).Select(i => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?> { ["kind"] = i % 2 == 0 ? "commit" : "identity", ["time_us"] = (long)i })],
+            TestContext.Current.CancellationToken);
+
+        await using var connection = new SqliteConnection(_file.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var stat = connection.CreateCommand();
+        stat.CommandText = "SELECT count(*) FROM sqlite_stat1 WHERE tbl = 'events' AND idx = 'fb_dx_events_0'";
+        Convert.ToInt64(await stat.ExecuteScalarAsync(TestContext.Current.CancellationToken), System.Globalization.CultureInfo.InvariantCulture)
+            .Should().Be(1);
+    }
+
     private static async Task<List<string>> ColumnsOf(SqliteConnection connection, string index)
     {
         await using var info = connection.CreateCommand();
