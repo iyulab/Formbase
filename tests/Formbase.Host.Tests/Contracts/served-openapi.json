@@ -811,6 +811,15 @@
               "null",
               "string"
             ]
+          },
+          "indexes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DeclaredIndex"
+            }
           }
         }
       },
@@ -855,6 +864,15 @@
               "null",
               "string"
             ]
+          },
+          "indexes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DeclaredIndex"
+            }
           }
         }
       },
@@ -1056,6 +1074,20 @@
                 "$ref": "#/components/schemas/DeclaredDerivation"
               }
             ]
+          }
+        }
+      },
+      "DeclaredIndex": {
+        "required": [
+          "fields"
+        ],
+        "type": "object",
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

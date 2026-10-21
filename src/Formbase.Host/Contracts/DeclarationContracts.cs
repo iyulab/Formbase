@@ -18,13 +18,26 @@ namespace Formbase.Host.Contracts;
 /// <param name="Fields">The declared fields, in declared order.</param>
 /// <param name="Relations">Declared links to other form types.</param>
 /// <param name="BusinessName">The name a person reads the form by, when one is declared.</param>
+/// <param name="Indexes">The indexes the projected table is built with, in declared order — empty when none is declared.</param>
 public sealed record DeclarationResponse(
     string FormType,
     string TableName,
     int DeclarationVersion,
     IReadOnlyList<DeclaredFieldResponse> Fields,
     IReadOnlyList<DeclaredRelationResponse> Relations,
-    string? BusinessName = null);
+    string? BusinessName = null,
+    IReadOnlyList<DeclaredIndex>? Indexes = null);
+
+/// <summary>
+/// An index the projected table is built with: the declared fields it covers, in index order — a composite
+/// index when there are several, its leading field first. It changes how fast a query is answered, never what
+/// it answers.
+/// </summary>
+/// <param name="Fields">
+/// Declared field names, one or more, each once. A reference field is refused (its value is looked up when the row
+/// is read), and so is an index that covers the same fields in the same order as another.
+/// </param>
+public sealed record DeclaredIndex(IReadOnlyList<string> Fields);
 
 /// <param name="Name">The projected column's name.</param>
 /// <param name="Type">The column's declared type.</param>
@@ -105,13 +118,18 @@ public sealed record DeclaredRelationResponse(
 /// The name a person reads the form by («설비 점검일지» for <c>inspection_log</c>) — declaration only,
 /// never part of the table, so changing it rebuilds nothing. Blank is refused.
 /// </param>
+/// <param name="Indexes">
+/// Indexes to build the projected table with — for the filters and groupings its queries use. A changed set
+/// rebuilds the table, as any change to its shape does.
+/// </param>
 public sealed record DeclarationRequest(
     string TableName,
     int DeclarationVersion,
     int? ExpectedDeclarationVersion,
     IReadOnlyList<DeclaredFieldRequest> Fields,
     IReadOnlyList<DeclaredRelationRequest>? Relations,
-    string? BusinessName = null);
+    string? BusinessName = null,
+    IReadOnlyList<DeclaredIndex>? Indexes = null);
 
 /// <param name="Name">The projected column's name.</param>
 /// <param name="Type">The column's declared type.</param>

@@ -4,6 +4,15 @@
 
 ### Added
 
+- **A declaration can name the indexes its projected table is built with: `FormTypeHints.Indexes`**
+  (`indexes` on the wire, each `{"fields": [...]}`) — declared field names in index order, one composite
+  index per entry. The SQLite store builds them with the table, so a rebuilt projection has them again;
+  the in-memory store keeps nothing to index, and a query answers the same with or without them. A field
+  that is not declared, a reference field, a field named twice in one index and two indexes over the same
+  fields in the same order are refused by every declaration writer (`ArgumentException`; `400` from the
+  host). A declaration without indexes keeps its fingerprint; changing the set rebuilds the projection.
+  The SQLite and PostgreSQL declaration stores add an `indexes` column to a declarations table written
+  by an earlier version on first use.
 - Computed fields: a declared field may carry a derivation (`FieldHint.Derivation`, `derivation` on the
   wire) — a Unix time as a timestamp (`FromEpoch`), a time rounded down to a unit (`TruncateTo`), or one
   part of a time as a number (`PartOf`), all in UTC. The value is computed at projection time and stored

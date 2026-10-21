@@ -139,6 +139,19 @@ public sealed class SqliteProjectionStore : IProjectionStore
             await index.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        // Declared indexes, numbered in declared order — an index's name only has to be unique, and its
+        // columns are what it is; a redeclared set rebuilds the table, so the numbers never go stale.
+        var declared = schema.Indexes ?? [];
+        for (var ordinal = 0; ordinal < declared.Count; ordinal++)
+        {
+            await using var index = connection.CreateCommand();
+            index.Transaction = transaction;
+            index.CommandText =
+                $"CREATE INDEX {SqliteValues.Quote($"fb_dx_{schema.TableName}_{ordinal}")} ON {SqliteValues.Quote(schema.TableName)} " +
+                $"({string.Join(", ", declared[ordinal].Columns.Select(SqliteValues.Quote))})";
+            await index.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 

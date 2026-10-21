@@ -4,8 +4,8 @@ using System.Text.Json.Serialization;
 namespace Formbase.Core.Schema;
 
 /// <summary>
-/// The JSON a durable <see cref="Ports.IFieldHintSource"/> stores a declaration's fields and relations
-/// in — one format for every store, kept where the declaration types and their converters live. Member
+/// The JSON a durable <see cref="Ports.IFieldHintSource"/> stores a declaration's fields, relations and
+/// indexes in — one format for every store, kept where the declaration types and their converters live. Member
 /// names as declared and enums by name, which is the shape declarations already on disk were written
 /// in. The metadata is generated at compile time, so a store that uses this works in Native AOT and
 /// trimmed hosts.
@@ -27,6 +27,14 @@ public static class DeclarationJson
     /// <summary>Stored relations read back; null for a JSON <c>null</c>.</summary>
     public static IReadOnlyList<RelationHint>? DeserializeRelations(string json) =>
         JsonSerializer.Deserialize(json, DeclarationJsonContext.Default.ListRelationHint);
+
+    /// <summary>The indexes as stored.</summary>
+    public static string SerializeIndexes(IReadOnlyList<IndexHint> indexes) =>
+        JsonSerializer.Serialize(indexes, DeclarationJsonContext.Default.IReadOnlyListIndexHint);
+
+    /// <summary>Stored indexes read back; null for a JSON <c>null</c>.</summary>
+    public static IReadOnlyList<IndexHint>? DeserializeIndexes(string json) =>
+        JsonSerializer.Deserialize(json, DeclarationJsonContext.Default.ListIndexHint);
 }
 
 [JsonSourceGenerationOptions(UseStringEnumConverter = true)]
@@ -34,4 +42,6 @@ public static class DeclarationJson
 [JsonSerializable(typeof(List<RelationHint>))]
 [JsonSerializable(typeof(IReadOnlyList<FieldHint>))]
 [JsonSerializable(typeof(IReadOnlyList<RelationHint>))]
+[JsonSerializable(typeof(List<IndexHint>))]
+[JsonSerializable(typeof(IReadOnlyList<IndexHint>))]
 internal sealed partial class DeclarationJsonContext : JsonSerializerContext;

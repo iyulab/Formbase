@@ -278,6 +278,50 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         malformed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    private static readonly string[] KindThenTime = ["kind", "time_us"];
+    private static readonly string[] Lot = ["lot"];
+
+    [Fact]
+    public async Task Indexes_are_stored_and_read_back_and_one_on_an_undeclared_field_is_refused()
+    {
+        var type = NewFormType();
+        var indexed = await _client.PutAsJsonAsync(
+            $"/formtypes/{type}/declaration",
+            new
+            {
+                tableName = $"t_{type}",
+                declarationVersion = 1,
+                fields = new[] { new { name = "kind", type = "text" }, new { name = "time_us", type = "integer" } },
+                indexes = new[] { new { fields = KindThenTime } },
+            },
+            TestContext.Current.CancellationToken);
+        indexed.StatusCode.Should().Be(HttpStatusCode.Created, await indexed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var read = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
+        read.GetProperty("indexes")[0].GetProperty("fields").EnumerateArray().Select(f => f.GetString())
+            .Should().Equal("kind", "time_us");
+
+        var plain = NewFormType();
+        (await _client.PutAsJsonAsync(
+            $"/formtypes/{plain}/declaration",
+            new { tableName = $"t_{plain}", declarationVersion = 1, fields = new[] { new { name = "kind", type = "text" } } },
+            TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await ReadAsync(await _client.GetAsync($"/formtypes/{plain}/declaration", TestContext.Current.CancellationToken)))
+            .GetProperty("indexes").GetArrayLength().Should().Be(0);
+
+        var undeclared = await _client.PutAsJsonAsync(
+            $"/formtypes/{NewFormType()}/declaration",
+            new
+            {
+                tableName = "t",
+                declarationVersion = 1,
+                fields = new[] { new { name = "kind", type = "text" } },
+                indexes = new[] { new { fields = Lot } },
+            },
+            TestContext.Current.CancellationToken);
+        undeclared.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(undeclared)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+    }
+
     [Fact]
     public async Task A_field_declared_twice_is_refused()
     {

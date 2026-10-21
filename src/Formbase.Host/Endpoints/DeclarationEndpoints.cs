@@ -251,7 +251,8 @@ internal static class DeclarationEndpoints
                 : [.. request.Relations.Select(r => new RelationHint(
                     r.Name, r.Kind.ToEngine(), FormTypeRef.Create(r.Target), r.KeyField, r.SectionField))],
             request.DeclarationVersion,
-            request.BusinessName);
+            request.BusinessName,
+            request.Indexes is null ? null : [.. request.Indexes.Select(i => new IndexHint([.. i.Fields ?? []]))]);
 
     /// <summary>The engine lookup a wire target names: a field, the record identity, or none.</summary>
     private static TargetLookup? LookupOf(DeclaredTargetResponse target) =>
@@ -288,7 +289,8 @@ internal static class DeclarationEndpoints
                 r.Target.Value,
                 r.KeyField,
                 r.SectionField))],
-            declaration.BusinessName);
+            declaration.BusinessName,
+            [.. (declaration.Indexes ?? []).Select(i => new DeclaredIndex([.. i.Fields]))]);
 
     private static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
         new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value, LastRunResponse.FromTracked(lastRun));

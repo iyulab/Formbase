@@ -63,7 +63,12 @@ public sealed class HintSchemaProposer : ISchemaProposer
             ? SectionDef.From(source, hints)
             : null;
 
-        return new TableSchema(hints.TableName, columns, relations, hints.DeclarationVersion, section);
+        // A declared field is a column of the same name, so an index carries over as it was declared.
+        IReadOnlyList<IndexDef>? indexes = hints.Indexes is { Count: > 0 }
+            ? [.. hints.Indexes.Select(i => new IndexDef([.. i.Fields]))]
+            : null;
+
+        return new TableSchema(hints.TableName, columns, relations, hints.DeclarationVersion, section, indexes);
     }
 
     /// <summary>The target's declared table name, or its form-type name when it declares no hints yet.</summary>

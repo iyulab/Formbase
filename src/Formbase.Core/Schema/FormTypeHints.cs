@@ -10,7 +10,8 @@ namespace Formbase.Core.Schema;
 /// distinction across schema growth. <paramref name="BusinessName"/> is the name a person reads the
 /// form by («설비 점검일지» for <c>inspection_log</c>), as <see cref="FieldHint.BusinessName"/> is for a
 /// field — declaration only, never part of the projected table, so changing it rebuilds nothing.
-/// Defaults reproduce the pre-vocabulary shape.
+/// <paramref name="Indexes"/> are the indexes the projected table is built with (<see cref="IndexHint"/>) —
+/// they change how fast a query is answered, never what it answers. Defaults reproduce the pre-vocabulary shape.
 /// </summary>
 public sealed record FormTypeHints(
     FormTypeRef Type,
@@ -18,7 +19,8 @@ public sealed record FormTypeHints(
     IReadOnlyList<FieldHint> Fields,
     IReadOnlyList<RelationHint>? Relations = null,
     int DeclarationVersion = 1,
-    string? BusinessName = null)
+    string? BusinessName = null,
+    IReadOnlyList<IndexHint>? Indexes = null)
 {
     /// <summary>The name a person reads the form by, when one is declared.</summary>
     /// <exception cref="ArgumentException">The name is given but blank.</exception>

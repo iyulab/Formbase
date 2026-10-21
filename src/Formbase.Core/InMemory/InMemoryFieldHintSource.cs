@@ -16,11 +16,13 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
     /// (<see cref="DeclaredTableName"/>) throws <see cref="ArgumentException"/>, and a table another form
     /// type already projects into throws <see cref="Errors.TableNameInUseException"/>, and a target naming a field
     /// that does not exist (<see cref="DeclaredTargets"/>) or a repeated section that breaks a rule
-    /// (<see cref="DeclaredSections"/>) throws <see cref="ArgumentException"/>; none stores anything.
+    /// (<see cref="DeclaredSections"/>) or an index that does (<see cref="DeclaredIndexes"/>) throws
+    /// <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
     public void Declare(FormTypeHints hints)
     {
         DeclaredTableName.EnsureDeclarable(hints);
+        DeclaredIndexes.EnsureWellFormed(hints);
 
         // The check and the write are one step: two declarations racing for one table must not both see it free.
         lock (_declaring)

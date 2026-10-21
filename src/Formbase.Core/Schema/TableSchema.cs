@@ -10,13 +10,15 @@ namespace Formbase.Core.Schema;
 /// (stage-1: delivered, materialized by stores that can), and <paramref name="DeclarationVersion"/>
 /// travels with the shape so its identity moves when the declaration does. <paramref name="Section"/>
 /// is set when the table is a repeated section: its rows are cut out of another form type's documents.
+/// <paramref name="Indexes"/> are the declared indexes the store builds with the table.
 /// </summary>
 public sealed record TableSchema(
     string TableName,
     IReadOnlyList<ColumnDef> Columns,
     IReadOnlyList<RelationDef>? Relations = null,
     int DeclarationVersion = 1,
-    SectionDef? Section = null)
+    SectionDef? Section = null,
+    IReadOnlyList<IndexDef>? Indexes = null)
 {
     // Unit separator between fields of a record; newline between records.
     private const char Sep = '';
@@ -79,6 +81,13 @@ public sealed record TableSchema(
                 .Append(Sep).Append(section.SectionField)
                 .Append(Sep).Append(section.ParentKey ?? string.Empty)
                 .Append(Sep).Append(section.RowKey);
+        }
+
+        foreach (var index in Indexes ?? [])
+        {
+            // Only when declared, so a table without declared indexes keeps the fingerprint it had before
+            // indexes could be declared. An index is built with the table, so a changed one rebuilds it.
+            canonical.Append('\n').Append('#').AppendJoin(Sep, index.Columns);
         }
 
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString())));

@@ -248,6 +248,37 @@ public abstract class FieldHintSourceContractTests
     }
 
     [Fact]
+    public async Task Declared_indexes_round_trip_in_order()
+    {
+        var source = CreateSource();
+        var hints = new FormTypeHints(Qc, "qc_table",
+        [
+            new FieldHint("serial", ColumnType.Text),
+            new FieldHint("line", ColumnType.Text),
+            new FieldHint("measured_at", ColumnType.Timestamp),
+        ],
+        Indexes: [new IndexHint(["line", "measured_at"]), new IndexHint(["serial"])]);
+
+        await DeclareAsync(source, hints);
+
+        var read = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
+        read!.Indexes!.Select(i => string.Join(',', i.Fields)).Should().Equal("line,measured_at", "serial");
+    }
+
+    /// <summary>The rules are <see cref="DeclaredIndexes"/>'; what every writer owes is applying them before it stores.</summary>
+    [Fact]
+    public async Task An_index_on_an_undeclared_field_is_refused_and_nothing_is_stored()
+    {
+        var source = CreateSource();
+        var hints = new FormTypeHints(Qc, "qc_table", [new FieldHint("serial", ColumnType.Text)], Indexes: [new IndexHint(["lot"])]);
+
+        var act = () => DeclareAsync(source, hints);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task A_declaration_without_relations_reads_back_without_relations()
     {
         var source = CreateSource();
@@ -258,6 +289,7 @@ public abstract class FieldHintSourceContractTests
         read!.DeclarationVersion.Should().Be(1);
         (read.Relations ?? []).Should().BeEmpty();
         read.BusinessName.Should().BeNull();
+        read.Indexes.Should().BeNull();
     }
 
     private static FormTypeHints Equipment() => new(Work, "work_table",
