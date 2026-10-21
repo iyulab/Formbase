@@ -38,6 +38,15 @@
   </ItemGroup>
 
   <!--
+    JSONBench-borrowed measurement: Formbase over SQLite against PostgreSQL JSONB on the same machine.
+    Needs Docker and the event file outside the repository:
+      FORMBASE_JSONBENCH_FILE=<file_0001.json.gz> FORMBASE_JSONBENCH_OUT=<dir> dotnet test -p:IncludeJsonBenchMeasurement=true
+  -->
+  <ItemGroup Condition="'$(IncludeJsonBenchMeasurement)' != 'true'">
+    <Compile Remove="Live/JsonBench/**/*.cs" />
+  </ItemGroup>
+
+  <!--
     Real-model smoke for the LLM proposer spike. Needs a reachable OpenAI-compatible endpoint:
       FORMBASE_LLM_ENDPOINT / FORMBASE_LLM_API_KEY / FORMBASE_LLM_MODEL
       dotnet test -p:IncludeLlmLiveTests=true
