@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.30.1
+
+A patch. Pairs with MorphDB `0.28.x`. `Formbase.MorphDb` builds on `MorphDB.Client` 0.28.0 and stops
+reading a table where the server says no rows follow.
+
+### Changed
+
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.28.0** (was 0.26.1); the live MorphDB suite and the
+  compose file run `ghcr.io/iyulab/morphdb:0.28.0`. A MorphDB 0.28 list no longer counts its rows unless
+  asked; the adapter never read the count.
+- **A query or a re-projection that reads a table page by page stops when the server says no rows
+  follow** (`Pagination.HasNext`). It used to stop on a page shorter than asked for, so a table whose
+  rows filled the last page exactly cost one more request that read nothing.
+
 ## 0.30.0
 
 A minor. Pairs with MorphDB `0.26.x`. The formdown adapter declares every number field `Decimal`, so a

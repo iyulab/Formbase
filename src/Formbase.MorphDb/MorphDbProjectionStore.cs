@@ -402,7 +402,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 var request = new QueryRequest { Filters = [new Filter(column, MorphOperator.Equal, value)], PageSize = MaxPageSize, Page = page };
                 var paged = await _client.Data.QueryAsync(tableName, request, cancellationToken).ConfigureAwait(false);
                 ids.UnionWith(paged.Data.Select(record => record.Id));
-                if (paged.Data.Count < MaxPageSize)
+                if (!paged.Pagination.HasNext)
                 {
                     break;
                 }
@@ -482,8 +482,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 return (IReadOnlyDictionary<string, object?>)row;
             }));
 
-            // Fewer rows than asked for means the table ran out — asking again would only read nothing.
-            if (paged.Data.Count < take)
+            // The server says whether rows follow, so a page that ends the table is the last request —
+            // also when it is exactly full.
+            if (!paged.Pagination.HasNext)
             {
                 break;
             }
