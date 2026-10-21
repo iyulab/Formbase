@@ -23,6 +23,7 @@
 
 ### Changed
 
+- Dependencies: Microsoft.Extensions.AI 10.11.0.
 - **A `sourceKey` that starts with `/` is now a JSON Pointer.** A declaration that used one to name a
   top-level key whose name starts with `/` writes it as `/~1…`; a field with no `sourceKey` whose own
   name starts with `/` keeps reading that name.

@@ -7,10 +7,10 @@
     <!-- Composition / adapters -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
     <!-- The host's optional schema-intelligence extension, and the LLM live suite. Any
          OpenAI-compatible endpoint. -->
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
     <PackageVersion Include="M3L.Native" Version="0.24.0" />
     <PackageVersion Include="MorphDB.Client" Version="0.28.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
@@ -28,7 +28,7 @@
 
   <ItemGroup>
     <!-- Test -->
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
     <!-- AwesomeAssertions: Apache-2.0 community fork of FluentAssertions (FA 8.x is commercial). API-compatible; namespace is AwesomeAssertions (not FluentAssertions). -->
