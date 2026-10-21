@@ -21,13 +21,15 @@ namespace Formbase.Core.Tests.Live.JsonBench;
 /// One event file (newline-delimited JSON, gzip) is loaded twice: into Formbase over SQLite (raw append,
 /// then projection to declared columns, the nested keys read through JSON Pointer source keys), and into a
 /// PostgreSQL <c>jsonb</c> table with JSONBench's DDL and index. Then each query Formbase can state runs three
-/// times on both, and the answers are compared. Q3 (an hour derived from a timestamp) and Q5 (a span between
-/// two measures) have no Formbase form yet and are reported as such, not timed.
+/// times on both, and the answers are compared. Q3's hour of day is a computed field; its three-collection
+/// <c>IN</c> is applied to the groups after the aggregate, so Formbase's time there includes the groups of
+/// the other collections. Q5 (a span between two measures) has no Formbase form and is reported as such.
 /// </para>
 /// <para>
 /// <c>FORMBASE_JSONBENCH_FILE</c> names the event file, <c>FORMBASE_JSONBENCH_OUT</c> the directory for the
-/// SQLite file and the report, <c>FORMBASE_JSONBENCH_LIMIT</c> how many events to load (default: all).
-/// Needs Docker for PostgreSQL.
+/// report, <c>FORMBASE_JSONBENCH_WORK</c> the directory for the SQLite file (default: the output directory —
+/// keep it on a local disk: SQLite over a network share times the share, not the engine), and
+/// <c>FORMBASE_JSONBENCH_LIMIT</c> how many events to load (default: all). Needs Docker for PostgreSQL.
 /// </para>
 /// </summary>
 public sealed class JsonBenchMeasurement
@@ -58,7 +60,9 @@ public sealed class JsonBenchMeasurement
         report.AppendLine();
 
         // --- Formbase over SQLite ---
-        var dbPath = Path.Combine(outDirectory, "formbase.db");
+        var workDirectory = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_WORK") is { Length: > 0 } work ? work : outDirectory;
+        Directory.CreateDirectory(workDirectory);
+        var dbPath = Path.Combine(workDirectory, "formbase.db");
         foreach (var stale in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
         {
             File.Delete(stale);
@@ -76,6 +80,7 @@ public sealed class JsonBenchMeasurement
                 new FieldHint("kind", ColumnType.Text),
                 new FieldHint("collection", ColumnType.Text, SourceKey: "/commit/collection"),
                 new FieldHint("operation", ColumnType.Text, SourceKey: "/commit/operation"),
+                new FieldHint("hour_of_day", ColumnType.Integer, SourceKey: "time_us", Derivation: FieldDerivation.PartOf(TimePart.Hour, EpochUnit.Microseconds)),
             ]),
             cancellation);
 
@@ -128,6 +133,7 @@ public sealed class JsonBenchMeasurement
         report.AppendLine("|---|---|---|---|---|");
 
         var created = new[] { FieldFilter.Equal("kind", "commit"), FieldFilter.Equal("operation", "create") };
+        string[] q3Collections = ["app.bsky.feed.post", "app.bsky.feed.repost", "app.bsky.feed.like"];
         var queries = new (string Name, AggregateSpec Spec, string Sql)[]
         {
             ("Q1 events per collection",
@@ -136,6 +142,9 @@ public sealed class JsonBenchMeasurement
             ("Q2 created events and distinct users per collection",
                 new AggregateSpec(GroupBy: ["collection"], Filters: created, Measures: [AggregateMeasure.CountDistinct("did")], OrderBy: [GroupOrder.ByCount(descending: true)]),
                 "SELECT data -> 'commit' ->> 'collection' AS event, COUNT(*) AS count, COUNT(DISTINCT data ->> 'did') AS users FROM bluesky WHERE data ->> 'kind' = 'commit' AND data -> 'commit' ->> 'operation' = 'create' GROUP BY event ORDER BY count DESC"),
+            ("Q3 created posts, reposts and likes per hour of day (IN applied to the groups)",
+                new AggregateSpec(GroupBy: ["collection", "hour_of_day"], Filters: created, OrderBy: [GroupOrder.ByKey("hour_of_day"), GroupOrder.ByKey("collection")]),
+                "SELECT data->'commit'->>'collection' AS event, EXTRACT(HOUR FROM TO_TIMESTAMP((data->>'time_us')::BIGINT / 1000000)) AS hour_of_day, COUNT(*) AS count FROM bluesky WHERE data->>'kind' = 'commit' AND data->'commit'->>'operation' = 'create' AND data->'commit'->>'collection' IN ('app.bsky.feed.post', 'app.bsky.feed.repost', 'app.bsky.feed.like') GROUP BY event, hour_of_day ORDER BY hour_of_day, event"),
             ("Q4 first three posters",
                 new AggregateSpec(GroupBy: ["did"], Filters: [.. created, FieldFilter.Equal("collection", "app.bsky.feed.post")], Measures: [AggregateMeasure.Min("time_us")], OrderBy: [GroupOrder.ByMeasure(0)], Limit: 3),
                 "SELECT data ->> 'did' AS user_id, MIN((data ->> 'time_us')::BIGINT) AS first_post FROM bluesky WHERE data ->> 'kind' = 'commit' AND data -> 'commit' ->> 'operation' = 'create' AND data -> 'commit' ->> 'collection' = 'app.bsky.feed.post' GROUP BY user_id ORDER BY first_post ASC LIMIT 3"),
@@ -149,6 +158,11 @@ public sealed class JsonBenchMeasurement
             {
                 var clock = Stopwatch.StartNew();
                 answer = await engine.AggregateAsync(Events, spec, cancellation);
+                if (spec.GroupBy is ["collection", "hour_of_day"])
+                {
+                    answer = answer with { Groups = [.. answer.Groups.Where(g => q3Collections.Contains(g.Key["collection"] as string))] };
+                }
+
                 formbaseTimes.Add(clock.Elapsed.TotalMilliseconds);
             }
 
@@ -166,7 +180,6 @@ public sealed class JsonBenchMeasurement
                 $"| {name} | {Format(formbaseTimes)} | {Format(postgresTimes)} | {Median(formbaseTimes) / Median(postgresTimes):F2}× | {(same ? "yes" : "**no**")} |");
         }
 
-        report.AppendLine("| Q3 events per hour of day | — no form yet: an hour derived from `time_us` needs a computed column | | | |");
         report.AppendLine("| Q5 longest posting span | — no form: a span is a difference of two measures | | | |");
         await File.WriteAllTextAsync(Path.Combine(outDirectory, "report.md"), report.ToString(), cancellation);
         TestContext.Current.SendDiagnosticMessage(report.ToString());
@@ -241,7 +254,8 @@ public sealed class JsonBenchMeasurement
 
         var expected = postgres.Select(r => string.Join('|', r.Select(v => Convert.ToString(v, CultureInfo.InvariantCulture)))).Order(StringComparer.Ordinal);
         var actual = formbase.Groups.Select(g => string.Join('|',
-            new[] { Convert.ToString(g.Key[spec.GroupBy![0]], CultureInfo.InvariantCulture), g.Count.ToString(CultureInfo.InvariantCulture) }
+            spec.GroupBy!.Select(column => Convert.ToString(g.Key[column], CultureInfo.InvariantCulture))
+                .Append(g.Count.ToString(CultureInfo.InvariantCulture))
                 .Concat((g.Measures ?? []).Select(m => Convert.ToString(m.Value, CultureInfo.InvariantCulture))))).Order(StringComparer.Ordinal);
         return expected.SequenceEqual(actual, StringComparer.Ordinal);
     }
