@@ -45,7 +45,7 @@ public sealed class HintSchemaProposer : ISchemaProposer
                     via,
                     await _hintSource.GetSectionSourceAsync(field.Target.Entity, cancellationToken).ConfigureAwait(false) is not null)
                 : null;
-            columns.Add(new ColumnDef(field.Name, field.Type, field.Nullable, field.SourceKey, field.Binding, bindingTarget, reference));
+            columns.Add(new ColumnDef(field.Name, field.Type, field.Nullable, field.SourceKey, field.Binding, bindingTarget, reference, field.Derivation));
         }
 
         List<RelationDef>? relations = null;

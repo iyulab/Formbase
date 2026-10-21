@@ -244,7 +244,8 @@ internal static class DeclarationEndpoints
                 f.Target is null
                     ? null
                     : new EntityRef(FormTypeRef.Create(f.Target.FormType), f.Target.ValueField, LookupOf(f.Target), f.Target.ViaField),
-                f.BusinessName))],
+                f.BusinessName,
+                f.Derivation?.ToEngine()))],
             request.Relations is null
                 ? null
                 : [.. request.Relations.Select(r => new RelationHint(
@@ -279,7 +280,8 @@ internal static class DeclarationEndpoints
                         (f.Target.Lookup as TargetLookup.FieldLookup)?.Name,
                         f.Target.ViaField,
                         f.Target.Lookup is TargetLookup.RecordLookup),
-                f.BusinessName))],
+                f.BusinessName,
+                f.Derivation?.ToWire()))],
             [.. (declaration.Relations ?? []).Select(r => new DeclaredRelationResponse(
                 r.Name,
                 r.Kind.ToWire(),

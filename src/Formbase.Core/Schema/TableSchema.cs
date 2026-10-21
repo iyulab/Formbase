@@ -41,6 +41,12 @@ public sealed record TableSchema(
                 .Append(Sep).Append(column.SourceKey ?? string.Empty)
                 .Append(Sep).Append(column.Binding)
                 .Append(Sep).Append(column.BindingTarget ?? string.Empty);
+            if (column.Derivation is { } derivation)
+            {
+                // Only when present, so a schema without computed fields keeps its fingerprint.
+                canonical.Append(Sep).Append('ƒ').Append(derivation.Canonical());
+            }
+
             if (column.Reference is { } reference)
             {
                 // Appended only when present, so a schema without resolved references keeps the

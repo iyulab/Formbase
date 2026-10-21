@@ -344,6 +344,19 @@ This is the shape the next projection run will build. A form type with no declar
   starts with `/` is written `/~1…`. A nested value the document does not reach reads as absent, like a
   missing top-level key. A malformed pointer (a `~` not followed by `0` or `1`) is refused with `400`.
   The key field of a repeated section is written into each row, so it must stay a top-level key.
+- **`derivation`** — makes the field a computed one: the column holds a value computed when the document
+  is projected, from the value `sourceKey` (or the field's name) reads, and filters, orders and groups like
+  any other column in every store. Three kinds, all in UTC whatever the host's or the store's time zone:
+  `{"kind": "fromEpoch", "epoch": "microseconds"}` — a Unix time as a `timestamp`;
+  `{"kind": "truncateTo", "unit": "hour"}` — a time rounded down to the start of its `minute`, `hour`,
+  `day`, `month` or `year`, a `timestamp`; `{"kind": "partOf", "part": "hour"}` — one part of a time
+  (`year`, `month`, `day`, `hour` 0–23, `minute`, `dayOfWeek` Monday 1 to Sunday 7) as an `integer`.
+  `truncateTo` and `partOf` read a timestamp string, or a Unix time when `epoch` (`seconds`,
+  `milliseconds`, `microseconds`, `nanoseconds`) is given. The field's `type` must be what the kind
+  computes and its `binding` `stored`; otherwise, or when a kind lacks its own parameter or carries
+  another kind's, the declaration is refused with `400`. A value that is not a time leaves the field
+  empty and is listed among the projection's field skips, like any value that does not convert.
+  Changing a derivation changes the table's shape, so the projection is rebuilt.
 - **`businessName`** — the name a person reads the field by, when one is declared (ODCS v3.1
   `businessName`) — say a label in the language of the form, beside a column name in ASCII. It is
   declaration only: it never becomes part of the projected table, so changing it rebuilds nothing.

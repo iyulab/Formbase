@@ -6,7 +6,8 @@ namespace Formbase.Core.Schema;
 /// extraction key when it differs from the projected <paramref name="Name"/>) and the time
 /// binding (<paramref name="Binding"/> with an optional <paramref name="BindingTarget"/> rendered
 /// as <c>table.column</c>). A reference whose declaration says how to find its target record also
-/// carries <paramref name="Reference"/>, from which a store computes it at read time. Defaults
+/// carries <paramref name="Reference"/>, from which a store computes it at read time. A computed field carries
+/// its <paramref name="Derivation"/>, applied when the projection reads the document. Defaults
 /// reproduce the pre-vocabulary behavior exactly.
 /// </summary>
 public sealed record ColumnDef(
@@ -16,7 +17,8 @@ public sealed record ColumnDef(
     string? SourceKey = null,
     FieldBinding Binding = FieldBinding.Stored,
     string? BindingTarget = null,
-    ReferenceDef? Reference = null)
+    ReferenceDef? Reference = null,
+    FieldDerivation? Derivation = null)
 {
     /// <summary>
     /// Where in a raw document this column reads from, when it differs from <see cref="Name"/> — a top-level

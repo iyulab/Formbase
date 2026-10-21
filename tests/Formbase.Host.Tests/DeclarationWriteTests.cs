@@ -236,6 +236,49 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task A_derivation_is_stored_and_read_back_and_one_the_field_type_does_not_fit_is_refused()
+    {
+        var type = NewFormType();
+        var derived = await _client.PutAsJsonAsync(
+            $"/formtypes/{type}/declaration",
+            new
+            {
+                tableName = $"t_{type}",
+                declarationVersion = 1,
+                fields = new[] { new { name = "hour", type = "integer", sourceKey = "time_us", derivation = new { kind = "partOf", part = "hour", epoch = "microseconds" } } },
+            },
+            TestContext.Current.CancellationToken);
+        derived.StatusCode.Should().Be(HttpStatusCode.Created, await derived.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var read = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
+        var derivation = read.GetProperty("fields")[0].GetProperty("derivation");
+        (derivation.GetProperty("kind").GetString(), derivation.GetProperty("part").GetString(), derivation.GetProperty("epoch").GetString())
+            .Should().Be(("partOf", "hour", "microseconds"));
+
+        var mismatched = await _client.PutAsJsonAsync(
+            $"/formtypes/{NewFormType()}/declaration",
+            new
+            {
+                tableName = "t",
+                declarationVersion = 1,
+                fields = new[] { new { name = "hour", type = "text", sourceKey = "time_us", derivation = new { kind = "partOf", part = "hour", epoch = "microseconds" } } },
+            },
+            TestContext.Current.CancellationToken);
+        mismatched.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(mismatched)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+
+        var malformed = await _client.PutAsJsonAsync(
+            $"/formtypes/{NewFormType()}/declaration",
+            new
+            {
+                tableName = "t",
+                declarationVersion = 1,
+                fields = new[] { new { name = "at", type = "timestamp", sourceKey = "time_us", derivation = new { kind = "fromEpoch" } } },
+            },
+            TestContext.Current.CancellationToken);
+        malformed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task A_field_declared_twice_is_refused()
     {
         var response = await _client.PutAsJsonAsync(

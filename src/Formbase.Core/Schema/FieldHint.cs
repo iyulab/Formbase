@@ -11,8 +11,10 @@ namespace Formbase.Core.Schema;
 /// <paramref name="Target"/> record the time-binding of a bound value. <paramref name="BusinessName"/>
 /// is the name a person reads the field by («로트 번호» for <c>lot_no</c>) — ODCS v3.1's
 /// <c>businessName</c> beside the machine names. It is declaration only: it never reaches the projected
-/// table, so changing it rebuilds nothing. Defaults reproduce the pre-vocabulary behavior: a stored
-/// field whose name is its own extraction key.
+/// table, so changing it rebuilds nothing. <paramref name="Derivation"/> makes the field a computed one:
+/// the column holds a value computed at projection time from the one the source key reads
+/// (<see cref="FieldDerivation"/>) — the field's type must be what the derivation computes, and its binding
+/// stored. Defaults reproduce the pre-vocabulary behavior: a stored field whose name is its own extraction key.
 /// </summary>
 public sealed record FieldHint(
     string Name,
@@ -21,8 +23,11 @@ public sealed record FieldHint(
     string? SourceKey = null,
     FieldBinding Binding = FieldBinding.Stored,
     EntityRef? Target = null,
-    string? BusinessName = null)
+    string? BusinessName = null,
+    FieldDerivation? Derivation = null)
 {
+    public FieldDerivation? Derivation { get; init; } = FieldDerivation.Checked(Derivation, Name, Type, Binding);
+
     /// <summary>
     /// Where in a document the field is read from, when it differs from <see cref="Name"/> — a top-level
     /// member name, or a JSON Pointer such as <c>/commit/collection</c> (<see cref="SourceKeys"/>).

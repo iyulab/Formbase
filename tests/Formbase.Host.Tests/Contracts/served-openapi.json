@@ -891,6 +891,63 @@
           "jsonb"
         ]
       },
+      "DeclaredDerivation": {
+        "required": [
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/DeclaredDerivationKind"
+          },
+          "unit": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTimeUnit"
+              }
+            ]
+          },
+          "part": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredTimePart"
+              }
+            ]
+          },
+          "epoch": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredEpochUnit"
+              }
+            ]
+          }
+        }
+      },
+      "DeclaredDerivationKind": {
+        "enum": [
+          "fromEpoch",
+          "truncateTo",
+          "partOf"
+        ]
+      },
+      "DeclaredEpochUnit": {
+        "enum": [
+          "seconds",
+          "milliseconds",
+          "microseconds",
+          "nanoseconds",
+          null
+        ]
+      },
       "DeclaredFieldRequest": {
         "required": [
           "name",
@@ -931,6 +988,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "derivation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredDerivation"
+              }
             ]
           }
         }
@@ -978,6 +1045,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "derivation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredDerivation"
+              }
             ]
           }
         }
@@ -1076,6 +1153,27 @@
             "default": false
           }
         }
+      },
+      "DeclaredTimePart": {
+        "enum": [
+          "year",
+          "month",
+          "day",
+          "hour",
+          "minute",
+          "dayOfWeek",
+          null
+        ]
+      },
+      "DeclaredTimeUnit": {
+        "enum": [
+          "minute",
+          "hour",
+          "day",
+          "month",
+          "year",
+          null
+        ]
       },
       "DocumentPageResponse": {
         "required": [

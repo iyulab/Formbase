@@ -37,6 +37,7 @@ public sealed record DeclarationResponse(
 /// <param name="Binding">When in time the value is read from.</param>
 /// <param name="Target">What a bound field points at, when it is bound to another form type.</param>
 /// <param name="BusinessName">The name a person reads the field by, when one is declared.</param>
+/// <param name="Derivation">What the field computes from the value its source key reads, when it is a computed field.</param>
 public sealed record DeclaredFieldResponse(
     string Name,
     DeclaredColumnType Type,
@@ -44,7 +45,8 @@ public sealed record DeclaredFieldResponse(
     string? SourceKey,
     DeclaredBinding Binding,
     DeclaredTargetResponse? Target,
-    string? BusinessName = null);
+    string? BusinessName = null,
+    DeclaredDerivation? Derivation = null);
 
 /// <param name="FormType">The form type the bound field's value comes from.</param>
 /// <param name="ValueField">
@@ -124,6 +126,12 @@ public sealed record DeclarationRequest(
 /// The name a person reads the field by («로트 번호» for <c>lot_no</c>) — declaration only, never a
 /// column, so changing it rebuilds nothing. Blank is refused.
 /// </param>
+/// <param name="Derivation">
+/// Makes the field a computed one: the column holds a value computed at projection time from the one the
+/// source key reads — a Unix time as a timestamp, a time rounded down to a unit, or one part of a time,
+/// all in UTC. The field's type must be what the derivation computes (<c>integer</c> for a part, else
+/// <c>timestamp</c>) and its binding <c>stored</c>; anything else is refused.
+/// </param>
 public sealed record DeclaredFieldRequest(
     string Name,
     DeclaredColumnType Type,
@@ -131,7 +139,69 @@ public sealed record DeclaredFieldRequest(
     string? SourceKey = null,
     DeclaredBinding Binding = DeclaredBinding.Stored,
     DeclaredTargetResponse? Target = null,
-    string? BusinessName = null);
+    string? BusinessName = null,
+    DeclaredDerivation? Derivation = null);
+
+/// <summary>
+/// A computed field's derivation on the wire. Each kind takes exactly its own parameter: <c>fromEpoch</c>
+/// an <paramref name="Epoch"/>, <c>truncateTo</c> a <paramref name="Unit"/>, <c>partOf</c> a
+/// <paramref name="Part"/> — the last two also an <paramref name="Epoch"/> when the source is a Unix time
+/// rather than a timestamp string.
+/// </summary>
+/// <param name="Kind">What is computed.</param>
+/// <param name="Unit">The unit <c>truncateTo</c> rounds down to.</param>
+/// <param name="Part">The part <c>partOf</c> takes.</param>
+/// <param name="Epoch">The unit of the Unix time the source holds.</param>
+public sealed record DeclaredDerivation(
+    DeclaredDerivationKind Kind,
+    DeclaredTimeUnit? Unit = null,
+    DeclaredTimePart? Part = null,
+    DeclaredEpochUnit? Epoch = null);
+
+/// <summary>What a computed field computes.</summary>
+public enum DeclaredDerivationKind
+{
+    /// <summary>A Unix time as a timestamp.</summary>
+    FromEpoch,
+
+    /// <summary>A time rounded down to the start of a unit.</summary>
+    TruncateTo,
+
+    /// <summary>One part of a time, as a number.</summary>
+    PartOf,
+}
+
+/// <summary>The unit a time is rounded down to.</summary>
+public enum DeclaredTimeUnit
+{
+    Minute,
+    Hour,
+    Day,
+    Month,
+    Year,
+}
+
+/// <summary>A part of a time, in UTC.</summary>
+public enum DeclaredTimePart
+{
+    Year,
+    Month,
+    Day,
+    Hour,
+    Minute,
+
+    /// <summary>The ISO day of the week, Monday 1 to Sunday 7.</summary>
+    DayOfWeek,
+}
+
+/// <summary>The unit a Unix time is counted in.</summary>
+public enum DeclaredEpochUnit
+{
+    Seconds,
+    Milliseconds,
+    Microseconds,
+    Nanoseconds,
+}
 
 /// <param name="Name">The relation's declared name.</param>
 /// <param name="Kind">Whether the target is owned or merely referenced.</param>
@@ -245,6 +315,43 @@ internal static class DeclarationWireMapping
         RelationKind.Reference => DeclaredRelationKind.Reference,
     };
 
+    public static DeclaredDerivation ToWire(this FieldDerivation derivation) =>
+        new(derivation.Kind.ToWire(), derivation.Unit?.ToWire(), derivation.Part?.ToWire(), derivation.Epoch?.ToWire());
+
+    public static DeclaredDerivationKind ToWire(this DerivationKind kind) => kind switch
+    {
+        DerivationKind.FromEpoch => DeclaredDerivationKind.FromEpoch,
+        DerivationKind.TruncateTo => DeclaredDerivationKind.TruncateTo,
+        DerivationKind.PartOf => DeclaredDerivationKind.PartOf,
+    };
+
+    public static DeclaredTimeUnit ToWire(this TimeUnit unit) => unit switch
+    {
+        TimeUnit.Minute => DeclaredTimeUnit.Minute,
+        TimeUnit.Hour => DeclaredTimeUnit.Hour,
+        TimeUnit.Day => DeclaredTimeUnit.Day,
+        TimeUnit.Month => DeclaredTimeUnit.Month,
+        TimeUnit.Year => DeclaredTimeUnit.Year,
+    };
+
+    public static DeclaredTimePart ToWire(this TimePart part) => part switch
+    {
+        TimePart.Year => DeclaredTimePart.Year,
+        TimePart.Month => DeclaredTimePart.Month,
+        TimePart.Day => DeclaredTimePart.Day,
+        TimePart.Hour => DeclaredTimePart.Hour,
+        TimePart.Minute => DeclaredTimePart.Minute,
+        TimePart.DayOfWeek => DeclaredTimePart.DayOfWeek,
+    };
+
+    public static DeclaredEpochUnit ToWire(this EpochUnit unit) => unit switch
+    {
+        EpochUnit.Seconds => DeclaredEpochUnit.Seconds,
+        EpochUnit.Milliseconds => DeclaredEpochUnit.Milliseconds,
+        EpochUnit.Microseconds => DeclaredEpochUnit.Microseconds,
+        EpochUnit.Nanoseconds => DeclaredEpochUnit.Nanoseconds,
+    };
+
     // The way back. Same reason for having no fallback arm: a wire value the engine has no term for
     // must fail the build rather than be silently mapped to a neighbour.
     public static ColumnType ToEngine(this DeclaredColumnType type) => type switch
@@ -269,6 +376,42 @@ internal static class DeclarationWireMapping
     {
         DeclaredRelationKind.Child => RelationKind.Child,
         DeclaredRelationKind.Reference => RelationKind.Reference,
+    };
+    public static FieldDerivation ToEngine(this DeclaredDerivation derivation) =>
+        new(derivation.Kind.ToEngine(), derivation.Unit?.ToEngine(), derivation.Part?.ToEngine(), derivation.Epoch?.ToEngine());
+
+    public static DerivationKind ToEngine(this DeclaredDerivationKind kind) => kind switch
+    {
+        DeclaredDerivationKind.FromEpoch => DerivationKind.FromEpoch,
+        DeclaredDerivationKind.TruncateTo => DerivationKind.TruncateTo,
+        DeclaredDerivationKind.PartOf => DerivationKind.PartOf,
+    };
+
+    public static TimeUnit ToEngine(this DeclaredTimeUnit unit) => unit switch
+    {
+        DeclaredTimeUnit.Minute => TimeUnit.Minute,
+        DeclaredTimeUnit.Hour => TimeUnit.Hour,
+        DeclaredTimeUnit.Day => TimeUnit.Day,
+        DeclaredTimeUnit.Month => TimeUnit.Month,
+        DeclaredTimeUnit.Year => TimeUnit.Year,
+    };
+
+    public static TimePart ToEngine(this DeclaredTimePart part) => part switch
+    {
+        DeclaredTimePart.Year => TimePart.Year,
+        DeclaredTimePart.Month => TimePart.Month,
+        DeclaredTimePart.Day => TimePart.Day,
+        DeclaredTimePart.Hour => TimePart.Hour,
+        DeclaredTimePart.Minute => TimePart.Minute,
+        DeclaredTimePart.DayOfWeek => TimePart.DayOfWeek,
+    };
+
+    public static EpochUnit ToEngine(this DeclaredEpochUnit unit) => unit switch
+    {
+        DeclaredEpochUnit.Seconds => EpochUnit.Seconds,
+        DeclaredEpochUnit.Milliseconds => EpochUnit.Milliseconds,
+        DeclaredEpochUnit.Microseconds => EpochUnit.Microseconds,
+        DeclaredEpochUnit.Nanoseconds => EpochUnit.Nanoseconds,
     };
 #pragma warning restore CS8524
 }

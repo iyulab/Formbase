@@ -164,6 +164,17 @@ internal static class DocumentMapper
             return false;
         }
 
+        if (column.Derivation is { } derivation)
+        {
+            if (derivation.TryDerive(field, out value, out var why))
+            {
+                return true;
+            }
+
+            reason = $"field '{column.Name}' cannot be computed ({derivation.Kind}): {why}";
+            return false;
+        }
+
         switch (column.Type)
         {
             case ColumnType.Text:

@@ -4,6 +4,12 @@
 
 ### Added
 
+- Computed fields: a declared field may carry a derivation (`FieldHint.Derivation`, `derivation` on the
+  wire) — a Unix time as a timestamp (`FromEpoch`), a time rounded down to a unit (`TruncateTo`), or one
+  part of a time as a number (`PartOf`), all in UTC. The value is computed at projection time and stored
+  as an ordinary column, so every store filters, groups and indexes it the same way. The field's type
+  must be what the derivation computes and its binding stored. A declaration without a derivation keeps
+  its fingerprint; changing a derivation rebuilds the projection.
 - **A field can read a nested value: `sourceKey` takes a JSON Pointer** (RFC 6901). A key that starts
   with `/` — `/commit/collection`, `/tags/0` — is resolved through objects and arrays; any other key is
   one top-level member, as before. A value the document does not reach is absent, as a missing
