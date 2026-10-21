@@ -313,15 +313,17 @@ public sealed class SqliteProjectionStore : IProjectionStore
         foreach (var measure in measures)
         {
             var column = SqliteValues.Quote(measure.Column);
-            var function = measure.Function switch
+            // A distinct count compares under the column's collation, so two spellings of one decimal are one value.
+            var computed = measure.Function switch
             {
-                MeasureFunction.Sum => SqliteValues.DecimalSum,
-                MeasureFunction.Average => SqliteValues.DecimalAverage,
-                MeasureFunction.Min => "MIN",
-                MeasureFunction.Max => "MAX",
+                MeasureFunction.Sum => $"{SqliteValues.DecimalSum}({column})",
+                MeasureFunction.Average => $"{SqliteValues.DecimalAverage}({column})",
+                MeasureFunction.Min => $"MIN({column})",
+                MeasureFunction.Max => $"MAX({column})",
+                MeasureFunction.CountDistinct => $"COUNT(DISTINCT {column})",
                 _ => throw new ArgumentOutOfRangeException(nameof(spec), measure.Function, "Unmapped measure function."),
             };
-            sql.Append(", ").Append(function).Append('(').Append(column).Append("), COUNT(").Append(column).Append(')');
+            sql.Append(", ").Append(computed).Append(", COUNT(").Append(column).Append(')');
         }
 
         sql.Append(" FROM ").Append(source);
@@ -349,7 +351,12 @@ public sealed class SqliteProjectionStore : IProjectionStore
                     measure,
                     SqliteValues.FromStorage(
                         reader.GetValue(first + (2 * i)),
-                        measure.Function is MeasureFunction.Sum or MeasureFunction.Average ? ColumnType.Decimal : types.GetValueOrDefault(measure.Column, ColumnType.Text)),
+                        measure.Function switch
+                        {
+                            MeasureFunction.Sum or MeasureFunction.Average => ColumnType.Decimal,
+                            MeasureFunction.CountDistinct => ColumnType.Integer,
+                            _ => types.GetValueOrDefault(measure.Column, ColumnType.Text),
+                        }),
                     reader.GetInt64(first + (2 * i) + 1)))
                 .ToList();
             groups.Add(new AggregateGroup(key, reader.GetInt64(groupBy.Count), evidence, values));

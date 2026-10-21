@@ -532,6 +532,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 MeasureFunction.Average => AggregationColumn.Avg(column, MeasureAlias(i)),
                 MeasureFunction.Min => AggregationColumn.Min(column, MeasureAlias(i)),
                 MeasureFunction.Max => AggregationColumn.Max(column, MeasureAlias(i)),
+                MeasureFunction.CountDistinct => AggregationColumn.CountDistinct(column, MeasureAlias(i)),
                 _ => throw new ArgumentOutOfRangeException(nameof(spec), measures[i].Function, "Unmapped measure function."),
             });
             aggregations.Add(AggregationColumn.Count(column, MeasureCountAlias(i)));

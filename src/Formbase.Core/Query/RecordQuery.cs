@@ -62,10 +62,17 @@ public sealed class RecordQuery : IRecordQuery
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(perGroup, nameof(spec));
         }
 
+        if (spec.Limit is { } limit)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit, nameof(spec));
+        }
+
         var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
 
         var groupBy = spec.GroupBy ?? [];
         var measures = spec.Measures ?? [];
+        var orderBy = spec.OrderBy ?? [];
+        RefuseUnorderable(orderBy, groupBy, measures);
         RefuseUnanswerable(type, spec.Filters, groupBy, schema, measures);
         var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema), Measures = measures };
 
@@ -79,7 +86,32 @@ public sealed class RecordQuery : IRecordQuery
             throw new ProjectionUnavailableException(type, ex);
         }
 
-        return new AggregateResult(Ordered(Typed(groups, schema), groupBy), stale);
+        var ordered = Ordered(Typed(groups, schema), groupBy, orderBy);
+        return new AggregateResult(spec.Limit is { } top && ordered.Count > top ? ordered[..top] : ordered, stale);
+    }
+
+    /// <summary>
+    /// Refuses an order key that names nothing the groups carry: a column the aggregate does not group by,
+    /// or a measure position past the measures asked for. Answering with the default order instead would
+    /// hand back a ranking the caller did not ask for, with nothing to say so.
+    /// </summary>
+    private static void RefuseUnorderable(IReadOnlyList<GroupOrder> orderBy, IReadOnlyList<string> groupBy, IReadOnlyList<AggregateMeasure> measures)
+    {
+        foreach (var key in orderBy)
+        {
+            ArgumentNullException.ThrowIfNull(key, nameof(orderBy));
+            if (key.Target == GroupOrderTarget.Key && !groupBy.Contains(key.Column!, StringComparer.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"The groups are ordered by '{key.Column}', which the aggregate does not group by.", nameof(orderBy));
+            }
+
+            if (key.Target == GroupOrderTarget.Measure && key.Measure >= measures.Count)
+            {
+                throw new ArgumentException(
+                    $"The groups are ordered by measure {key.Measure}, and the aggregate asks for {measures.Count}.", nameof(orderBy));
+            }
+        }
     }
 
     /// <summary>
@@ -106,6 +138,7 @@ public sealed class RecordQuery : IRecordQuery
     private static ColumnType? MeasureType(AggregateMeasure measure, TableSchema schema) => measure.Function switch
     {
         MeasureFunction.Sum or MeasureFunction.Average => ColumnType.Decimal,
+        MeasureFunction.CountDistinct => ColumnType.Integer,
         _ => schema.Columns.FirstOrDefault(c => c.Name == measure.Column)?.Type,
     };
 
@@ -172,15 +205,25 @@ public sealed class RecordQuery : IRecordQuery
     }
 
     /// <summary>
-    /// Groups in the order their keys sort, column by column in grouping order, nulls first. The order
-    /// is the core's to decide rather than each store's: backends disagree about where nulls sort, and
-    /// a list whose order depends on the store behind it is not one answer.
+    /// Groups in the order the caller's keys give (<see cref="GroupOrder"/>), then in the order their
+    /// grouping values sort, column by column in grouping order, nulls first. The order is the core's to
+    /// decide rather than each store's: backends disagree about where nulls sort, and a list whose order
+    /// depends on the store behind it is not one answer.
     /// </summary>
-    private static List<AggregateGroup> Ordered(IReadOnlyList<AggregateGroup> groups, IReadOnlyList<string> groupBy)
+    private static List<AggregateGroup> Ordered(IReadOnlyList<AggregateGroup> groups, IReadOnlyList<string> groupBy, IReadOnlyList<GroupOrder> orderBy)
     {
         var ordered = groups.ToList();
         ordered.Sort((x, y) =>
         {
+            foreach (var key in orderBy)
+            {
+                var compared = ValueOrder.Compare(SortValue(x, key), SortValue(y, key));
+                if (compared != 0)
+                {
+                    return key.Descending ? -compared : compared;
+                }
+            }
+
             foreach (var column in groupBy)
             {
                 var compared = ValueOrder.Compare(x.Key.GetValueOrDefault(column), y.Key.GetValueOrDefault(column));
@@ -194,6 +237,13 @@ public sealed class RecordQuery : IRecordQuery
         });
         return ordered;
     }
+
+    private static object? SortValue(AggregateGroup group, GroupOrder key) => key.Target switch
+    {
+        GroupOrderTarget.Count => group.Count,
+        GroupOrderTarget.Key => group.Key.GetValueOrDefault(key.Column!),
+        _ => group.Measures[key.Measure!.Value].Value,
+    };
 
     /// <summary>
     /// Shapes raw store rows to the row contract: which record each row is, and exactly the declared
@@ -355,11 +405,13 @@ public sealed class RecordQuery : IRecordQuery
     /// <summary>
     /// Whether a measure is a question the column can answer: sums and averages add numbers; bounds also
     /// order instants. Text bounds are left out for the reason text ranges are (<see cref="Applies(FieldFilter, ColumnType)"/>).
+    /// A distinct count only tells values apart, which every type but JSON does the same way in every store.
     /// </summary>
     private static bool Applies(MeasureFunction function, ColumnType columnType) => function switch
     {
         MeasureFunction.Sum or MeasureFunction.Average => columnType is ColumnType.Integer or ColumnType.Decimal,
         MeasureFunction.Min or MeasureFunction.Max => columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
+        MeasureFunction.CountDistinct => columnType is not ColumnType.Jsonb,
         _ => false,
     };
 

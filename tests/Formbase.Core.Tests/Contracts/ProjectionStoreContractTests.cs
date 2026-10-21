@@ -521,6 +521,70 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, ct);
     }
 
+    // A distinct count tells values apart the way an equality filter does: one decimal spelt two ways is one
+    // value, one instant at two offsets is one value. Empty values are not counted, and a group with none
+    // counts zero rather than nothing.
+    [Fact]
+    public async Task Aggregate_counts_the_distinct_values_each_group_has()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        await store.CreateTableAsync(MeasuredSchema(), ct);
+        await store.BulkInsertAsync(TableName,
+        [
+            MeasuredRow("a", 1, 10.5m, "2026-01-02T00:00:00Z"),
+            MeasuredRow("a", 1, 10.50m, "2026-01-02T09:00:00+09:00"),
+            MeasuredRow("a", 2, 3m, null),
+            MeasuredRow("a", null, null, null),
+            MeasuredRow("c", null, null, null),
+        ], ct);
+
+        AggregateMeasure[] measures = [AggregateMeasure.CountDistinct("n"), AggregateMeasure.CountDistinct("d"), AggregateMeasure.CountDistinct("t"), AggregateMeasure.CountDistinct("k")];
+        var groups = (await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["k"], Measures: measures), ct))
+            .ToDictionary(g => (string)g.Key["k"]!);
+
+        groups["a"].Measures.Select(m => Number(m.Value)).Should().Equal(2m, 2m, 1m, 1m);
+        groups["a"].Measures.Select(m => m.ValueCount).Should().Equal(3L, 3L, 2L, 4L);
+        groups["c"].Measures.Select(m => Number(m.Value)).Should().Equal(0m, 0m, 0m, 1m);
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
+    // Groups ranked by count or by a measure, ties broken by their key, and cut to the first N: the order
+    // and the cut are the engine's, so every store gives the same top N.
+    [Fact]
+    public async Task An_aggregates_groups_are_ranked_and_cut_to_the_top()
+    {
+        var store = CreateStore();
+        var (engine, type) = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        foreach (var (lot, qty) in new[] { ("A", 1), ("A", 2), ("A", 1), ("B", 1), ("C", 3), ("C", 4), ("C", 5), ("D", 9) })
+        {
+            await engine.AcceptAsync(type, DocumentBody.Parse($$"""{"lot":"{{lot}}","qty":{{qty}}}"""), cancellationToken: ct);
+        }
+
+        await engine.ProjectAsync(type, ct);
+
+        var byCount = await engine.AggregateAsync(type, new AggregateSpec(
+            GroupBy: ["lot"], OrderBy: [GroupOrder.ByCount(descending: true)], Limit: 3), ct);
+        // A and C tie on count and fall back to key order; the cut keeps three.
+        byCount.Groups.Select(g => $"{g.Key["lot"]}:{g.Count}").Should().Equal("A:3", "C:3", "B:1");
+
+        var byUsers = await engine.AggregateAsync(type, new AggregateSpec(
+            GroupBy: ["lot"], Measures: [AggregateMeasure.CountDistinct("qty")], OrderBy: [GroupOrder.ByMeasure(0, descending: true), GroupOrder.ByKey("lot", descending: true)], Limit: 2), ct);
+        byUsers.Groups.Select(g => $"{g.Key["lot"]}:{g.Measures[0].Value}").Should().Equal("C:3", "A:2");
+        byUsers.Groups.Should().AllSatisfy(g => g.Measures[0].Value.Should().BeOfType<long>());
+
+        var wrongKey = () => engine.AggregateAsync(type, new AggregateSpec(GroupBy: ["lot"], OrderBy: [GroupOrder.ByKey("qty")]), ct);
+        var wrongMeasure = () => engine.AggregateAsync(type, new AggregateSpec(GroupBy: ["lot"], OrderBy: [GroupOrder.ByMeasure(0)]), ct);
+        var noLimit = () => engine.AggregateAsync(type, new AggregateSpec(GroupBy: ["lot"], Limit: 0), ct);
+        await wrongKey.Should().ThrowAsync<ArgumentException>().WithMessage("*does not group by*");
+        await wrongMeasure.Should().ThrowAsync<ArgumentException>().WithMessage("*asks for 0*");
+        await noLimit.Should().ThrowAsync<ArgumentOutOfRangeException>();
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
     // Through the engine a sum or an average is a decimal and a bound is the column's own type, whatever
     // number type the store computed in; a measure a column cannot answer is refused, not answered empty.
     [Fact]

@@ -11,6 +11,8 @@ namespace Formbase.Core.Query;
 /// <c>Integer</c> and <c>Decimal</c> columns; <see cref="MeasureFunction.Min"/> and
 /// <see cref="MeasureFunction.Max"/> also to <c>Timestamp</c>. Text is left out on purpose, as it is for
 /// range filters: which of two strings is smaller is a collation choice the stores make differently.
+/// <see cref="MeasureFunction.CountDistinct"/> asks only whether two values are equal, so it applies to
+/// every type but <c>Jsonb</c>, whose equality the stores read differently (key order, spacing).
 /// </param>
 public sealed record AggregateMeasure(string Column, MeasureFunction Function)
 {
@@ -23,6 +25,9 @@ public sealed record AggregateMeasure(string Column, MeasureFunction Function)
     /// <summary>The smallest value of <paramref name="column"/> in each group.</summary>
     public static AggregateMeasure Min(string column) => new(column, MeasureFunction.Min);
 
+    /// <summary>How many different values <paramref name="column"/> holds in each group.</summary>
+    public static AggregateMeasure CountDistinct(string column) => new(column, MeasureFunction.CountDistinct);
+
     /// <summary>The largest value of <paramref name="column"/> in each group.</summary>
     public static AggregateMeasure Max(string column) => new(column, MeasureFunction.Max);
 }
@@ -34,6 +39,13 @@ public enum MeasureFunction
     Average,
     Min,
     Max,
+
+    /// <summary>
+    /// How many different values the group's rows hold in the column — empty ones not counted. The
+    /// value is a <see cref="long"/>, and <c>0</c> rather than null when no row has a value: a count of
+    /// nothing is zero, as <see cref="AggregateGroup.Count"/> is.
+    /// </summary>
+    CountDistinct,
 }
 
 /// <summary>

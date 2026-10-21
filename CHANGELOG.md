@@ -11,6 +11,15 @@
   same way. A malformed pointer is refused when the field is declared (`ArgumentException`; `400` from
   the host), and a repeated section's key field, which is written into each row, must stay a top-level
   key.
+- **An aggregate can count distinct values: `AggregateMeasure.CountDistinct(column)`** — how many
+  different values each group holds in a column, empty ones not counted, zero for a group with none.
+  It applies to every column type but `Jsonb`, and tells values apart as an equality filter does (one
+  decimal spelt two ways, one instant at two offsets, is one value).
+- **An aggregate's groups can be ranked and cut: `AggregateSpec.OrderBy` and `AggregateSpec.Limit`.**
+  `GroupOrder.ByCount`, `GroupOrder.ByKey(column)` and `GroupOrder.ByMeasure(index)` order the groups,
+  each ascending or descending; groups still tied fall back to their key order, so the order is the
+  same from every store. `Limit` keeps the first N — the top of a ranking. A key on a column the
+  aggregate does not group by, or on a measure it does not ask for, is refused.
 
 ### Changed
 

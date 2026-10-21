@@ -18,11 +18,22 @@ namespace Formbase.Core.Query;
 /// read in the same read as the count. A measure of an undeclared column, or of a column whose type its
 /// function does not apply to, is refused rather than answered empty.
 /// </param>
+/// <param name="OrderBy">
+/// How the groups are ordered (<see cref="GroupOrder"/>) — by count, by a grouping column or by a measure,
+/// most significant first. Without it, groups come in the order of their grouping columns, nulls first.
+/// A key on a column that is not grouped, or on a measure that is not asked for, is refused.
+/// </param>
+/// <param name="Limit">
+/// When set, only the first this many groups in that order are returned — the «top N» of a ranking.
+/// Must be positive.
+/// </param>
 public sealed record AggregateSpec(
     IReadOnlyList<string>? GroupBy = null,
     IReadOnlyList<FieldFilter>? Filters = null,
     int? RecordsPerGroup = null,
-    IReadOnlyList<AggregateMeasure>? Measures = null)
+    IReadOnlyList<AggregateMeasure>? Measures = null,
+    IReadOnlyList<GroupOrder>? OrderBy = null,
+    int? Limit = null)
 {
     /// <summary>The count of every record.</summary>
     public static AggregateSpec CountAll { get; } = new();

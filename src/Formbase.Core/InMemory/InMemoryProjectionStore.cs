@@ -244,8 +244,8 @@ public sealed class InMemoryProjectionStore : IProjectionStore
     };
 
     /// <summary>
-    /// Each measure over the group's rows: the values present in the column, summed, averaged or
-    /// bounded — null when none is. Sums and averages are exact decimal arithmetic, as the
+    /// Each measure over the group's rows: the values present in the column, summed, averaged,
+    /// bounded or told apart — null when none is, except a distinct count, which is zero. Sums and averages are exact decimal arithmetic, as the
     /// SQL backends' numeric sums are.
     /// </summary>
     private static List<MeasureValue> Measure(IReadOnlyCollection<Dictionary<string, object?>> rows, IReadOnlyList<AggregateMeasure>? measures) =>
@@ -253,7 +253,9 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             .Select(measure =>
             {
                 var values = rows.Select(row => row.GetValueOrDefault(measure.Column)).Where(value => value is not null).ToList();
-                object? result = values.Count == 0
+                object? result = measure.Function == MeasureFunction.CountDistinct
+                    ? (long)values.Distinct().Count()
+                    : values.Count == 0
                     ? null
                     : measure.Function switch
                     {
