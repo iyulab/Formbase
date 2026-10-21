@@ -76,6 +76,26 @@ public sealed class SectionProjectionTests : IDisposable
             .OrderBy(r => (string)r[ProjectionSystemColumns.Record]!, StringComparer.Ordinal)];
 
     [Fact]
+    public async Task A_section_row_computes_a_derived_field_from_its_item()
+    {
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(new FormTypeHints(Line, LineTable,
+        [
+            new FieldHint("order_no", ColumnType.Text, Nullable: false),
+            new FieldHint("product", ColumnType.Text, Nullable: false),
+            new FieldHint("shipped_day", ColumnType.Timestamp, SourceKey: "shipped", Derivation: FieldDerivation.TruncateTo(TimeUnit.Day)),
+        ]));
+        hints.Declare(OrderHints());
+        var engine = new Engine(new InMemoryRawStore(), new InMemoryProjectionStore(), new InMemoryProjectionState(), hints);
+        await Append(engine, """{"order_no":"A-7","lines":[{"product":"bolt","shipped":"2026-10-22T15:04:05Z"}]}""");
+
+        await engine.Projector.ProjectAsync(Line, TestContext.Current.CancellationToken);
+
+        (await Rows(engine, LineTable)).Should().ContainSingle()
+            .Which["shipped_day"].Should().Be(new DateTimeOffset(2026, 10, 22, 0, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
     public async Task Each_item_of_the_section_is_a_row_carrying_the_parent_key()
     {
         var engine = InMemory();
