@@ -35,6 +35,11 @@
   each ascending or descending; groups still tied fall back to their key order, so the order is the
   same from every store. `Limit` keeps the first N — the top of a ranking. A key on a column the
   aggregate does not group by, or on a measure it does not ask for, is refused.
+- **A filter can list values: `FieldFilter.In(column, values)` (`FilterOperator.In`)** — the column equals
+  one of them; every column type, each value coerced to the column's type as an equality is; an empty
+  list keeps no row, and an empty column is never one of the list (`IsNull` asks for that, and a list
+  with an empty value in it is refused). Queries and aggregates read it alike. `Formbase.MorphDb` needs
+  MorphDB 0.29, which reads a list filter.
 
 ### Changed
 

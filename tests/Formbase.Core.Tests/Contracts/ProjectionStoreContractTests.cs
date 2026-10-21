@@ -238,6 +238,56 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
+    // In is equality against each listed value: text exact (not case-folded, as Equal is not), numbers by
+    // value, an empty column never listed; an empty list keeps nothing. Aggregates read the same filter.
+    [Fact]
+    public async Task In_keeps_the_rows_whose_value_is_listed_in_queries_and_aggregates()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        await store.CreateTableAsync(Schema(), ct);
+        await store.BulkInsertAsync(TableName, [Row("a,b", 1), Row("c", 2), Row("C", 3), Row("d", 4)], ct);
+        await store.BulkInsertAsync(TableName, [new Dictionary<string, object?> { ["k"] = null, ["v"] = 5L }], ct);
+
+        var byText = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.In("k", ["a,b", "c", "zz"])]), ct);
+        Values(byText).Should().Equal(1L, 2L);
+
+        var byNumber = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.In("v", [4L, 5L]), FieldFilter.IsNotNull("k")]), ct);
+        Values(byNumber).Should().Equal(4L);
+
+        var none = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.In("k", [])]), ct);
+        none.Should().BeEmpty();
+
+        var counted = await store.AggregateAsync(TableName, new AggregateSpec(Filters: [FieldFilter.In("v", [1L, 3L, 5L])]), ct);
+        counted.Should().ContainSingle().Which.Count.Should().Be(3);
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
+    // Through the engine an In list is coerced to the column's type element by element, and a list with an
+    // empty value in it is refused: IsNull is how an empty column is asked for.
+    [Fact]
+    public async Task In_through_the_engine_coerces_each_value_and_refuses_an_empty_one()
+    {
+        var store = CreateStore();
+        var (engine, type) = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        foreach (var (lot, qty) in new[] { ("A", 1), ("B", 2), ("C", 3) })
+        {
+            await engine.AcceptAsync(type, DocumentBody.Parse($$"""{"lot":"{{lot}}","qty":{{qty}}}"""), cancellationToken: ct);
+        }
+
+        await engine.ProjectAsync(type, ct);
+
+        var rows = await engine.QueryAsync(type, new QuerySpec(Filters: [FieldFilter.In("qty", [1, 3])]), ct);
+        rows.Rows.Select(r => r.Fields["lot"]).Should().BeEquivalentTo(["A", "C"], "an int listed against an integer column is the same number");
+
+        var refused = () => engine.QueryAsync(type, new QuerySpec(Filters: [new FieldFilter("lot", FilterOperator.In, new object?[] { "A", null })]), ct);
+        await refused.Should().ThrowAsync<InvalidQueryException>();
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
     [Fact]
     public async Task Aggregate_counts_one_group_per_distinct_key_null_included()
     {

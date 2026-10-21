@@ -430,6 +430,7 @@ public sealed class RecordQuery : IRecordQuery
             => filter.Value is not null && columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
         FilterOperator.Contains or FilterOperator.StartsWith
             => filter.Value is not null && columnType is ColumnType.Text,
+        FilterOperator.In => filter.Value is IReadOnlyList<object?> values && !values.Contains(null),
         _ => false,
     };
 
@@ -461,7 +462,13 @@ public sealed class RecordQuery : IRecordQuery
             .Select(filter =>
             {
                 var columnType = schema.Columns.FirstOrDefault(c => c.Name == filter.Column)?.Type;
-                return columnType is { } type ? filter with { Value = CoerceValue(filter.Value, type) } : filter;
+                return columnType switch
+                {
+                    { } type when filter.Operator == FilterOperator.In && filter.Value is IReadOnlyList<object?> values
+                        => filter with { Value = values.Select(value => CoerceValue(value, type)).ToArray() },
+                    { } type => filter with { Value = CoerceValue(filter.Value, type) },
+                    _ => filter,
+                };
             })
             .ToList();
     }

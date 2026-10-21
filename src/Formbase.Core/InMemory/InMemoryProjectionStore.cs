@@ -317,6 +317,8 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                 return actual is null;
             case FilterOperator.IsNotNull:
                 return actual is not null;
+            case FilterOperator.In:
+                return actual is not null && filter.Value is IEnumerable<object?> values && values.Contains(actual);
         }
 
         if (actual is null || filter.Value is null)

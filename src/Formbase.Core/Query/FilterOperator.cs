@@ -33,4 +33,11 @@ public enum FilterOperator
 
     /// <summary>The column has a value. Takes no value; applies to every column type.</summary>
     IsNotNull,
+
+    /// <summary>
+    /// The column equals one of a list of values (<see cref="FieldFilter.In"/>). Applies to every column type,
+    /// as <see cref="Equal"/> does; an empty list matches no row, and an empty value is not one of the list —
+    /// <see cref="IsNull"/> is the condition for that.
+    /// </summary>
+    In,
 }

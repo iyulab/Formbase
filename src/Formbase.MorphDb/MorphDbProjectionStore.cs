@@ -644,6 +644,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         FormbaseOperator.LessThanOrEqual => MorphOperator.LessThanOrEqual,
         FormbaseOperator.Contains => MorphOperator.Contains,
         FormbaseOperator.StartsWith => MorphOperator.StartsWith,
+        FormbaseOperator.In => MorphOperator.In,
         _ => throw new ArgumentOutOfRangeException(nameof(op), op, "No MorphDB operator for this filter."),
     };
 }

@@ -16,4 +16,11 @@ public sealed record FieldFilter(string Column, FilterOperator Operator, object?
 
     /// <summary>A filter matching rows whose <paramref name="column"/> has a value.</summary>
     public static FieldFilter IsNotNull(string column) => new(column, FilterOperator.IsNotNull, null);
+
+    /// <summary>The column equals one of <paramref name="values"/>.</summary>
+    public static FieldFilter In(string column, IEnumerable<object> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return new(column, FilterOperator.In, values.ToArray());
+    }
 }

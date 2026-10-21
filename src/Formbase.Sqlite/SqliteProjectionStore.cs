@@ -525,6 +525,20 @@ public sealed class SqliteProjectionStore : IProjectionStore
                 continue;
             }
 
+            if (filter.Operator == FilterOperator.In)
+            {
+                // A value of another type than the column's is left out of the list, as it matches nothing.
+                var listed = ((IEnumerable<object?>)filter.Value!).Where(value => IsOfType(value, type)).ToList();
+                var parameters = listed.Select((value, i) =>
+                {
+                    var name = $"{parameter}_{i.ToString(CultureInfo.InvariantCulture)}";
+                    command.Parameters.AddWithValue(name, SqliteValues.ToStorage(value, type));
+                    return name;
+                });
+                conditions.Add(listed.Count == 0 ? "0" : $"{column} IN ({string.Join(", ", parameters)})");
+                continue;
+            }
+
             if (!IsOfType(filter.Value, type))
             {
                 // A value of another type than the column's matches nothing, as on every other store.
