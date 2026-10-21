@@ -29,7 +29,10 @@ namespace Formbase.Core.Tests.Live.JsonBench;
 /// <c>FORMBASE_JSONBENCH_FILE</c> names the event file, <c>FORMBASE_JSONBENCH_OUT</c> the directory for the
 /// report, <c>FORMBASE_JSONBENCH_WORK</c> the directory for the SQLite file (default: the output directory —
 /// keep it on a local disk: SQLite over a network share times the share, not the engine), and
-/// <c>FORMBASE_JSONBENCH_LIMIT</c> how many events to load (default: all). Needs Docker for PostgreSQL.
+/// <c>FORMBASE_JSONBENCH_LIMIT</c> how many events to load (default: all). <c>FORMBASE_JSONBENCH_INDEX=1</c> adds,
+/// after the projection, one SQLite index over the queried columns — the counterpart of the expression index
+/// JSONBench's DDL gives PostgreSQL. Formbase declares no such index itself; this measures what one would buy.
+/// Needs Docker for PostgreSQL.
 /// </para>
 /// </summary>
 public sealed class JsonBenchMeasurement
@@ -102,8 +105,24 @@ public sealed class JsonBenchMeasurement
         while (status.State != ProjectionState.Projected);
 
         project.Stop();
+        var indexed = Environment.GetEnvironmentVariable("FORMBASE_JSONBENCH_INDEX") == "1";
+        long indexMs = 0;
+        if (indexed)
+        {
+            var clock = Stopwatch.StartNew();
+            await using var sqlite = new Microsoft.Data.Sqlite.SqliteConnection(connection);
+            await sqlite.OpenAsync(cancellation);
+            await using var command = sqlite.CreateCommand();
+            command.CommandText = "CREATE INDEX jsonbench_ix ON bluesky (kind, operation, collection, did, time_us); ANALYZE;";
+            await command.ExecuteNonQueryAsync(cancellation);
+            indexMs = clock.ElapsedMilliseconds;
+        }
+
         var skips = await engine.GetProjectionFieldSkipsAsync(Events, cancellation);
-        report.AppendLine(CultureInfo.InvariantCulture, $"- Formbase load: raw append {append.ElapsedMilliseconds:N0} ms ({BatchSize:N0} per batch) · projection {project.ElapsedMilliseconds:N0} ms · field skips {skips.Count} · SQLite file {new FileInfo(dbPath).Length / 1024 / 1024:N0} MiB");
+        var indexNote = indexed
+            ? string.Create(CultureInfo.InvariantCulture, $"index on (kind, operation, collection, did, time_us) + ANALYZE {indexMs:N0} ms")
+            : "no index on the declared columns";
+        report.AppendLine(CultureInfo.InvariantCulture, $"- Formbase load: raw append {append.ElapsedMilliseconds:N0} ms ({BatchSize:N0} per batch) · projection {project.ElapsedMilliseconds:N0} ms · field skips {skips.Count} · SQLite file {new FileInfo(dbPath).Length / 1024 / 1024:N0} MiB · {indexNote}");
 
         // --- PostgreSQL JSONB (JSONBench's DDL, same machine) ---
         await using var postgres = new PostgreSqlBuilder("postgres:16-alpine").Build();
