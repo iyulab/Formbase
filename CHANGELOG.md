@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A field can read a nested value: `sourceKey` takes a JSON Pointer** (RFC 6901). A key that starts
+  with `/` — `/commit/collection`, `/tags/0` — is resolved through objects and arrays; any other key is
+  one top-level member, as before. A value the document does not reach is absent, as a missing
+  top-level key is. The projection, a repeated section's parent key and every store read the key the
+  same way. A malformed pointer is refused when the field is declared (`ArgumentException`; `400` from
+  the host), and a repeated section's key field, which is written into each row, must stay a top-level
+  key.
+
+### Changed
+
+- **A `sourceKey` that starts with `/` is now a JSON Pointer.** A declaration that used one to name a
+  top-level key whose name starts with `/` writes it as `/~1…`; a field with no `sourceKey` whose own
+  name starts with `/` keeps reading that name.
+
 ## 0.30.1
 
 A patch. Pairs with MorphDB `0.28.x`. `Formbase.MorphDb` builds on `MorphDB.Client` 0.28.0 and stops

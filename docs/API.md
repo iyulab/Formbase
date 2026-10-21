@@ -336,8 +336,14 @@ This is the shape the next projection run will build. A form type with no declar
 - **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`.
   A `timestamp` value without an offset — a date alone, or a date and time with no zone — is read as
   UTC, in documents and in query filters alike; a value with an offset keeps it.
-- **`sourceKey`** — the document key the field reads when it differs from the column name. A rename
-  that keeps already-stored documents readable.
+- **`sourceKey`** — where in the document the field is read from, when it differs from the column
+  name. A top-level key — a rename that keeps already-stored documents readable — or a JSON Pointer
+  ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) for a nested value: `/commit/collection`
+  reads `collection` inside `commit`, `/tags/0` the first item of `tags`, and `~1` · `~0` stand for
+  `/` · `~` inside a key. A key that starts with `/` is always a pointer, so a top-level key whose name
+  starts with `/` is written `/~1…`. A nested value the document does not reach reads as absent, like a
+  missing top-level key. A malformed pointer (a `~` not followed by `0` or `1`) is refused with `400`.
+  The key field of a repeated section is written into each row, so it must stay a top-level key.
 - **`businessName`** — the name a person reads the field by, when one is declared (ODCS v3.1
   `businessName`) — say a label in the language of the form, beside a column name in ASCII. It is
   declaration only: it never becomes part of the projected table, so changing it rebuilds nothing.

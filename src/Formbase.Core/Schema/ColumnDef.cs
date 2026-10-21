@@ -18,6 +18,16 @@ public sealed record ColumnDef(
     string? BindingTarget = null,
     ReferenceDef? Reference = null)
 {
-    /// <summary>The raw document key this column reads from — <see cref="SourceKey"/> when set, else <see cref="Name"/>.</summary>
-    public string ExtractionKey => SourceKey ?? Name;
+    /// <summary>
+    /// Where in a raw document this column reads from, when it differs from <see cref="Name"/> — a top-level
+    /// member name, or a JSON Pointer (<see cref="SourceKeys"/>).
+    /// </summary>
+    /// <exception cref="ArgumentException">The key is given but blank, or not a valid JSON Pointer.</exception>
+    public string? SourceKey { get; init => field = SourceKeys.Checked(value, nameof(SourceKey)); } = SourceKeys.Checked(SourceKey, nameof(SourceKey));
+
+    /// <summary>
+    /// The key this column reads a raw document by (<see cref="SourceKeys"/>) — <see cref="SourceKey"/> when set,
+    /// else the top-level member named <see cref="Name"/>.
+    /// </summary>
+    public string ExtractionKey => SourceKey ?? SourceKeys.ForMember(Name);
 }

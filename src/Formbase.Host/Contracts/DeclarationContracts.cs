@@ -30,8 +30,9 @@ public sealed record DeclarationResponse(
 /// <param name="Type">The column's declared type.</param>
 /// <param name="Nullable">Whether the projected column accepts null.</param>
 /// <param name="SourceKey">
-/// The document key this field reads, when it differs from the column name — a rename that keeps
-/// already-stored documents readable.
+/// Where in a document this field is read from, when it differs from the column name — a top-level key
+/// (a rename that keeps already-stored documents readable), or a JSON Pointer such as
+/// <c>/commit/collection</c> for a nested one.
 /// </param>
 /// <param name="Binding">When in time the value is read from.</param>
 /// <param name="Target">What a bound field points at, when it is bound to another form type.</param>
@@ -113,7 +114,10 @@ public sealed record DeclarationRequest(
 /// <param name="Name">The projected column's name.</param>
 /// <param name="Type">The column's declared type.</param>
 /// <param name="Nullable">Whether the projected column accepts null. Defaults to true.</param>
-/// <param name="SourceKey">The document key this field reads, when it differs from the column name.</param>
+/// <param name="SourceKey">
+/// Where in a document this field is read from, when it differs from the column name — a top-level key, or a
+/// JSON Pointer (RFC 6901) such as <c>/commit/collection</c> for a nested one. A malformed pointer is refused.
+/// </param>
 /// <param name="Binding">When in time the value is read from. Defaults to <c>stored</c>.</param>
 /// <param name="Target">What a bound field points at.</param>
 /// <param name="BusinessName">

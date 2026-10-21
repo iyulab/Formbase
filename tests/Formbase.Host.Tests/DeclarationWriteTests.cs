@@ -216,6 +216,26 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     }
 
     [Fact]
+    public async Task A_pointer_source_key_is_stored_and_read_back_and_a_malformed_one_is_refused()
+    {
+        var type = NewFormType();
+        var nested = await _client.PutAsJsonAsync(
+            $"/formtypes/{type}/declaration",
+            new { tableName = $"t_{type}", declarationVersion = 1, fields = new[] { new { name = "collection", type = "text", sourceKey = "/commit/collection" } } },
+            TestContext.Current.CancellationToken);
+        nested.StatusCode.Should().Be(HttpStatusCode.Created, await nested.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var read = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
+        read.GetProperty("fields")[0].GetProperty("sourceKey").GetString().Should().Be("/commit/collection");
+
+        var malformed = await _client.PutAsJsonAsync(
+            $"/formtypes/{NewFormType()}/declaration",
+            new { tableName = "t", declarationVersion = 1, fields = new[] { new { name = "collection", type = "text", sourceKey = "/commit~2x" } } },
+            TestContext.Current.CancellationToken);
+        malformed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(malformed)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+    }
+
+    [Fact]
     public async Task A_field_declared_twice_is_refused()
     {
         var response = await _client.PutAsJsonAsync(

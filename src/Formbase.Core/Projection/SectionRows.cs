@@ -42,7 +42,7 @@ public static class SectionRows
         var parentRecord = ProjectionSystemColumns.RecordOf(parent.Id, parent.Key);
         var key = section.ParentKey is null
             ? default(JsonElement?)
-            : root.TryGetProperty(section.ParentKey, out var value) ? value : null;
+            : SourceKeys.TryResolve(root, section.ParentKey, out var value) ? value : null;
 
         var rows = new List<SectionRow>(items.GetArrayLength());
         var position = 0;

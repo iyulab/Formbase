@@ -146,9 +146,7 @@ internal static class DocumentMapper
 
         // Read from the extraction key (identity), not the projected column name (display): a
         // renamed field keeps reading its original raw key, so its data follows the rename.
-        var present = root.ValueKind == JsonValueKind.Object
-            && root.TryGetProperty(column.ExtractionKey, out var element);
-        var field = present ? root.GetProperty(column.ExtractionKey) : default;
+        var present = SourceKeys.TryResolve(root, column.ExtractionKey, out var field);
         // A field the document never had is a different fact from an explicit null — the projected
         // NULL conflates both, so the distinction is surfaced (absence counts, skip reasons).
         absent = !present;

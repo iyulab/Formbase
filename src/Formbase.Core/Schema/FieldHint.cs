@@ -23,6 +23,13 @@ public sealed record FieldHint(
     EntityRef? Target = null,
     string? BusinessName = null)
 {
+    /// <summary>
+    /// Where in a document the field is read from, when it differs from <see cref="Name"/> — a top-level
+    /// member name, or a JSON Pointer such as <c>/commit/collection</c> (<see cref="SourceKeys"/>).
+    /// </summary>
+    /// <exception cref="ArgumentException">The key is given but blank, or not a valid JSON Pointer.</exception>
+    public string? SourceKey { get; init => field = SourceKeys.Checked(value, nameof(SourceKey)); } = SourceKeys.Checked(SourceKey, nameof(SourceKey));
+
     /// <summary>The name a person reads the field by, when one is declared.</summary>
     /// <exception cref="ArgumentException">The name is given but blank.</exception>
     public string? BusinessName { get; init => field = Checked(value); } = Checked(BusinessName);
