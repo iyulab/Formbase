@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.32.0
+
+A minor, and a fix that matters for anyone who restricts a projected table with MorphDB row-level
+security: a rebuild no longer drops the MorphDB table — it refreshes it in place, so the policies,
+webhooks and subscriptions bound to it stay. Before, a redeclaration silently left the table readable by
+anyone the project lets in. Pairs with MorphDB `0.31.x`.
 
 ### Fixed
 
@@ -26,7 +31,7 @@
 - `MorphDbTypeMap` names MorphDB's canonical types (`biginteger`, `datetime`, `json`), the names MorphDB
   reports a column's type as, so a declared column and an existing one compare by name. MorphDB accepts
   both spellings, so tables are unaffected.
-- Needs MorphDB `0.31.x` (the .NET client reports a table's relations, which an in-place rebuild reconciles).
+- Built against `MorphDB.Client 0.31.0`, whose client reports a table's relations — an in-place rebuild reconciles them.
 
 ## 0.31.0
 
