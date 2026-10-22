@@ -47,6 +47,8 @@
   `PRAGMA optimize`, which analyzes a table only when its row count has moved tenfold since it was last
   analyzed, under a bounded sample. Without statistics the planner could pick the wrong one of several
   indexes on a table; a projection now pays for a few analyses as its table grows.
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.29.0** (was 0.28.0); the live MorphDB suite and the
+  compose file run `ghcr.io/iyulab/morphdb:0.29.0`.
 - Dependencies: Microsoft.Extensions.AI 10.11.0.
 - **A `sourceKey` that starts with `/` is now a JSON Pointer.** A declaration that used one to name a
   top-level key whose name starts with `/` writes it as `/~1…`; a field with no `sourceKey` whose own
