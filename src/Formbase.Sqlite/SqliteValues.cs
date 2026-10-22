@@ -37,6 +37,8 @@ internal static class SqliteValues
         ColumnType.Timestamp => "TEXT",
         ColumnType.Uuid => "TEXT",
         ColumnType.Jsonb => "TEXT",
+        // ISO days sort as text in calendar order, so ranges and bounds need nothing more.
+        ColumnType.Date => "TEXT",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unmapped column type."),
     };
 
@@ -54,6 +56,7 @@ internal static class SqliteValues
         DateTimeOffset instant when type == ColumnType.Timestamp => instant.UtcDateTime.ToString(InstantFormat, CultureInfo.InvariantCulture),
         DateTime instant when type == ColumnType.Timestamp => instant.ToUniversalTime().ToString(InstantFormat, CultureInfo.InvariantCulture),
         Guid id when type == ColumnType.Uuid => id.ToString("D"),
+        DateOnly day when type == ColumnType.Date => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         string text => text,
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString() ?? string.Empty,
@@ -74,6 +77,7 @@ internal static class SqliteValues
             ColumnType.Boolean => Convert.ToInt64(stored, CultureInfo.InvariantCulture) != 0,
             ColumnType.Timestamp => DateTimeOffset.ParseExact((string)stored, InstantFormat, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal),
             ColumnType.Uuid => Guid.Parse((string)stored),
+            ColumnType.Date => DateOnly.ParseExact((string)stored, "yyyy-MM-dd", CultureInfo.InvariantCulture),
             _ => Convert.ToString(stored, CultureInfo.InvariantCulture),
         };
     }

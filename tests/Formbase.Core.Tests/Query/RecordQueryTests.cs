@@ -323,6 +323,33 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task A_day_is_projected_from_its_iso_text_and_asked_for_as_a_day_or_as_that_text()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("on", ColumnType.Date),
+        ]));
+        await h.Accept("""{"lot":"L-1","on":"2026-10-21"}""");
+        await h.Accept("""{"lot":"L-2","on":"2026-10-22"}""");
+        // An instant names a day only in some offset: it is not a day, and the field is skipped.
+        await h.Accept("""{"lot":"L-3","on":"2026-10-21T00:00:00Z"}""");
+        var projected = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        projected.SkippedFields.Should().ContainSingle().Which.Field.Should().Be("on");
+
+        var byDay = await h.Query.QueryAsync(Qc, new QuerySpec(Filters: [FieldFilter.Equal("on", new DateOnly(2026, 10, 21))]), TestContext.Current.CancellationToken);
+        byDay.Rows.Should().ContainSingle().Which.Fields["on"].Should().Be(new DateOnly(2026, 10, 21));
+
+        var byText = await h.Query.QueryAsync(Qc, new QuerySpec(Filters: [new FieldFilter("on", FilterOperator.GreaterThan, "2026-10-21")]), TestContext.Current.CancellationToken);
+        byText.Rows.Should().ContainSingle().Which.Fields["lot"].Should().Be("L-2");
+
+        var byInstant = await h.Query.QueryAsync(Qc, new QuerySpec(Filters: [FieldFilter.Equal("on", new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero))]), TestContext.Current.CancellationToken);
+        byInstant.Rows.Should().BeEmpty("an instant is not asked of a day");
+    }
+
+    [Fact]
     public async Task A_range_filter_value_is_coerced_to_the_column_type()
     {
         var h = new Harness();

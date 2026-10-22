@@ -39,7 +39,7 @@ public class FormdownAdapterTests
         var types = Adapted().Hints.Fields.ToDictionary(f => f.Name, f => f.Type);
 
         types["lot_no"].Should().Be(ColumnType.Text);
-        types["inspected_on"].Should().Be(ColumnType.Timestamp);
+        types["inspected_on"].Should().Be(ColumnType.Date, "a date field is a day, not a point in time");
         types["qty"].Should().Be(ColumnType.Decimal, "a step is an input rule, not the type of what is stored");
         types["unit_price"].Should().Be(ColumnType.Decimal);
         types["total"].Should().Be(ColumnType.Decimal);
@@ -93,7 +93,6 @@ public class FormdownAdapterTests
             ("defects", VocabularyGapKind.Unresolved, "checkbox group"),
             ("grade", VocabularyGapKind.Constraint, "options [A, B, C] + other"),
             ("shift_start", VocabularyGapKind.Unresolved, "type time"),
-            ("inspected_on", VocabularyGapKind.Unresolved, "type date"),
             ("photo", VocabularyGapKind.Constraint, "accept=image/*"),
             ("photo", VocabularyGapKind.Unresolved, "type file"),
             ("lotCode", VocabularyGapKind.Constraint, "pattern=^[A-Z]{2}-\\d+$"),

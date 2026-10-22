@@ -572,6 +572,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
         ColumnType.Boolean => value is bool,
         ColumnType.Timestamp => value is DateTimeOffset or DateTime,
         ColumnType.Uuid => value is Guid,
+        ColumnType.Date => value is DateOnly,
         _ => value is string,
     };
 

@@ -446,7 +446,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             return [];
         }
 
-        var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f), f.Value)).ToList();
+        var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f), QueryValue(f.Value))).ToList();
 
         // Server-side ordering — the only way paging is deterministic (a client-side sort would order
         // an already-arbitrary page). Descending maps to ascending: false.
@@ -638,6 +638,19 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// <c>isnull</c>: sent as <c>eq</c>, the missing value would reach the server as an empty string and
     /// compare against that instead.
     /// </summary>
+    /// <summary>
+    /// A filter value as the row query sends it. A day goes as its ISO text: <c>MorphDB.Client</c> 0.29
+    /// formats a <see cref="DateOnly"/> in the query string with the invariant culture's short date
+    /// (<c>10/21/2026</c>), which the server does not read as a date.
+    /// </summary>
+    // TODO(upstream): drop once the pin is MorphDB.Client 0.30, which writes a DateOnly filter value in ISO form.
+    private static object? QueryValue(object? value) => value switch
+    {
+        DateOnly day => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        IReadOnlyList<object?> list => list.Select(QueryValue).ToList(),
+        _ => value,
+    };
+
     private static MorphOperator ToMorph(FieldFilter filter) => filter switch
     {
         { Operator: FormbaseOperator.Equal, Value: null } => MorphOperator.IsNull,

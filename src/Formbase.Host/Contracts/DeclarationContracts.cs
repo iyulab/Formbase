@@ -265,6 +265,7 @@ public enum DeclaredColumnType
     Timestamp,
     Uuid,
     Jsonb,
+    Date,
 }
 
 /// <summary>
@@ -316,6 +317,7 @@ internal static class DeclarationWireMapping
         ColumnType.Decimal => DeclaredColumnType.Decimal,
         ColumnType.Boolean => DeclaredColumnType.Boolean,
         ColumnType.Timestamp => DeclaredColumnType.Timestamp,
+        ColumnType.Date => DeclaredColumnType.Date,
         ColumnType.Uuid => DeclaredColumnType.Uuid,
         ColumnType.Jsonb => DeclaredColumnType.Jsonb,
     };
@@ -379,6 +381,7 @@ internal static class DeclarationWireMapping
         DeclaredColumnType.Decimal => ColumnType.Decimal,
         DeclaredColumnType.Boolean => ColumnType.Boolean,
         DeclaredColumnType.Timestamp => ColumnType.Timestamp,
+        DeclaredColumnType.Date => ColumnType.Date,
         DeclaredColumnType.Uuid => ColumnType.Uuid,
         DeclaredColumnType.Jsonb => ColumnType.Jsonb,
     };

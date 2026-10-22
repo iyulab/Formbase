@@ -411,19 +411,19 @@ public sealed class RecordQuery : IRecordQuery
 
     /// <summary>
     /// Whether a measure is a question the column can answer: sums and averages add numbers; bounds also
-    /// order instants. Text bounds are left out for the reason text ranges are (<see cref="Applies(FieldFilter, ColumnType)"/>).
+    /// order instants and days. Text bounds are left out for the reason text ranges are (<see cref="Applies(FieldFilter, ColumnType)"/>).
     /// A distinct count only tells values apart, which every type but JSON does the same way in every store.
     /// </summary>
     private static bool Applies(MeasureFunction function, ColumnType columnType) => function switch
     {
         MeasureFunction.Sum or MeasureFunction.Average => columnType is ColumnType.Integer or ColumnType.Decimal,
-        MeasureFunction.Min or MeasureFunction.Max => columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
+        MeasureFunction.Min or MeasureFunction.Max => columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp or ColumnType.Date,
         MeasureFunction.CountDistinct => columnType is not ColumnType.Jsonb,
         _ => false,
     };
 
     /// <summary>
-    /// Whether a filter is a question the column can answer. Ranges compare numbers and instants;
+    /// Whether a filter is a question the column can answer. Ranges compare numbers, instants and days;
     /// text ranges are left out on purpose: where "b" sorts relative to "B" is a collation choice the
     /// backends make differently, so the same query would return different rows depending on the store.
     /// Every comparing operator needs a value to compare against; the null tests take none, and a value
@@ -437,7 +437,7 @@ public sealed class RecordQuery : IRecordQuery
         FilterOperator.Equal => columnType is not ColumnType.Jsonb,
         FilterOperator.IsNull or FilterOperator.IsNotNull => filter.Value is null,
         FilterOperator.GreaterThan or FilterOperator.GreaterThanOrEqual or FilterOperator.LessThan or FilterOperator.LessThanOrEqual
-            => filter.Value is not null && columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
+            => filter.Value is not null && columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp or ColumnType.Date,
         FilterOperator.Contains or FilterOperator.StartsWith
             => filter.Value is not null && columnType is ColumnType.Text,
         FilterOperator.In => filter.Value is IReadOnlyList<object?> values && !values.Contains(null) && columnType is not ColumnType.Jsonb,
@@ -502,6 +502,14 @@ public sealed class RecordQuery : IRecordQuery
                 ColumnType.Timestamp => value is DateTimeOffset
                     ? value
                     : TimestampText.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),
+                // A day is asked for as a day: a DateOnly, or its ISO text. An instant names a day only
+                // in some offset, so it is left as it is and matches nothing.
+                ColumnType.Date => value switch
+                {
+                    DateOnly => value,
+                    string text => DateOnly.ParseExact(text.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    _ => value,
+                },
                 _ => value,
             };
         }

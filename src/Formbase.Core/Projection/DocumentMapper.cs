@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
@@ -228,6 +229,17 @@ internal static class DocumentMapper
                     && TimestampText.TryParse(field.GetString(), out var ts))
                 {
                     value = ts;
+                    return true;
+                }
+                break;
+
+            case ColumnType.Date:
+                // Only the ISO day itself: a timestamp's day depends on the offset it is read in, so
+                // taking one apart here would choose a day the document did not write.
+                if (field.ValueKind == JsonValueKind.String
+                    && DateOnly.TryParseExact(field.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+                {
+                    value = day;
                     return true;
                 }
                 break;

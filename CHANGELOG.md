@@ -4,6 +4,14 @@
 
 ### Added
 
+- **A calendar-date column type: `ColumnType.Date`** (`date` on the wire). A day is not a point in time:
+  `2026-10-21` is the same day in every offset, where a timestamp at midnight UTC is another day west of
+  Greenwich. Values are `DateOnly`; a document carries one as `yyyy-MM-dd` (a timestamp string in a
+  date field is skipped, not cut to a day), and a filter takes a `DateOnly` or that text. Equality, `In`,
+  ranges, minimum and maximum, and grouping answer alike on every store; MorphDB stores it as its `date`
+  type. The formdown adapter declares a `date` field with it, the M3L adapter a `date` field, and the
+  LLM proposer a `"format": "date"` string.
+
 - **A declaration can name the indexes its projected table is built with: `FormTypeHints.Indexes`**
   (`indexes` on the wire, each `{"fields": [...]}`) — declared field names in index order, one composite
   index per entry. The SQLite and MorphDB stores build them with the table, so a rebuilt projection has them again;
@@ -59,9 +67,9 @@
 - **`Formbase.Formdown`: a field left empty is no value.** A form can only hand over an empty string for
   an unchosen option or an unwritten box, so `AdaptData` now writes `null` for an empty text field as it
   already did for an empty number or date — an unanswered choice reads as `IsNull`, not as a group of its
-  own. A checked list that is empty stays an empty list. `AdaptSchema` reports a `date` field as a gap
-  (`type date` — stored as the instant 00:00 UTC of that day) and a `datetime-local` one (`type
-  datetime-local` — read as UTC), since the hints have no calendar-date type.
+  own. A checked list that is empty stays an empty list. A `date` field is declared as the new `Date`
+  type (it was a timestamp at 00:00 UTC, so a day asked for at local midnight matched nothing); a
+  `datetime-local` one stays a timestamp and is reported as a gap (`type datetime-local` — read as UTC).
 - **A `sourceKey` that starts with `/` is now a JSON Pointer.** A declaration that used one to name a
   top-level key whose name starts with `/` writes it as `/~1…`; a field with no `sourceKey` whose own
   name starts with `/` keeps reading that name.

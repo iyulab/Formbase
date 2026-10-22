@@ -726,6 +726,56 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
+    private static DateOnly? Day(object? value) => value switch
+    {
+        null => null,
+        DateOnly day => day,
+        DateTime instant => DateOnly.FromDateTime(instant),
+        _ => DateOnly.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)![..10], CultureInfo.InvariantCulture),
+    };
+
+    [Fact]
+    public async Task Days_compare_as_days_in_equality_ranges_bounds_and_groups()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        await store.CreateTableAsync(new TableSchema(TableName, [new ColumnDef("k", ColumnType.Text), new ColumnDef("on", ColumnType.Date)]), ct);
+        await store.BulkInsertAsync(TableName,
+        [
+            new Dictionary<string, object?> { ["k"] = "a", ["on"] = new DateOnly(2026, 9, 30) },
+            new Dictionary<string, object?> { ["k"] = "b", ["on"] = new DateOnly(2026, 10, 21) },
+            new Dictionary<string, object?> { ["k"] = "c", ["on"] = new DateOnly(2026, 10, 21) },
+            new Dictionary<string, object?> { ["k"] = "d", ["on"] = new DateOnly(2026, 11, 1) },
+            new Dictionary<string, object?> { ["k"] = "e", ["on"] = null },
+        ], ct);
+
+        var same = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.Equal("on", new DateOnly(2026, 10, 21))]), ct);
+        Keys(same).Should().Equal("b", "c");
+
+        var october = await store.QueryAsync(TableName, new QuerySpec(Filters:
+        [
+            new FieldFilter("on", FilterOperator.GreaterThanOrEqual, new DateOnly(2026, 10, 1)),
+            new FieldFilter("on", FilterOperator.LessThan, new DateOnly(2026, 11, 1)),
+        ]), ct);
+        Keys(october).Should().Equal("b", "c");
+
+        var listed = await store.QueryAsync(TableName, new QuerySpec(Filters: [FieldFilter.In("on", [new DateOnly(2026, 9, 30), new DateOnly(2026, 11, 1)])]), ct);
+        Keys(listed).Should().Equal("a", "d");
+
+        Day(same[0]["on"]).Should().Be(new DateOnly(2026, 10, 21), "a day reads back as the same day");
+
+        var bounds = await store.AggregateAsync(TableName, new AggregateSpec(
+            Measures: [AggregateMeasure.Min("on"), AggregateMeasure.Max("on")]), ct);
+        Day(bounds.Single().Measures[0].Value).Should().Be(new DateOnly(2026, 9, 30));
+        Day(bounds.Single().Measures[1].Value).Should().Be(new DateOnly(2026, 11, 1));
+
+        var byDay = await store.AggregateAsync(TableName, new AggregateSpec(GroupBy: ["on"]), ct);
+        byDay.ToDictionary(g => Day(g.Key["on"])?.ToString("O", CultureInfo.InvariantCulture) ?? "none", g => g.Count)
+            .Should().BeEquivalentTo(new Dictionary<string, long> { ["2026-09-30"] = 1, ["2026-10-21"] = 2, ["2026-11-01"] = 1, ["none"] = 1 });
+
+        await store.DropTableAsync(TableName, ct);
+    }
+
     [Fact]
     public async Task Text_matching_ignores_case_beyond_ascii()
     {

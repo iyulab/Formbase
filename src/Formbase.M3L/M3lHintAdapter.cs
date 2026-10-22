@@ -315,7 +315,9 @@ public static class M3lHintAdapter
                 return ColumnType.Decimal;
             case "boolean":
                 return ColumnType.Boolean;
-            case "timestamp" or "date" or "datetime" or "time":
+            case "date":
+                return ColumnType.Date;
+            case "timestamp" or "datetime" or "time":
                 return ColumnType.Timestamp;
             case "identifier" or "uuid":
                 return ColumnType.Uuid;

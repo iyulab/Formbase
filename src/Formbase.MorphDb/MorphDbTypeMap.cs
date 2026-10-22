@@ -19,6 +19,7 @@ public static class MorphDbTypeMap
         ColumnType.Timestamp => "timestamp",
         ColumnType.Uuid => "uuid",
         ColumnType.Jsonb => "jsonb",
+        ColumnType.Date => "date",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unmapped column type."),
     };
 }

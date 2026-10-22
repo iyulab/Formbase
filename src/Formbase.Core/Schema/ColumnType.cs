@@ -19,4 +19,10 @@ public enum ColumnType
     Timestamp,
     Uuid,
     Jsonb,
+
+    /// <summary>
+    /// A calendar date — a day, not a point in time: <c>2026-10-21</c> is the same day in every offset.
+    /// Values are <see cref="DateOnly"/>; a document carries one as ISO 8601 text (<c>yyyy-MM-dd</c>).
+    /// </summary>
+    Date,
 }

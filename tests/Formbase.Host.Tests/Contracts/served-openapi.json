@@ -906,7 +906,8 @@
           "boolean",
           "timestamp",
           "uuid",
-          "jsonb"
+          "jsonb",
+          "date"
         ]
       },
       "DeclaredDerivation": {

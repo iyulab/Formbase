@@ -334,7 +334,9 @@ GET /formtypes/orders/declaration
 This is the shape the next projection run will build. A form type with no declaration answers `404`
 `/problems/no-declaration` — a state to read, not a failure to recover from.
 
-- **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`.
+- **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`, `date`.
+  A `date` is a calendar day, not a point in time: a document carries it as `yyyy-MM-dd` and a filter
+  names it the same way; a timestamp string in a `date` field is not read (the field is skipped).
   A `timestamp` value without an offset — a date alone, or a date and time with no zone — is read as
   UTC, in documents and in query filters alike; a value with an offset keeps it.
 - **`sourceKey`** — where in the document the field is read from, when it differs from the column

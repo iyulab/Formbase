@@ -148,7 +148,7 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
             .GetProperty("components").GetProperty("schemas");
 
         Values(schemas, "DeclaredColumnType").Should().BeEquivalentTo(
-            ["text", "integer", "decimal", "boolean", "timestamp", "uuid", "jsonb"]);
+            ["text", "integer", "decimal", "boolean", "timestamp", "uuid", "jsonb", "date"]);
         Values(schemas, "DeclaredBinding").Should().BeEquivalentTo(
             ["stored", "snapshot", "reference"]);
         Values(schemas, "DeclaredRelationKind").Should().BeEquivalentTo(

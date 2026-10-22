@@ -217,6 +217,7 @@ public sealed class LlmSchemaProposer : ISchemaProposer
         return (type, format) switch
         {
             ("string", "date-time") => ColumnType.Timestamp,
+            ("string", "date") => ColumnType.Date,
             ("string", "uuid") => ColumnType.Uuid,
             ("string", _) => ColumnType.Text,
             ("integer", _) => ColumnType.Integer,

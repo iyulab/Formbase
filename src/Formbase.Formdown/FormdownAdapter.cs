@@ -209,12 +209,7 @@ public static class FormdownAdapter
             case "checkbox":
                 return ColumnType.Boolean;
             case "date":
-                // A calendar date is not a point in time either, but the hints have no date type: it is
-                // stored as the instant it starts at in UTC, and the loss is reported rather than hidden.
-                gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
-                    "type date",
-                    "A calendar date is stored as the instant 00:00 UTC of that day; compare it with that instant, not with midnight in another offset."));
-                return ColumnType.Timestamp;
+                return ColumnType.Date;
             case "datetime-local":
                 gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
                     "type datetime-local",
@@ -244,7 +239,7 @@ public static class FormdownAdapter
             var text = value.GetString()!;
             switch (type)
             {
-                case ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp when text.Trim().Length == 0:
+                case ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp or ColumnType.Date when text.Trim().Length == 0:
                 case ColumnType.Text when text.Length == 0:
                     // An input left empty: no value, not an empty one. A form has no way to hand over
                     // "no answer" but an empty string, so an unchosen option or an unwritten box is null.
