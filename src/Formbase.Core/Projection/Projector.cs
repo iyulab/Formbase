@@ -116,8 +116,7 @@ public sealed class Projector : IProjector
     {
         try
         {
-            await _projectionStore.DropTableAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
-            await _projectionStore.CreateTableAsync(PhysicalSchema(schema), cancellationToken).ConfigureAwait(false);
+            await _projectionStore.ResetTableAsync(PhysicalSchema(schema), cancellationToken).ConfigureAwait(false);
 
             var documents = await ReadAsync(stream, Watermark.Zero, rawHead, cancellationToken).ConfigureAwait(false);
             var mapped = Map(documents, schema);

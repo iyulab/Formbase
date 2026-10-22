@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A rebuild no longer removes what MorphDB binds to a projected table.** A rebuild — after a
+  redeclaration, a failed run, or on the first run of a table built before marks — dropped the MorphDB
+  table and created a new one, and with it went every row-level security policy, webhook and
+  subscription bound to the old table: a table its policies had closed became readable by anyone the
+  project lets in, without a word. The MorphDB store now refreshes the table in place, as PostgreSQL
+  refreshes a materialized view — rows deleted, columns, declared indexes and declared relations
+  brought to the declaration — so the table and what is bound to it stay. A column whose shape is
+  unchanged is kept as it is; a changed one is replaced, and if MorphDB refuses because a policy depends
+  on it, the rebuild fails rather than leave the table open. A table without an owner mark is still
+  replaced (MorphDB cannot add the mark in place).
+
+### Added
+
+- `IProjectionStore.ResetTableAsync(schema)` — leaves a table with the schema's shape and no rows, what a
+  rebuild refills. Its default drops and recreates the table; a store whose tables carry things the
+  projection does not own keeps the table and reshapes it.
+
+### Changed
+
+- `MorphDbTypeMap` names MorphDB's canonical types (`biginteger`, `datetime`, `json`), the names MorphDB
+  reports a column's type as, so a declared column and an existing one compare by name. MorphDB accepts
+  both spellings, so tables are unaffected.
+- Needs MorphDB `0.31.x` (the .NET client reports a table's relations, which an in-place rebuild reconciles).
+
 ## 0.31.0
 
 A minor. Pairs with MorphDB `0.30.x`. A multiple choice becomes rows: a section that declares one field

@@ -553,7 +553,7 @@ next run rather than landing under a watermark that does not cover them.
 
 | `mode` | When | What the counts cover |
 |---|---|---|
-| `rebuild` | The first run; the declaration or its table changed; a failed run left the table in doubt (`unverified`); or the recorded state predates this behavior. The table is dropped and refilled from every document | Every document in the stream |
+| `rebuild` | The first run; the declaration or its table changed; a failed run left the table in doubt (`unverified`); or the recorded state predates this behavior. The table is emptied, brought to the declaration and refilled from every document — on MorphDB the same table, so what is bound to it there (row-level security policies, webhooks, subscriptions) stays | Every document in the stream |
 | `incremental` | Nothing but documents changed since the last run. Only documents appended since its watermark are read: records they correct or retire lose their old row, and their own rows and skips are added | Only the documents this run read |
 
 The table and [`GET …/projection/skips`](#what-a-projection-skipped) are what a rebuild would have produced either

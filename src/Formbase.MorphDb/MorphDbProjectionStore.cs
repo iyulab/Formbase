@@ -60,6 +60,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
         Translated(async () => { await CreateTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
 
+    public Task ResetTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
+        Translated(async () => { await ResetTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
+
     public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) =>
         Translated(() => BulkInsertCoreAsync(tableName, rows, cancellationToken));
 
@@ -126,21 +129,13 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     {
         if (_owner is not null)
         {
-            var owner = await _owner.GetOwnerAsync(cancellationToken).ConfigureAwait(false);
             var existing = await _client.Schema.GetTableAsync(tableName, cancellationToken).ConfigureAwait(false);
             if (existing is null)
             {
                 return;
             }
 
-            if (existing.Metadata.TryGetValue(OwnerKey, out var holder)
-                && !string.Equals(holder, owner.Id, StringComparison.Ordinal))
-            {
-                var holderLabel = existing.Metadata.TryGetValue(OwnerLabelKey, out var label) && label.Length > 0
-                    ? $"{label} (owner '{holder}')"
-                    : $"owner '{holder}'";
-                throw new ProjectionTableOwnedElsewhereException(tableName, holderLabel, $"{owner.Label} (owner '{owner.Id}')");
-            }
+            await EnsureOwnedHereAsync(existing, cancellationToken).ConfigureAwait(false);
         }
 
         try
@@ -150,6 +145,143 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         catch (MorphDBNotFoundException missing) when (!IsMissingProject(missing))
         {
             // Already absent — drop is idempotent.
+        }
+    }
+
+    /// <summary>Refuses a table another owner built; a table with no mark passes.</summary>
+    private async Task EnsureOwnedHereAsync(TableInfo existing, CancellationToken cancellationToken)
+    {
+        if (_owner is null)
+        {
+            return;
+        }
+
+        var owner = await _owner.GetOwnerAsync(cancellationToken).ConfigureAwait(false);
+        if (existing.Metadata.TryGetValue(OwnerKey, out var holder)
+            && !string.Equals(holder, owner.Id, StringComparison.Ordinal))
+        {
+            var holderLabel = existing.Metadata.TryGetValue(OwnerLabelKey, out var label) && label.Length > 0
+                ? $"{label} (owner '{holder}')"
+                : $"owner '{holder}'";
+            throw new ProjectionTableOwnedElsewhereException(existing.Name, holderLabel, $"{owner.Label} (owner '{owner.Id}')");
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the table in place, as PostgreSQL refreshes a materialized view: its rows are deleted and
+    /// its columns, declared indexes and declared relations are brought to the schema, but the table stays
+    /// the same table — so what MorphDB binds to it (row-level security policies, webhooks, real-time
+    /// subscriptions) survives the rebuild. Dropping it removed them without a word, which opened a table
+    /// its policies had closed. A column whose shape is unchanged is kept as it is, so a policy that names
+    /// it keeps naming it; a changed one is dropped and added again, and if MorphDB will not drop it (a
+    /// policy depends on it) the rebuild fails rather than leaving the table open.
+    /// <para>
+    /// A table that carries no owner mark — built before marks existed — is replaced as before: MorphDB
+    /// cannot add the mark to a table in place, and the rebuild is what marks it.
+    /// </para>
+    /// </summary>
+    private async Task ResetTableCoreAsync(TableSchema schema, CancellationToken cancellationToken)
+    {
+        var existing = await _client.Schema.GetTableAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
+        if (existing is null || (_owner is not null && !existing.Metadata.ContainsKey(OwnerKey)))
+        {
+            await DropTableCoreAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
+            await CreateTableCoreAsync(schema, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await EnsureOwnedHereAsync(existing, cancellationToken).ConfigureAwait(false);
+
+        // Every projected row carries its document, so this selects them all.
+        await _client.Batch.DeleteManyAsync(
+            schema.TableName,
+            [new Filter { Column = ProjectionSystemColumns.DocumentId, Operator = MorphOperator.IsNotNull }],
+            cancellationToken).ConfigureAwait(false);
+
+        // Relations this table declared (it is their parent) go first: a relation holds the column it names.
+        var declared = (schema.Relations ?? []).Where(r => r.Kind == RelationKind.Child).ToList();
+        foreach (var relation in existing.Relations.Where(r => r.TargetTableId == existing.Id))
+        {
+            await _client.Schema.DeleteRelationAsync(relation.Id, cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var index in existing.Indexes.Where(i => i.Name.StartsWith(DeclaredIndexPrefix, StringComparison.Ordinal)))
+        {
+            await _client.Schema.DeleteIndexAsync(index.Id, cancellationToken).ConfigureAwait(false);
+        }
+
+        var wanted = ColumnsOf(schema).ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var kept = new HashSet<string>(StringComparer.Ordinal);
+        // Computed columns first: a lookup reads through a column of this table that may itself be replaced.
+        foreach (var column in existing.Columns.Where(IsProjected).OrderByDescending(c => c.IsDerived))
+        {
+            if (wanted.TryGetValue(column.Name, out var want) && SameShape(column, want))
+            {
+                kept.Add(column.Name);
+                continue;
+            }
+
+            await _client.Schema.DropColumnAsync(schema.TableName, column.Name, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Stored columns before computed ones, which may read through them.
+        foreach (var want in wanted.Values.Where(w => !kept.Contains(w.Name)).OrderBy(w => w.Lookup is not null))
+        {
+            await _client.Schema.AddColumnAsync(schema.TableName, new AddColumnRequest
+            {
+                Name = want.Name,
+                Type = want.Type,
+                Nullable = want.Nullable,
+                Lookup = want.Lookup,
+            }, cancellationToken).ConfigureAwait(false);
+        }
+
+        await CreateDeclaredIndexesAsync(schema, cancellationToken).ConfigureAwait(false);
+        foreach (var relation in declared)
+        {
+            await MaterializeRelationAsync(schema.TableName, relation, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    // MorphDB's own columns start with an underscore; every other column is the projection's.
+    private static bool IsProjected(ColumnInfo column) => !column.Name.StartsWith('_');
+
+    private static bool SameShape(ColumnInfo existing, CreateColumnRequest wanted) =>
+        string.Equals(existing.Type, wanted.Type, StringComparison.OrdinalIgnoreCase)
+        && existing.Nullable == wanted.Nullable
+        && SameLookup(existing.Lookup, wanted.Lookup);
+
+    private static bool SameLookup(LookupConfig? a, LookupConfig? b) =>
+        (a, b) switch
+        {
+            (null, null) => true,
+            (null, _) or (_, null) => false,
+            _ => a.RelationColumn == b.RelationColumn
+                && a.TargetTable == b.TargetTable
+                && a.TargetColumn == b.TargetColumn
+                && a.MatchColumn == b.MatchColumn
+                && a.OrderBy == b.OrderBy
+                && a.WhenTargetMissing == b.WhenTargetMissing,
+        };
+
+    private const string DeclaredIndexPrefix = "fb_dx_";
+
+    private static IEnumerable<CreateColumnRequest> ColumnsOf(TableSchema schema) =>
+        schema.Columns.SelectMany(c => c.Reference is { } reference
+            ? [Column(c.Name, c.Type, c.Nullable, Lookup(reference, reference.ValueColumn)), .. SourceColumns(c.Name, reference)]
+            : new[] { Column(c.Name, c.Type, c.Nullable, lookup: null) });
+
+    private async Task CreateDeclaredIndexesAsync(TableSchema schema, CancellationToken cancellationToken)
+    {
+        // Declared indexes, numbered in declared order: MorphDB keys an index's physical name by its
+        // table, so the number only has to be unique here.
+        var indexes = schema.Indexes ?? [];
+        for (var ordinal = 0; ordinal < indexes.Count; ordinal++)
+        {
+            await _client.Schema.CreateIndexAsync(
+                schema.TableName,
+                new CreateIndexRequest { Name = $"{DeclaredIndexPrefix}{ordinal}", Columns = [.. indexes[ordinal].Columns] },
+                cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -163,26 +295,13 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         var request = new CreateTableRequest
         {
             Name = schema.TableName,
-            Columns = schema.Columns
-                .SelectMany(c => c.Reference is { } reference
-                    ? [Column(c.Name, c.Type, c.Nullable, Lookup(reference, reference.ValueColumn)), .. SourceColumns(c.Name, reference)]
-                    : new[] { Column(c.Name, c.Type, c.Nullable, lookup: null) })
-                .ToList(),
+            Columns = ColumnsOf(schema).ToList(),
             Metadata = _owner is null ? null : OwnerMark(await _owner.GetOwnerAsync(cancellationToken).ConfigureAwait(false)),
         };
 
         await _client.Schema.CreateTableAsync(request, cancellationToken).ConfigureAwait(false);
 
-        // Declared indexes, numbered in declared order: MorphDB keys an index's physical name by its
-        // table, so the number only has to be unique here, and a redeclared set rebuilds the table.
-        var indexes = schema.Indexes ?? [];
-        for (var ordinal = 0; ordinal < indexes.Count; ordinal++)
-        {
-            await _client.Schema.CreateIndexAsync(
-                schema.TableName,
-                new CreateIndexRequest { Name = $"fb_dx_{ordinal}", Columns = [.. indexes[ordinal].Columns] },
-                cancellationToken).ConfigureAwait(false);
-        }
+        await CreateDeclaredIndexesAsync(schema, cancellationToken).ConfigureAwait(false);
 
         if (schema.Relations is { Count: > 0 })
         {
@@ -205,7 +324,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// latest accepted when several match, null when none does.
     /// <para>
     /// <c>whenTargetMissing: null</c> because the target is another projection with a life of its own:
-    /// projections run in no particular order and rebuild by dropping and recreating their table, so the
+    /// projections run in no particular order and each rebuild empties and reshapes its table, so the
     /// target may not exist yet, may be mid-rebuild, or may not yet carry the column a redeclaration
     /// names. Each of those reads as no match — and the result as stale, which the core decides from
     /// the target's projection state — rather than refusing this table or failing its reads.
@@ -318,7 +437,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
     /// <summary>
     /// Materializes one declared relation as a MorphDB virtual FK, always with
-    /// <c>EnforceOnWrite: false</c> — the drop-and-rebuild orchestration in the core projector gives
+    /// <c>EnforceOnWrite: false</c> — the rebuild orchestration in the core projector gives
     /// no ordering guarantee between a form type's table and the tables its relations name, so a
     /// child can (and, on the first projection of either side, will) be written before its parent
     /// has been reloaded. Enforcing would reject data that is consistent at its source; this project

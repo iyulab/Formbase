@@ -19,6 +19,21 @@ public interface IProjectionStore
     /// <summary>Creates a table from the schema. Fails if the table already exists (drop first).</summary>
     Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Leaves the table with exactly <paramref name="schema"/>'s shape and no rows — what a rebuild
+    /// refills. A store whose tables carry things the projection does not own keeps the table itself
+    /// and reshapes it in place, so they survive the rebuild: a MorphDB table's row-level security
+    /// policies, webhooks and subscriptions are bound to the table, and dropping it removes them
+    /// silently. A store with nothing attached to a table may drop and recreate it, which is what this
+    /// default does.
+    /// </summary>
+    async Task ResetTableAsync(TableSchema schema, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        await DropTableAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
+        await CreateTableAsync(schema, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Inserts rows into an existing table; returns the number inserted.</summary>
     Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default);
 
