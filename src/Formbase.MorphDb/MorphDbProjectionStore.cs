@@ -71,28 +71,28 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         CancellationToken cancellationToken = default) =>
         Translated(() => ReplaceRowsCoreAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken));
 
-    public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
-    {
-        RefuseChildFilters(spec.Children);
-        return Translated(() => QueryCoreAsync(tableName, spec, cancellationToken));
-    }
+    public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
+        Translated(() => QueryCoreAsync(tableName, spec, cancellationToken));
 
-    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
-    {
-        RefuseChildFilters(spec.Children);
-        return Translated(() => AggregateCoreAsync(tableName, spec, cancellationToken));
-    }
+    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
+        Translated(() => AggregateCoreAsync(tableName, spec, cancellationToken));
 
-    // TODO(upstream: MorphDB relation filter — ISSUE-morphdb-20261022-child-exists-filter): answer a child filter
-    // with the server's EXISTS condition once the client carries it. Refused until then, never ignored —
-    // dropping the condition would answer for every parent.
-    private static void RefuseChildFilters(IReadOnlyList<ChildFilter>? children)
-    {
-        if (children is { Count: > 0 })
+    /// <summary>
+    /// A query's conditions as MorphDB filters: each field filter as itself, and each child filter as an
+    /// <c>exists</c> — the child table's rows whose key column holds the row's join column, kept by the
+    /// child condition — so the server answers it in the same statement as the rest.
+    /// </summary>
+    private static List<Filter> Filters(IReadOnlyList<FieldFilter>? filters, IReadOnlyList<ChildFilter>? children) =>
+    [
+        .. (filters ?? []).Select(f => new Filter(f.Column, ToMorph(f), f.Value)),
+        .. (children ?? []).Select(child =>
         {
-            throw new NotSupportedException("The MorphDB projection store does not answer a child filter yet.");
-        }
-    }
+            var join = child.Join ?? throw new ArgumentException($"The child filter on '{child.Relation}' arrived without its join; the record query sets it.", nameof(children));
+            var condition = child.Condition;
+            return new Filter(join.ParentColumn, MorphOperator.Exists,
+                new RelatedRows(join.ChildTable, join.ChildKeyColumn, [new Filter(condition.Column, ToMorph(condition), condition.Value)]));
+        }),
+    ];
 
     private static async Task<T> Translated<T>(Func<Task<T>> call)
     {
@@ -483,7 +483,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             return [];
         }
 
-        var filters = (spec.Filters ?? []).Select(f => new Filter(f.Column, ToMorph(f), QueryValue(f.Value))).ToList();
+        var filters = Filters(spec.Filters, spec.Children);
 
         // Server-side ordering — the only way paging is deterministic (a client-side sort would order
         // an already-arbitrary page). Descending maps to ascending: false.
@@ -590,7 +590,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         {
             Aggregations = aggregations,
             GroupBy = groupBy,
-            Filter = (spec.Filters ?? []).Select(f => new AggregationFilter(f.Column, ToMorph(f), f.Value)).ToList(),
+            Filter = Filters(spec.Filters, spec.Children).Select(f => new AggregationFilter(f.Column, f.Operator, f.Value)).ToList(),
         };
 
         var response = await _client.Data.AggregateAsync(tableName, request, cancellationToken).ConfigureAwait(false);
@@ -680,14 +680,6 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// formats a <see cref="DateOnly"/> in the query string with the invariant culture's short date
     /// (<c>10/21/2026</c>), which the server does not read as a date.
     /// </summary>
-    // TODO(upstream): drop once the pin is MorphDB.Client 0.30, which writes a DateOnly filter value in ISO form.
-    private static object? QueryValue(object? value) => value switch
-    {
-        DateOnly day => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-        IReadOnlyList<object?> list => list.Select(QueryValue).ToList(),
-        _ => value,
-    };
-
     private static MorphOperator ToMorph(FieldFilter filter) => filter switch
     {
         { Operator: FormbaseOperator.Equal, Value: null } => MorphOperator.IsNull,

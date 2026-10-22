@@ -10,7 +10,7 @@
   orders with a line over 100. The condition is checked against the target's declared columns, the join is
   the relation's key field (or the parent's record, for a section whose parent declares none), and the
   answer is stale when the target's projection is. Every store answers it alike; on SQLite and MorphDB it is
-  an `EXISTS`. `RelationDef.Target` carries the target's form type.
+  an `EXISTS` (MorphDB 0.30's `exists` filter). `RelationDef.Target` carries the target's form type.
 
 - **A repeated section of values.** A section that declares one field beside its key field takes items
   that are values as well as objects — `"tags": ["rush", "fragile"]` projects two rows, each value in that
