@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.31.0
+
+A minor. Pairs with MorphDB `0.30.x`. A multiple choice becomes rows: a section that declares one field
+beside its key takes values, the formdown adapter declares a checkbox group as one, and a query keeps the
+records that have a child row meeting a condition (`ChildFilter`) — the inspections with a dent checked —
+on every store. Also new: a calendar-date column type, declared indexes, computed fields, JSON Pointer
+source keys, distinct counts, ranked and cut groups, `In` filters, and a durable host that presents a MorphDB
+secret. Breaking: a formdown checkbox group is a section, not a JSON column; an equality, grouping or
+distinct count on a JSON column is refused; a `sourceKey` starting with `/` is a JSON Pointer.
 
 ### Added
 
@@ -82,8 +90,9 @@
   `PRAGMA optimize`, which analyzes a table only when its row count has moved tenfold since it was last
   analyzed, under a bounded sample. Without statistics the planner could pick the wrong one of several
   indexes on a table; a projection now pays for a few analyses as its table grows.
-- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.29.0** (was 0.28.0); the live MorphDB suite and the
-  compose file run `ghcr.io/iyulab/morphdb:0.29.0`.
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.30.0** (was 0.28.0); the live MorphDB suite and the
+  compose file run `ghcr.io/iyulab/morphdb:0.30.0`. A child filter needs a 0.30 server (`exists`), and a
+  date filter value reaches it in ISO form.
 - **The MorphDB projection store names the row MorphDB refuses.** A refused insert now fails with the
   document id and record key of the refused row and the table, with MorphDB's error inside; it used to
   carry only MorphDB's message, whose row position counts within one chunk of the write. Needs MorphDB
