@@ -442,6 +442,15 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         var relation = (await ReadAsync(await _client.GetAsync($"/formtypes/{parent}/declaration", ct)))
             .GetProperty("relations")[0];
         relation.GetProperty("sectionField").GetString().Should().Be("lines");
+
+        // The section's own declaration names where its rows come from; the parent's names nothing.
+        var sectionOf = (await ReadAsync(await _client.GetAsync($"/formtypes/{section}/declaration", ct))).GetProperty("sectionOf");
+        sectionOf.GetProperty("formType").GetString().Should().Be(parent);
+        sectionOf.GetProperty("relation").GetString().Should().Be("lines");
+        sectionOf.GetProperty("sectionField").GetString().Should().Be("lines");
+        sectionOf.GetProperty("keyField").GetString().Should().Be("order_no");
+        var parentRead = await ReadAsync(await _client.GetAsync($"/formtypes/{parent}/declaration", ct));
+        (!parentRead.TryGetProperty("sectionOf", out var none) || none.ValueKind == JsonValueKind.Null).Should().BeTrue();
     }
 
     [Fact]

@@ -873,6 +873,16 @@
             "items": {
               "$ref": "#/components/schemas/DeclaredIndex"
             }
+          },
+          "sectionOf": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredSectionOfResponse"
+              }
+            ]
           }
         }
       },
@@ -1153,6 +1163,29 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "DeclaredSectionOfResponse": {
+        "required": [
+          "formType",
+          "relation",
+          "sectionField",
+          "keyField"
+        ],
+        "type": "object",
+        "properties": {
+          "formType": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "sectionField": {
+            "type": "string"
+          },
+          "keyField": {
+            "type": "string"
           }
         }
       },

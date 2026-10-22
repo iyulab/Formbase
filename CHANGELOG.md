@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A repeated section's declaration names where its rows come from.** `GET /formtypes/{type}/declaration`
+  (and the reply to `PUT`) on a form type that is a repeated section of another carries `sectionOf` — the
+  parent form type, the child relation naming the section, the array field holding the rows, and the
+  parent field each row carries. A section's own declaration does not say it is one, so a reader that
+  starts from the section — sampling its rows over HTTP — had no way to find the documents they are cut
+  from. `null` on every other form type.
+
 ## 0.32.0
 
 A minor, and a fix that matters for anyone who restricts a projected table with MorphDB row-level

@@ -84,7 +84,7 @@ internal static class DeclarationEndpoints
                 statusCode: StatusCodes.Status404NotFound,
                 title: "The form type has no declaration",
                 type: "/problems/no-declaration")
-            : Results.Ok(Describe(declaration));
+            : Results.Ok(Describe(declaration, await hints.GetSectionSourceAsync(formType, cancellationToken).ConfigureAwait(false)));
     }
 
     private static async Task<IResult> DeclareAsync(
@@ -125,7 +125,8 @@ internal static class DeclarationEndpoints
         // whether it stored what it was handed.
         var stored = await hints.GetHintsAsync(formType, cancellationToken).ConfigureAwait(false);
         var status = await engine.GetProjectionStatusAsync(formType, cancellationToken).ConfigureAwait(false);
-        var body = new DeclarationWriteResponse(Describe(stored!), Describe(status, runTracker.TryGet(formType)));
+        var section = await hints.GetSectionSourceAsync(formType, cancellationToken).ConfigureAwait(false);
+        var body = new DeclarationWriteResponse(Describe(stored!, section), Describe(status, runTracker.TryGet(formType)));
 
         return existing is null
             ? Results.Created($"/formtypes/{formType}/declaration", body)
@@ -262,7 +263,7 @@ internal static class DeclarationEndpoints
                 : throw new ArgumentException($"The target on '{target.FormType}' names both a lookup field and a lookup by record; give one.")
             : target.LookupKey is null ? null : TargetLookup.Field(target.LookupKey);
 
-    private static DeclarationResponse Describe(FormTypeHints declaration) =>
+    private static DeclarationResponse Describe(FormTypeHints declaration, SectionSource? section) =>
         new(
             declaration.Type.Value,
             declaration.TableName,
@@ -290,7 +291,10 @@ internal static class DeclarationEndpoints
                 r.KeyField,
                 r.SectionField))],
             declaration.BusinessName,
-            [.. (declaration.Indexes ?? []).Select(i => new DeclaredIndex([.. i.Fields]))]);
+            [.. (declaration.Indexes ?? []).Select(i => new DeclaredIndex([.. i.Fields]))],
+            section is null
+                ? null
+                : new DeclaredSectionOfResponse(section.Parent.Type.Value, section.Relation.Name, section.SectionField, section.Relation.KeyField));
 
     private static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
         new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value, LastRunResponse.FromTracked(lastRun));

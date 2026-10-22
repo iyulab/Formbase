@@ -19,6 +19,11 @@ namespace Formbase.Host.Contracts;
 /// <param name="Relations">Declared links to other form types.</param>
 /// <param name="BusinessName">The name a person reads the form by, when one is declared.</param>
 /// <param name="Indexes">The indexes the projected table is built with, in declared order — empty when none is declared.</param>
+/// <param name="SectionOf">
+/// Where this form type's rows come from when it is a repeated section of another — null when it takes
+/// documents of its own. A section's own declaration does not say so; the parent's child relation does,
+/// and this names it, so a reader of the section alone can find the documents its rows are cut from.
+/// </param>
 public sealed record DeclarationResponse(
     string FormType,
     string TableName,
@@ -26,7 +31,19 @@ public sealed record DeclarationResponse(
     IReadOnlyList<DeclaredFieldResponse> Fields,
     IReadOnlyList<DeclaredRelationResponse> Relations,
     string? BusinessName = null,
-    IReadOnlyList<DeclaredIndex>? Indexes = null);
+    IReadOnlyList<DeclaredIndex>? Indexes = null,
+    DeclaredSectionOfResponse? SectionOf = null);
+
+/// <summary>
+/// The parent a repeated section's rows are cut from: the form type whose documents hold them, the child
+/// relation that names the section, the array field holding the rows, and the parent's field each row
+/// carries. A row's record identity is the parent's, a slash and its position in that array.
+/// </summary>
+/// <param name="FormType">The parent form type — the one whose documents hold the rows.</param>
+/// <param name="Relation">The parent's child relation that names this section.</param>
+/// <param name="SectionField">The array field of the parent's documents that holds the rows.</param>
+/// <param name="KeyField">The field each row carries the parent's value of.</param>
+public sealed record DeclaredSectionOfResponse(string FormType, string Relation, string SectionField, string KeyField);
 
 /// <summary>
 /// An index the projected table is built with: the declared fields it covers, in index order — a composite

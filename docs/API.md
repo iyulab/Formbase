@@ -327,7 +327,8 @@ GET /formtypes/orders/declaration
     { "name": "lines", "kind": "child", "target": "orderlines", "keyField": "orderId" }
   ],
   "businessName": "Sales order",
-  "indexes": [ { "fields": ["customerId"] } ]
+  "indexes": [ { "fields": ["customerId"] } ],
+  "sectionOf": null
 }
 ```
 
@@ -434,6 +435,10 @@ value (the parent's value wins over an item property of the same name; a parent 
 named like `keyField` gives each row its record identity instead). The parent's own table does not carry
 the array.
 
+- **The section's declaration names its parent.** Read back, `orderlines`' declaration carries
+  `"sectionOf": { "formType": "orders", "relation": "lines", "sectionField": "lines", "keyField": "orderNo" }`
+  — the documents its rows are cut from, so a reader that starts from the section can find them. Every
+  other form type answers `"sectionOf": null`.
 - **The section has no documents of its own.** A document or retirement sent under `orderlines` is
   refused with `409` `/problems/form-type-is-a-section`. Its projection status, staleness and trigger
   follow the parent's stream, so a new order makes `orderlines` stale. Documents it received before it
