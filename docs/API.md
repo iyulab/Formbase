@@ -441,9 +441,16 @@ the array.
 - **A row is part of its parent's record.** Its record identity is the parent's, a slash and the item's
   position (`o-1/0`); it shares the parent's document and record key, and a record query names it with
   `record.row`, its position. Correcting or retiring the parent replaces every row it held.
+- **A section of values.** When the section declares one field beside its `keyField`, an item may be a
+  value instead of an object — a checkbox group's chosen options, a list of tags — and each value becomes
+  that field of its row: `"tags": ["rush", "fragile"]` is two rows. Each value can then be filtered on,
+  grouped and counted like any column, the way a multiple choice is a one-to-many table.
 - **What cannot be read is a skip of the parent document.** A section that is not an array, or an item
-  that is not an object, skips the parent; a row missing a required field is a skip of the parent whose
-  reason names the row (`row 1 of section 'lines': …`). A parent with no section, or `null`, holds no rows.
+  that is neither an object nor (in a section of values) a value, skips the parent; a row missing a required
+  field is a skip of the parent whose reason names the row (`row 1 of section 'lines': …`).
+- **A missing section is told apart from an empty one.** A parent with no section, or `null`, holds no rows
+  and is counted under the section field in the section projection's `absentFieldCounts`; an empty array is
+  an answer — no lines, nothing chosen — and holds no rows without being counted.
 - **Declarations are checked.** `sectionField` is refused (`400` `/problems/invalid-declaration`) on a
   `reference` relation, when the parent also declares it as a field, when another form type already names
   the same section, when either side would nest sections, and when the section does not declare the

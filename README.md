@@ -259,7 +259,9 @@ A reference declared without the lookup pair cannot be computed and projects emp
 schema formdown core's `getSchema()` returns becomes the form type's declaration — a label someone
 wrote becomes the field's `BusinessName` — and a filled form, whose values formdown hands over as
 text, becomes a document typed by that declaration. What the declaration has no slot for (option
-lists, ranges, patterns, formulas) comes back as gaps instead of being dropped silently.
+lists, ranges, patterns, formulas) comes back as gaps instead of being dropped silently. A checkbox group
+is not a column: it becomes a repeated section of values (`schema.Sections`), one row per checked option,
+so options can be filtered on, grouped and counted — declare `schema.Declarations`.
 
 <!-- snippet: compile packages="Formbase.Core Formbase.DependencyInjection Formbase.Formdown Microsoft.Extensions.DependencyInjection" -->
 ```csharp
@@ -285,7 +287,8 @@ var schema = FormdownAdapter.AdaptSchema("""
      "qty":{"type":"number","validation":{"min":0}},
      "result":{"type":"radio","options":[{"value":"pass"},{"value":"fail"}]}}
     """, inspection, "inspections");
-hints.Declare(schema.Hints);
+foreach (var declaration in schema.Declarations)  // the form, and a section per checkbox group
+    hints.Declare(declaration);
 // schema.Gaps -> what the declaration cannot carry: min=0 on qty, the options of result
 
 // 2) A filled form: its values arrive as text, and are typed by the declaration.

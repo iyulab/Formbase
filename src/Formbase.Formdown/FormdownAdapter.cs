@@ -29,9 +29,25 @@ namespace Formbase.Formdown;
 public static class FormdownAdapter
 {
     /// <summary>The result of adapting one formdown schema: the hints, and what did not fit them.</summary>
-    /// <param name="Hints">The declaration for the form type, one field per data field of the form, in form order.</param>
+    /// <param name="Hints">
+    /// The declaration for the form type, one field per data field of the form, in form order — except a
+    /// checkbox group, which is a child relation to one of <paramref name="Sections"/>.
+    /// </param>
     /// <param name="Gaps">The constructs the hints cannot carry.</param>
-    public sealed record SchemaResult(FormTypeHints Hints, IReadOnlyList<VocabularyGap> Gaps);
+    /// <param name="Sections">
+    /// One section form type per checkbox group: each checked option is one row of it — the parent's record
+    /// and a <c>value</c> — so an option can be filtered, grouped and counted like any value, as a multiple
+    /// choice is a one-to-many table in the derivation rules. Declare these with <paramref name="Hints"/>
+    /// (<see cref="Declarations"/>).
+    /// </param>
+    public sealed record SchemaResult(FormTypeHints Hints, IReadOnlyList<VocabularyGap> Gaps, IReadOnlyList<FormTypeHints> Sections)
+    {
+        /// <summary>Every declaration the form needs — its sections, then the form type itself.</summary>
+        public IReadOnlyList<FormTypeHints> Declarations => [.. Sections, Hints];
+    }
+
+    /// <summary>The field of a checkbox group's section that holds one checked option.</summary>
+    public const string SectionValueField = "value";
 
     /// <summary>
     /// Adapts a formdown schema — the JSON of <c>getSchema(content)</c>, an object of field name to field
@@ -61,19 +77,37 @@ public static class FormdownAdapter
 
         var fields = new List<FieldHint>();
         var gaps = new List<VocabularyGap>();
+        var groups = new List<FieldHint>();
         var declaration = type.Value;
         foreach (var (name, schema, _) in declared
             .OrderBy(f => Position(f.Schema) ?? int.MaxValue)
             .ThenBy(f => f.Order))
         {
             var field = AdaptField(declaration, name, schema, gaps);
-            if (field is not null)
+            if (field is null)
             {
-                fields.Add(field);
+                continue;
             }
+
+            (IsCheckboxGroup(schema) ? groups : fields).Add(field);
         }
 
-        return new SchemaResult(new FormTypeHints(type, tableName, fields), gaps);
+        // A checkbox group is not a column of the form: its checked options are the rows of a section,
+        // joined to the form's record. The key field is named so it cannot be one of the form's own fields —
+        // a parent field of that name would be read as the link.
+        var parentKey = "parent";
+        while (fields.Any(f => f.Name == parentKey))
+        {
+            parentKey += "_";
+        }
+
+        var sections = groups.Select(group => new FormTypeHints(
+            FormTypeRef.Create($"{type.Value}.{group.Name}"),
+            $"{tableName}_{group.Name}",
+            [new FieldHint(parentKey, ColumnType.Text, Nullable: false), new FieldHint(SectionValueField, ColumnType.Text, Nullable: false, BusinessName: group.BusinessName)])).ToList();
+        var relations = groups.Zip(sections, (group, section) => new RelationHint(group.Name, RelationKind.Child, section.Type, parentKey, group.Name)).ToList();
+
+        return new SchemaResult(new FormTypeHints(type, tableName, fields, relations.Count > 0 ? relations : null), gaps, sections);
     }
 
     /// <summary>
@@ -201,11 +235,9 @@ public static class FormdownAdapter
                 // column would leave a fraction out of every range and sum.
                 return ColumnType.Decimal;
             case "checkbox" when hasOptions:
-                // A checkbox group hands over the list of the values checked.
-                gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
-                    "checkbox group",
-                    "Several checked values are one JSONB array; the element type (one of the options) drops."));
-                return ColumnType.Jsonb;
+                // A checkbox group hands over the list of the values checked; each becomes a row of the
+                // group's section (AdaptSchema), and this is the type of one checked value.
+                return ColumnType.Text;
             case "checkbox":
                 return ColumnType.Boolean;
             case "date":
@@ -231,6 +263,10 @@ public static class FormdownAdapter
                 return ColumnType.Text;
         }
     }
+
+    private static bool IsCheckboxGroup(JsonElement schema) =>
+        schema.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String && type.GetString() == "checkbox"
+        && schema.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array && options.GetArrayLength() > 0;
 
     private static void WriteTyped(Utf8JsonWriter writer, JsonElement value, ColumnType type)
     {

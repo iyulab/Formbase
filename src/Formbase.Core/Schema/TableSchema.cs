@@ -81,6 +81,11 @@ public sealed record TableSchema(
                 .Append(Sep).Append(section.SectionField)
                 .Append(Sep).Append(section.ParentKey ?? string.Empty)
                 .Append(Sep).Append(section.RowKey);
+            if (section.ValueMember is { } valueMember)
+            {
+                // Only for a section of values, so a section of objects keeps its fingerprint.
+                canonical.Append(Sep).Append('=').Append(valueMember);
+            }
         }
 
         foreach (var index in Indexes ?? [])

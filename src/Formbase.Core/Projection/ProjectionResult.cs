@@ -23,7 +23,9 @@ namespace Formbase.Core.Projection;
 /// at all. An explicit <c>null</c> in the document is an answer and is not counted here — a field the
 /// document never had is a different fact (the projected NULL conflates both; these counts make the
 /// conflation visible per projection). Covers only rows that landed; skipped documents report their
-/// own reasons via <see cref="Skipped"/>.
+/// own reasons via <see cref="Skipped"/>. A repeated section's table also counts, under its section field,
+/// the parent documents that did not carry the section at all — an empty section is an answer (nothing
+/// chosen) and is not counted.
 /// </param>
 /// <param name="UnresolvedReferences">
 /// Declared <see cref="Schema.FieldBinding.Reference"/> columns that cannot be computed, in declared

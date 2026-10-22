@@ -16,7 +16,12 @@ namespace Formbase.Core.Schema;
 /// record identity instead (<see cref="Projection.ProjectionSystemColumns.RecordOf"/>).
 /// </param>
 /// <param name="RowKey">The key, in each row, that value is written under — the section's key field.</param>
-public sealed record SectionDef(FormTypeRef ParentType, string SectionField, string? ParentKey, string RowKey)
+/// <param name="ValueMember">
+/// For a section of values — a checkbox group's chosen options, a list of tags — the member each item is
+/// written under in its row: the one field the section declares beside its key field. Null when the section
+/// declares more than that, and its items must be objects.
+/// </param>
+public sealed record SectionDef(FormTypeRef ParentType, string SectionField, string? ParentKey, string RowKey, string? ValueMember = null)
 {
     /// <summary>
     /// The section a declaration gives <paramref name="section"/>'s rows: <paramref name="source"/> names
@@ -45,10 +50,18 @@ public sealed record SectionDef(FormTypeRef ParentType, string SectionField, str
 
         var parentKey = source.Parent.Fields.FirstOrDefault(f => string.Equals(f.Name, keyField, StringComparison.Ordinal));
 
+        // One field beside the key is what a section of values declares: each item is that field's value.
+        // A field read from a pointer reads inside an object item, so it does not make the section one of values.
+        var others = section.Fields.Where(f => !ReferenceEquals(f, rowKey)).ToList();
+        var valueMember = others.Count == 1 && others[0] is { } value && !(value.SourceKey is { } valueKey && SourceKeys.IsPointer(valueKey))
+            ? value.SourceKey ?? value.Name
+            : null;
+
         return new SectionDef(
             source.Parent.Type,
             source.SectionField,
             parentKey is null ? null : parentKey.SourceKey ?? SourceKeys.ForMember(parentKey.Name),
-            rowKey.SourceKey ?? rowKey.Name);
+            rowKey.SourceKey ?? rowKey.Name,
+            valueMember);
     }
 }

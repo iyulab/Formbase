@@ -29,7 +29,7 @@ public class FormdownAdapterTests
         hints.Type.Should().Be(Inspection);
         hints.TableName.Should().Be("inspections");
         hints.Fields.Select(f => f.Name).Should().Equal(
-            "lot_no", "inspected_on", "qty", "unit_price", "total", "passed", "result", "defects",
+            "lot_no", "inspected_on", "qty", "unit_price", "total", "passed", "result",
             "grade", "note", "shift_start", "photo", "lotCode", "supplier");
     }
 
@@ -45,9 +45,22 @@ public class FormdownAdapterTests
         types["total"].Should().Be(ColumnType.Decimal);
         types["passed"].Should().Be(ColumnType.Boolean, "a single checkbox is on or off");
         types["result"].Should().Be(ColumnType.Text);
-        types["defects"].Should().Be(ColumnType.Jsonb, "a checkbox group hands over the list checked");
         types["shift_start"].Should().Be(ColumnType.Text, "a time of day is not a point in time");
         types["photo"].Should().Be(ColumnType.Text);
+    }
+
+    [Fact]
+    public void A_checkbox_group_is_a_section_with_one_row_per_checked_option()
+    {
+        var adapted = Adapted();
+
+        var relation = adapted.Hints.Relations.Should().ContainSingle().Which;
+        relation.Should().Be(new RelationHint("defects", RelationKind.Child, FormTypeRef.Create("inspection.defects"), "parent", "defects"));
+        var section = adapted.Sections.Should().ContainSingle().Which;
+        section.TableName.Should().Be("inspections_defects");
+        section.Fields.Select(f => (f.Name, f.Type, f.Nullable)).Should().Equal(
+            ("parent", ColumnType.Text, false), (FormdownAdapter.SectionValueField, ColumnType.Text, false));
+        adapted.Declarations.Should().Equal(section, adapted.Hints);
     }
 
     [Fact]
@@ -90,7 +103,6 @@ public class FormdownAdapterTests
             ("total", VocabularyGapKind.Derived, "compute \"qty * unit_price\""),
             ("result", VocabularyGapKind.Constraint, "options [pass=합격, fail=불합격]"),
             ("defects", VocabularyGapKind.Constraint, "options [scratch, dent, stain]"),
-            ("defects", VocabularyGapKind.Unresolved, "checkbox group"),
             ("grade", VocabularyGapKind.Constraint, "options [A, B, C] + other"),
             ("shift_start", VocabularyGapKind.Unresolved, "type time"),
             ("photo", VocabularyGapKind.Constraint, "accept=image/*"),
@@ -106,7 +118,7 @@ public class FormdownAdapterTests
         // but getSchema() does not hand it over: the adapter cannot report what it never receives.
         var adapted = Adapted();
 
-        adapted.Hints.Relations.Should().BeNull();
+        adapted.Hints.Relations.Should().NotContain(r => r.Name == "supplier");
         adapted.Gaps.Should().NotContain(g => g.Field == "supplier");
     }
 
@@ -171,7 +183,11 @@ public class FormdownAdapterTests
         var hints = provider.GetRequiredService<InMemoryFieldHintSource>();
 
         var adapted = Adapted();
-        hints.Declare(adapted.Hints);
+        foreach (var declaration in adapted.Declarations)
+        {
+            hints.Declare(declaration);
+        }
+
         await engine.AcceptAsync(Inspection, FormdownAdapter.AdaptData(
             """{"lot_no":"L-1","inspected_on":"2026-10-20","qty":"12","unit_price":"2.50","total":"30","passed":true,"defects":["dent","stain"]}""",
             adapted.Hints), cancellationToken: ct);
@@ -179,6 +195,19 @@ public class FormdownAdapterTests
             """{"lot_no":"L-2","inspected_on":"2026-10-21","qty":"8","unit_price":"3","total":"24","passed":false,"defects":[]}""",
             adapted.Hints), cancellationToken: ct);
         var projected = await engine.ProjectAsync(Inspection, ct);
+
+        // The checked options are rows: each can be filtered on, grouped and counted, and the form with
+        // none checked adds no row while a form that never had the group is counted as missing it.
+        await engine.AcceptAsync(Inspection, FormdownAdapter.AdaptData(
+            """{"lot_no":"L-3","inspected_on":"2026-10-22","qty":"1","unit_price":"1","total":"1","passed":true}""",
+            adapted.Hints), cancellationToken: ct);
+        var defects = adapted.Sections[0].Type;
+        var sectionProjection = await engine.ProjectAsync(defects, ct);
+        sectionProjection.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["defects"] = 1 });
+        var dents = await engine.QueryAsync(defects, new QuerySpec([new FieldFilter(FormdownAdapter.SectionValueField, FilterOperator.Equal, "dent")]), ct);
+        dents.Rows.Should().ContainSingle();
+        var perOption = await engine.AggregateAsync(defects, new AggregateSpec(GroupBy: [FormdownAdapter.SectionValueField]), ct);
+        perOption.Groups.Select(g => ((string?)g.Key[FormdownAdapter.SectionValueField], g.Count)).Should().BeEquivalentTo([("dent", 1), ("stain", 1)]);
 
         projected.Should().NotBeNull();
         (await engine.GetProjectionFieldSkipsAsync(Inspection, ct)).Should().BeEmpty("every value the form sent fits its column");

@@ -159,6 +159,48 @@ public abstract class SectionStoreContractTests
 
         (await h.Engine.QueryAsync(Order, QuerySpec.All, ct)).Rows.Should().ContainSingle().Which.Record.Row.Should().BeNull();
     }
+
+    private FormTypeRef Tag => FormTypeRef.Create("t_" + _suffix);
+
+    [Fact]
+    public async Task A_section_of_values_holds_one_row_per_value_and_counts_a_parent_without_it()
+    {
+        var store = CreateStore();
+        var h = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        // One field beside the key: each item of the array is that field's value.
+        h.Hints.Declare(new FormTypeHints(Tag, Tag.Value, [new FieldHint("order_no", ColumnType.Text), new FieldHint("tag", ColumnType.Text)]));
+        h.Hints.Declare(new FormTypeHints(Order, Order.Value,
+            [new FieldHint("order_no", ColumnType.Text), new FieldHint("customer", ColumnType.Text)],
+            [new RelationHint("lines", RelationKind.Child, Line, "order_no", "lines"), new RelationHint("tags", RelationKind.Child, Tag, "order_no", "tags")]));
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-1","tags":["rush","fragile"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-2","tags":["rush"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-3","tags":[]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-4"}"""), cancellationToken: ct);
+
+        var projected = await h.Engine.ProjectAsync(Tag, ct);
+
+        projected.Inserted.Should().Be(3);
+        projected.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["tags"] = 1 }, "an empty list is an answer; a missing one is not");
+        var rush = await h.Engine.QueryAsync(Tag, new QuerySpec([new FieldFilter("tag", FilterOperator.Equal, "rush")], OrderBy: [new OrderKey("order_no")]), ct);
+        rush.Rows.Select(r => (string?)r.Fields["order_no"]).Should().Equal("A-1", "A-2");
+        var perTag = await h.Engine.AggregateAsync(Tag, new AggregateSpec(GroupBy: ["tag"]), ct);
+        perTag.Groups.Select(g => ((string?)g.Key["tag"], g.Count)).Should().BeEquivalentTo([("fragile", 1), ("rush", 2)]);
+    }
+
+    [Fact]
+    public async Task A_value_in_a_section_of_objects_is_refused_by_naming_what_a_section_of_values_declares()
+    {
+        var store = CreateStore();
+        var h = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        var document = await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-1","lines":["bolt"]}"""), cancellationToken: ct);
+
+        var projected = await h.Engine.ProjectAsync(Line, ct);
+
+        projected.Skipped.Should().ContainSingle().Which.Should().Match<ProjectionSkip>(s =>
+            s.DocumentId == document && s.Reason.Contains("a section of values declares one field beside its key"));
+    }
 }
 
 /// <summary>Runs the section contract against the in-memory store.</summary>

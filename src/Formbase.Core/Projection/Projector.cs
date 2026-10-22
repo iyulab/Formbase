@@ -280,6 +280,13 @@ public sealed class Projector : IProjector
                 continue;
             }
 
+            if (expansion.IsAbsent)
+            {
+                // The parent never answered the section: counted under the section field, apart from a parent
+                // whose section is empty (an answer — nothing chosen), which adds no rows and no count.
+                mapped.AbsentCounts[section.SectionField] = mapped.AbsentCounts.GetValueOrDefault(section.SectionField) + 1;
+            }
+
             foreach (var row in expansion.Rows)
             {
                 MapOne(mapped, schema, document, row.Body, row.Record, row.Position, $"row {row.Position} of section '{section.SectionField}': ");

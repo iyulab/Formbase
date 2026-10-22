@@ -4,6 +4,12 @@
 
 ### Added
 
+- **A repeated section of values.** A section that declares one field beside its key field takes items
+  that are values as well as objects — `"tags": ["rush", "fragile"]` projects two rows, each value in that
+  field — so a multiple choice is a one-to-many table whose values filter, group and count like any column.
+  A section projection counts, under the section field in `AbsentFieldCounts`, the parent documents that do
+  not carry the section at all (absent or `null`); an empty array is an answer and is not counted.
+
 - **A calendar-date column type: `ColumnType.Date`** (`date` on the wire). A day is not a point in time:
   `2026-10-21` is the same day in every offset, where a timestamp at midnight UTC is another day west of
   Greenwich. Values are `DateOnly`; a document carries one as `yyyy-MM-dd` (a timestamp string in a
@@ -50,6 +56,14 @@
   MorphDB 0.29, which reads a list filter.
 
 ### Changed
+
+- **formdown: a checkbox group is a section, not a JSON column** (breaking). `FormdownAdapter.AdaptSchema`
+  declares each checkbox group as a child relation to a section form type (`SchemaResult.Sections` —
+  `<form>.<field>`, table `<table>_<field>`, fields `parent` and `value`), one row per checked option; the
+  form's own declaration no longer has the column, and the "checkbox group" gap is gone. Declare
+  `SchemaResult.Declarations` (the sections, then the form). To migrate a query that filtered or grouped the
+  group's column: query the section's form type on `value`, and read the form's record from each row's
+  `parent`. Documents already stored need no change — the array in them is what the section reads.
 
 - **The SQLite projection store keeps planner statistics.** After writing rows it runs SQLite's
   `PRAGMA optimize`, which analyzes a table only when its row count has moved tenfold since it was last

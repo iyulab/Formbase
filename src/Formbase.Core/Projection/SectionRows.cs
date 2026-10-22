@@ -6,7 +6,8 @@ namespace Formbase.Core.Projection;
 
 /// <summary>
 /// Cuts a repeated section's rows out of a parent document (<see cref="SectionDef"/>): one row per item
-/// of the section array, each carrying the parent's key value. The projector builds a section's table
+/// of the section array, each carrying the parent's key value. An item is an object of fields, or — in a
+/// section of values (<see cref="SectionDef.ValueMember"/>) — a value written under that one field. The projector builds a section's table
 /// from these, and any other reader that wants the section's rows rather than the parent's documents
 /// uses the same cut, so the two cannot disagree about what a row is.
 /// </summary>
@@ -31,7 +32,7 @@ public static class SectionRows
 
         if (!root.TryGetProperty(section.SectionField, out var items) || items.ValueKind == JsonValueKind.Null)
         {
-            return SectionExpansion.None;
+            return SectionExpansion.Absent;
         }
 
         if (items.ValueKind != JsonValueKind.Array)
@@ -48,9 +49,12 @@ public static class SectionRows
         var position = 0;
         foreach (var item in items.EnumerateArray())
         {
-            if (item.ValueKind != JsonValueKind.Object)
+            var isValue = item.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False;
+            if (item.ValueKind != JsonValueKind.Object && !(isValue && section.ValueMember is not null))
             {
-                return SectionExpansion.Refused($"row {position} of section '{section.SectionField}' is a JSON {Kind(item)}, not an object");
+                return SectionExpansion.Refused(section.ValueMember is null && isValue
+                    ? $"row {position} of section '{section.SectionField}' is a JSON {Kind(item)}, not an object — a section of values declares one field beside its key"
+                    : $"row {position} of section '{section.SectionField}' is a JSON {Kind(item)}, not an object{(section.ValueMember is null ? string.Empty : " or a value")}");
             }
 
             rows.Add(new SectionRow(position, $"{parentRecord}/{position}", WithKey(item, section, key, parentRecord)));
@@ -85,11 +89,19 @@ public static class SectionRows
                 writer.WriteNullValue();
             }
 
-            foreach (var property in item.EnumerateObject())
+            if (item.ValueKind != JsonValueKind.Object)
             {
-                if (!string.Equals(property.Name, section.RowKey, StringComparison.Ordinal))
+                writer.WritePropertyName(section.ValueMember!);
+                item.WriteTo(writer);
+            }
+            else
+            {
+                foreach (var property in item.EnumerateObject())
                 {
-                    property.WriteTo(writer);
+                    if (!string.Equals(property.Name, section.RowKey, StringComparison.Ordinal))
+                    {
+                        property.WriteTo(writer);
+                    }
                 }
             }
 
@@ -114,9 +126,13 @@ public static class SectionRows
 /// <summary>The rows a parent document holds for a section, or why none can be read (<see cref="Refusal"/>).</summary>
 /// <param name="Rows">The rows, in array order; empty when refused or when the document holds none.</param>
 /// <param name="Refusal">Why the document's section cannot be read, or null when it can.</param>
-public sealed record SectionExpansion(IReadOnlyList<SectionRow> Rows, string? Refusal)
+/// <param name="IsAbsent">
+/// The document does not carry the section at all — no such field, or null. An empty array is an answer (no
+/// rows: nothing chosen, no lines), and is not absent; the two are told apart when a projection counts what is missing.
+/// </param>
+public sealed record SectionExpansion(IReadOnlyList<SectionRow> Rows, string? Refusal, bool IsAbsent = false)
 {
-    internal static SectionExpansion None { get; } = new([], null);
+    internal static SectionExpansion Absent { get; } = new([], null, IsAbsent: true);
 
     internal static SectionExpansion Refused(string reason) => new([], reason);
 }
