@@ -53,7 +53,9 @@
 - **An equality filter on a JSON column is refused** (`InvalidQueryException`, `400` from the host), as
   a distinct count on one already was: the stores read two JSON values as equal differently, and a
   scalar never equals the list a checkbox group stores, so the filter matched nothing on one store and
-  could match on another. `FilterOperator.Equal` and `In` now apply to every type but `Jsonb`.
+  could match on another. `FilterOperator.Equal` and `In` now apply to every type but `Jsonb`. Grouping
+  an aggregate by a JSON column is refused for the same reason (the in-memory and SQLite stores group
+  the JSON as written, PostgreSQL `jsonb` as parsed); `InvalidQueryException.UngroupableColumns` names it.
 - **`Formbase.Formdown`: a field left empty is no value.** A form can only hand over an empty string for
   an unchosen option or an unwritten box, so `AdaptData` now writes `null` for an empty text field as it
   already did for an empty number or date — an unanswered choice reads as `IsNull`, not as a group of its

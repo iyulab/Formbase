@@ -302,6 +302,27 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task Grouping_by_a_json_column_is_refused_as_its_distinct_count_is()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("checks", ColumnType.Jsonb),
+        ]));
+        // The same list written two ways: a store that keeps the text sees two values, one that parses
+        // it (PostgreSQL jsonb) sees one — so the groups would differ by store.
+        await h.Accept("""{"lot":"L-1","checks":["a","b"]}""");
+        await h.Accept("""{"lot":"L-2","checks":[ "a", "b" ]}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var act = () => h.Query.AggregateAsync(Qc, new AggregateSpec(GroupBy: ["lot", "checks"]));
+
+        (await act.Should().ThrowAsync<InvalidQueryException>())
+            .Which.UngroupableColumns.Should().Equal("checks");
+    }
+
+    [Fact]
     public async Task A_range_filter_value_is_coerced_to_the_column_type()
     {
         var h = new Harness();

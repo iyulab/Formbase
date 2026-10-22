@@ -35,6 +35,12 @@ public sealed class InvalidQueryException : FormbaseException
     /// </summary>
     public IReadOnlyList<AggregateMeasure> InapplicableMeasures { get; }
 
+    /// <summary>
+    /// The grouping columns whose values the stores cannot be relied on to tell apart alike — a JSON
+    /// column, which one store compares as written and another as parsed.
+    /// </summary>
+    public IReadOnlyList<string> UngroupableColumns { get; }
+
     public InvalidQueryException(FormTypeRef formType, IReadOnlyList<string> unknownColumns)
         : this(formType, unknownColumns, [])
     {
@@ -53,21 +59,33 @@ public sealed class InvalidQueryException : FormbaseException
         IReadOnlyList<string> unknownColumns,
         IReadOnlyList<FieldFilter> inapplicableFilters,
         IReadOnlyList<AggregateMeasure> inapplicableMeasures)
-        : base(Describe(formType, unknownColumns, inapplicableFilters, inapplicableMeasures))
+        : this(formType, unknownColumns, inapplicableFilters, inapplicableMeasures, [])
+    {
+    }
+
+    public InvalidQueryException(
+        FormTypeRef formType,
+        IReadOnlyList<string> unknownColumns,
+        IReadOnlyList<FieldFilter> inapplicableFilters,
+        IReadOnlyList<AggregateMeasure> inapplicableMeasures,
+        IReadOnlyList<string> ungroupableColumns)
+        : base(Describe(formType, unknownColumns, inapplicableFilters, inapplicableMeasures, ungroupableColumns))
     {
         FormType = formType;
         UnknownColumns = unknownColumns;
         InapplicableFilters = inapplicableFilters;
         InapplicableMeasures = inapplicableMeasures;
+        UngroupableColumns = ungroupableColumns;
     }
 
     private static string Describe(
         FormTypeRef formType,
         IReadOnlyList<string> unknownColumns,
         IReadOnlyList<FieldFilter> inapplicable,
-        IReadOnlyList<AggregateMeasure> inapplicableMeasures)
+        IReadOnlyList<AggregateMeasure> inapplicableMeasures,
+        IReadOnlyList<string> ungroupableColumns)
     {
-        var parts = new List<string>(3);
+        var parts = new List<string>(4);
         if (unknownColumns.Count > 0)
         {
             parts.Add($"Form type '{formType}' declares no column named " +
@@ -88,6 +106,13 @@ public sealed class InvalidQueryException : FormbaseException
             parts.Add("A sum or an average applies to an integer or decimal column, a minimum or maximum also to a timestamp: " +
                       string.Join(", ", inapplicableMeasures.Select(m => $"{m.Function} of '{m.Column}'")) +
                       $" cannot be asked of form type '{formType}'.");
+        }
+
+        if (ungroupableColumns.Count > 0)
+        {
+            parts.Add("A JSON column cannot be grouped by, as it cannot be counted distinctly: " +
+                      string.Join(", ", ungroupableColumns.Select(c => $"'{c}'")) +
+                      $" of form type '{formType}' would group alike in one store and apart in another.");
         }
 
         return string.Join(" ", parts);

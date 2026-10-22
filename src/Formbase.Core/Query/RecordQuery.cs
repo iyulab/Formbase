@@ -73,7 +73,7 @@ public sealed class RecordQuery : IRecordQuery
         var measures = spec.Measures ?? [];
         var orderBy = spec.OrderBy ?? [];
         RefuseUnorderable(orderBy, groupBy, measures);
-        RefuseUnanswerable(type, spec.Filters, groupBy, schema, measures);
+        RefuseUnanswerable(type, spec.Filters, groupBy, schema, measures, groupBy);
         var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema), Measures = measures };
 
         IReadOnlyList<AggregateGroup> groups;
@@ -365,7 +365,8 @@ public sealed class RecordQuery : IRecordQuery
         IReadOnlyList<FieldFilter>? filters,
         IEnumerable<string> otherColumns,
         TableSchema schema,
-        IReadOnlyList<AggregateMeasure>? measures = null)
+        IReadOnlyList<AggregateMeasure>? measures = null,
+        IReadOnlyList<string>? groupBy = null)
     {
         var declared = schema.Columns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
 
@@ -396,9 +397,15 @@ public sealed class RecordQuery : IRecordQuery
             }
         }
 
-        if (unknown is not null || inapplicable is not null || inapplicableMeasures is not null)
+        // A JSON grouping column is refused for the reason a distinct count of one is: grouping only asks
+        // whether two values are equal, and the stores answer that differently for JSON.
+        var ungroupable = (groupBy ?? [])
+            .Where(c => declared.TryGetValue(c, out var columnType) && columnType == ColumnType.Jsonb)
+            .ToList();
+
+        if (unknown is not null || inapplicable is not null || inapplicableMeasures is not null || ungroupable.Count > 0)
         {
-            throw new InvalidQueryException(type, unknown ?? [], inapplicable ?? [], inapplicableMeasures ?? []);
+            throw new InvalidQueryException(type, unknown ?? [], inapplicable ?? [], inapplicableMeasures ?? [], ungroupable);
         }
     }
 

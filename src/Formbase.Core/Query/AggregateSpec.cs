@@ -6,7 +6,7 @@ namespace Formbase.Core.Query;
 /// of the <see cref="GroupBy"/> columns. Without grouping the answer is one group — every kept row, zero
 /// included.
 /// </summary>
-/// <param name="GroupBy">The columns whose distinct combinations are the groups.</param>
+/// <param name="GroupBy">The columns whose distinct combinations are the groups — any declared column but a <c>Jsonb</c> one, whose equality the stores read differently.</param>
 /// <param name="Filters">The rows counted.</param>
 /// <param name="RecordsPerGroup">
 /// When set, each group also carries the records its count is made of
