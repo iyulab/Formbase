@@ -253,7 +253,9 @@ public sealed class RecordQuery : IRecordQuery
     /// two bookkeeping values that say which record a row is are read out into
     /// <see cref="RecordRow.Record"/> instead, typed, so the identity is a contract and the column names
     /// stay internal. A declared column the physical table lacks (a stale, drifted shape) reads null, so
-    /// the key set holds unconditionally.
+    /// the key set holds unconditionally. Each value is read as its column's type, by the rule a filter
+    /// value and a group key are: a store may hand back the text its backend speaks (an instant, an id
+    /// or a day as a string), and a field must not change type with the store underneath.
     /// </summary>
     private static List<RecordRow> Shape(
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, TableSchema schema, bool referenceSources)
@@ -265,7 +267,7 @@ public sealed class RecordQuery : IRecordQuery
             var fields = new Dictionary<string, object?>(schema.Columns.Count, StringComparer.Ordinal);
             foreach (var column in schema.Columns)
             {
-                fields[column.Name] = row.TryGetValue(column.Name, out var value) ? value : null;
+                fields[column.Name] = row.TryGetValue(column.Name, out var value) ? CoerceValue(value, column.Type) : null;
             }
 
             shaped.Add(new RecordRow(

@@ -350,6 +350,30 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task A_field_reads_as_its_column_type_whatever_the_store_hands_back()
+    {
+        var h = new Harness();
+        var text = new TextAnsweringStore(h.Store);
+        var query = new RecordQuery(h.Raw, new HintSchemaProposer(h.Hints), text, h.State);
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("at", ColumnType.Timestamp),
+            new FieldHint("id", ColumnType.Uuid),
+            new FieldHint("on", ColumnType.Date),
+        ]));
+        await h.Accept("""{"lot":"L-1","at":"2026-10-21T09:00:00+09:00","id":"7a1d4b90-3e2f-4c88-b5d1-6f0e2a9c1b37","on":"2026-10-21"}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var fields = (await query.QueryAsync(Qc, QuerySpec.All, TestContext.Current.CancellationToken)).Rows.Single().Fields;
+
+        fields["at"].Should().Be(new DateTimeOffset(2026, 10, 21, 0, 0, 0, TimeSpan.Zero));
+        fields["id"].Should().Be(Guid.Parse("7a1d4b90-3e2f-4c88-b5d1-6f0e2a9c1b37"));
+        fields["on"].Should().Be(new DateOnly(2026, 10, 21));
+        fields["lot"].Should().Be("L-1");
+    }
+
+    [Fact]
     public async Task A_range_filter_value_is_coerced_to_the_column_type()
     {
         var h = new Harness();
@@ -524,6 +548,31 @@ public class RecordQueryTests
 
         public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
             => Task.FromResult(groups);
+    }
+
+    /// <summary>Answers from another store, but hands values back as the text a REST backend speaks.</summary>
+    private sealed class TextAnsweringStore(IProjectionStore inner) : IProjectionStore
+    {
+        public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) => inner.TableExistsAsync(tableName, cancellationToken);
+        public Task DropTableAsync(string tableName, CancellationToken cancellationToken = default) => inner.DropTableAsync(tableName, cancellationToken);
+        public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) => inner.CreateTableAsync(schema, cancellationToken);
+        public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) => inner.BulkInsertAsync(tableName, rows, cancellationToken);
+
+        public Task<int> ReplaceRowsAsync(string tableName, IReadOnlyCollection<RecordKey> removeKeys, IReadOnlyCollection<DocumentId> removeDocuments, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) => inner.ReplaceRowsAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken);
+
+        public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
+            (await inner.QueryAsync(tableName, spec, cancellationToken)).Select(row => (IReadOnlyDictionary<string, object?>)row.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value switch
+                {
+                    DateTimeOffset instant => instant.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
+                    Guid id => id.ToString(),
+                    DateOnly day => day.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                    _ => pair.Value,
+                },
+                StringComparer.Ordinal)).ToList();
+
+        public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) => inner.AggregateAsync(tableName, spec, cancellationToken);
     }
 
     private sealed class SpecCapturingQueryStore : IProjectionStore

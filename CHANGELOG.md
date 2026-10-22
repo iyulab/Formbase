@@ -74,6 +74,14 @@
   top-level key whose name starts with `/` writes it as `/~1…`; a field with no `sourceKey` whose own
   name starts with `/` keeps reading that name.
 
+### Fixed
+
+- **A query row's field has its column's type on every store.** The MorphDB store handed back the text its
+  API speaks for a timestamp, a UUID or a date (`"2026-10-21T00:00:00Z"`), where the in-memory and SQLite
+  stores give `DateTimeOffset`, `Guid` and `DateOnly`; `RecordRow.Fields` now reads each value as its
+  column's type, by the rule a group key already followed. A host over MorphDB writes such a timestamp
+  as the others do (`+00:00`).
+
 ## 0.30.1
 
 A patch. Pairs with MorphDB `0.28.x`. `Formbase.MorphDb` builds on `MorphDB.Client` 0.28.0 and stops
