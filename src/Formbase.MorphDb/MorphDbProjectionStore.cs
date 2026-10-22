@@ -381,26 +381,46 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             return 0;
         }
 
+        // MorphDB inserts a chunk all or none, and refuses it with a 400 that names the refused row by its
+        // position in the chunk ("[3].field"): that row is named here by its document and record key.
         var inserted = 0;
         foreach (var chunk in (await WritableAsync(tableName, rows, cancellationToken).ConfigureAwait(false)).Chunk(InsertChunkSize))
         {
             var records = chunk.ToList();
-
-            var response = await _client.Batch.InsertManyAsync(tableName, records, cancellationToken).ConfigureAwait(false);
-
-            // A batch reports per-operation outcomes and stays a 200 even when some rows fail, so a
-            // partial failure has to be raised here rather than silently shrinking the count.
-            if (response.FailureCount > 0)
+            try
             {
-                var reason = response.Results.FirstOrDefault(r => !r.Success)?.Error ?? "unknown";
-                throw new InvalidOperationException(
-                    $"MorphDB rejected {response.FailureCount} of {records.Count} rows for '{tableName}': {reason}");
+                var response = await _client.Batch.InsertManyAsync(tableName, records, cancellationToken).ConfigureAwait(false);
+                inserted += response.SuccessCount;
             }
-
-            inserted += response.SuccessCount;
+            catch (MorphDBValidationException refused) when (RefusedRow(refused, records) is { } row)
+            {
+                row.TryGetValue(ProjectionSystemColumns.DocumentId, out var document);
+                row.TryGetValue(ProjectionSystemColumns.RecordKey, out var record);
+                throw new InvalidOperationException(
+                    $"MorphDB refused the row of document '{document}' (record '{record}') for '{tableName}': {refused.Message}",
+                    refused);
+            }
         }
 
         return inserted;
+    }
+
+    /// <summary>The row a refused chunk names by its position (<c>[3]</c> or <c>[3].field</c>), when it names one.</summary>
+    private static IDictionary<string, object?>? RefusedRow(MorphDBValidationException refused, List<IDictionary<string, object?>> records)
+    {
+        foreach (var key in refused.Errors.Keys)
+        {
+            var end = key.IndexOf(']', StringComparison.Ordinal);
+            if (key.StartsWith('[') && end > 1
+                && (end == key.Length - 1 || key[end + 1] == '.')
+                && int.TryParse(key.AsSpan(1, end - 1), NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                && index < records.Count)
+            {
+                return records[index];
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

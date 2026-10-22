@@ -84,6 +84,10 @@
   indexes on a table; a projection now pays for a few analyses as its table grows.
 - **`Formbase.MorphDb` builds on `MorphDB.Client` 0.29.0** (was 0.28.0); the live MorphDB suite and the
   compose file run `ghcr.io/iyulab/morphdb:0.29.0`.
+- **The MorphDB projection store names the row MorphDB refuses.** A refused insert now fails with the
+  document id and record key of the refused row and the table, with MorphDB's error inside; it used to
+  carry only MorphDB's message, whose row position counts within one chunk of the write. Needs MorphDB
+  0.30 (which names the row) — against an older server the error is MorphDB's, as before.
 - Dependencies: Microsoft.Extensions.AI 10.11.0.
 - **An equality filter on a JSON column is refused** (`InvalidQueryException`, `400` from the host), as
   a distinct count on one already was: the stores read two JSON values as equal differently, and a
