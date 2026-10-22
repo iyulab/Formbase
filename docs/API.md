@@ -698,13 +698,18 @@ Each row is **which record it is** and **its declared fields**:
 - **`fields`** — **exactly the declared columns**. The projection's own bookkeeping is not part of what
   a caller reads, because an internal that leaked here would calcify into their contract; which record
   a row is reaches the caller as `record` instead.
+  Each value is written as its column's type whichever store the projection lives in: a `timestamp`
+  as an ISO 8601 instant with an offset (`2026-10-21T00:00:00+00:00`), a `date` as `yyyy-MM-dd`, a
+  `uuid` as its text, a `jsonb` as a string holding the JSON the document carried.
 
 The parameters:
 
 - **`filter`** — repeatable, `column:value`, equality only. The **first** colon separates the two, so
   a value may contain colons. Values are compared as the declared column's type, so `total:42`
   matches a number. A filter that cannot be read is refused rather than dropped: dropping one widens
-  the result, and the caller reads rows they asked to exclude.
+  the result, and the caller reads rows they asked to exclude. A `jsonb` column cannot be filtered: the stores
+  read two JSON values as equal differently, so the same filter would match on one and not another
+  (`400` `/problems/invalid-query`).
 - **`orderBy`** — comma-separated column list; a leading `-` reverses that column. An ordering key
   that cannot be read is refused for the same reason in the other direction: rows left in an order
   nobody asked for are indistinguishable from ordered ones until a second page disagrees with the
