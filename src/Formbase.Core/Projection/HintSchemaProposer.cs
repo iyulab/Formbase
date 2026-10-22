@@ -55,7 +55,7 @@ public sealed class HintSchemaProposer : ISchemaProposer
             foreach (var relation in hints.Relations)
             {
                 var targetTable = await ResolveTableAsync(relation.Target, cancellationToken).ConfigureAwait(false);
-                relations.Add(new RelationDef(relation.Name, relation.Kind, targetTable, relation.KeyField));
+                relations.Add(new RelationDef(relation.Name, relation.Kind, targetTable, relation.KeyField, relation.Target));
             }
         }
 

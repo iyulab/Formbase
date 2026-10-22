@@ -71,11 +71,28 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         CancellationToken cancellationToken = default) =>
         Translated(() => ReplaceRowsCoreAsync(tableName, removeKeys, removeDocuments, rows, cancellationToken));
 
-    public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default) =>
-        Translated(() => QueryCoreAsync(tableName, spec, cancellationToken));
+    public Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
+    {
+        RefuseChildFilters(spec.Children);
+        return Translated(() => QueryCoreAsync(tableName, spec, cancellationToken));
+    }
 
-    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default) =>
-        Translated(() => AggregateCoreAsync(tableName, spec, cancellationToken));
+    public Task<IReadOnlyList<AggregateGroup>> AggregateAsync(string tableName, AggregateSpec spec, CancellationToken cancellationToken = default)
+    {
+        RefuseChildFilters(spec.Children);
+        return Translated(() => AggregateCoreAsync(tableName, spec, cancellationToken));
+    }
+
+    // TODO(upstream: MorphDB relation filter — ISSUE-morphdb-20261022-child-exists-filter): answer a child filter
+    // with the server's EXISTS condition once the client carries it. Refused until then, never ignored —
+    // dropping the condition would answer for every parent.
+    private static void RefuseChildFilters(IReadOnlyList<ChildFilter>? children)
+    {
+        if (children is { Count: > 0 })
+        {
+            throw new NotSupportedException("The MorphDB projection store does not answer a child filter yet.");
+        }
+    }
 
     private static async Task<T> Translated<T>(Func<Task<T>> call)
     {

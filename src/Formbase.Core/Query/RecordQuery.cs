@@ -38,7 +38,8 @@ public sealed class RecordQuery : IRecordQuery
         var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
 
         RefuseUnanswerable(type, spec.Filters, (spec.OrderBy ?? []).Select(k => k.Column), schema);
-        var coerced = WithDeterministicOrder(spec with { Filters = Coerce(spec.Filters, schema) }, schema);
+        var (children, childrenStale) = await ResolveChildrenAsync(type, spec.Children, schema, cancellationToken).ConfigureAwait(false);
+        var coerced = WithDeterministicOrder(spec with { Filters = Coerce(spec.Filters, schema), Children = children }, schema);
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
         try
@@ -51,7 +52,7 @@ public sealed class RecordQuery : IRecordQuery
             throw new ProjectionUnavailableException(type, ex);
         }
 
-        return new QueryResult(Shape(rows, schema, spec.ReferenceSources), stale);
+        return new QueryResult(Shape(rows, schema, spec.ReferenceSources), stale || childrenStale);
     }
 
     public async Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
@@ -74,7 +75,8 @@ public sealed class RecordQuery : IRecordQuery
         var orderBy = spec.OrderBy ?? [];
         RefuseUnorderable(orderBy, groupBy, measures);
         RefuseUnanswerable(type, spec.Filters, groupBy, schema, measures, groupBy);
-        var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema), Measures = measures };
+        var (children, childrenStale) = await ResolveChildrenAsync(type, spec.Children, schema, cancellationToken).ConfigureAwait(false);
+        var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema), Measures = measures, Children = children };
 
         IReadOnlyList<AggregateGroup> groups;
         try
@@ -87,7 +89,7 @@ public sealed class RecordQuery : IRecordQuery
         }
 
         var ordered = Ordered(Typed(groups, schema), groupBy, orderBy);
-        return new AggregateResult(spec.Limit is { } top && ordered.Count > top ? ordered[..top] : ordered, stale);
+        return new AggregateResult(spec.Limit is { } top && ordered.Count > top ? ordered[..top] : ordered, stale || childrenStale);
     }
 
     /// <summary>
@@ -445,6 +447,47 @@ public sealed class RecordQuery : IRecordQuery
         FilterOperator.In => filter.Value is IReadOnlyList<object?> values && !values.Contains(null) && columnType is not ColumnType.Jsonb,
         _ => false,
     };
+
+    /// <summary>
+    /// Each child filter as a store reads it: the relation named on the queried form type, its condition
+    /// checked and coerced against the target's columns, and the join — the target's key column against the
+    /// queried table's column of that name, or its record identity when it declares none (a repeated
+    /// section's rows carry the parent's record then). The answer is stale when a target's projection is.
+    /// </summary>
+    /// <exception cref="ArgumentException">The form type declares no child relation of that name, or the relation names no form type.</exception>
+    private async Task<(IReadOnlyList<ChildFilter>? Children, bool Stale)> ResolveChildrenAsync(
+        FormTypeRef type, IReadOnlyList<ChildFilter>? children, TableSchema schema, CancellationToken cancellationToken)
+    {
+        if (children is not { Count: > 0 })
+        {
+            return (children, false);
+        }
+
+        var resolved = new List<ChildFilter>(children.Count);
+        var stale = false;
+        foreach (var child in children)
+        {
+            ArgumentNullException.ThrowIfNull(child);
+            var relation = (schema.Relations ?? []).FirstOrDefault(r => r.Kind == RelationKind.Child && string.Equals(r.Name, child.Relation, StringComparison.Ordinal))
+                ?? throw new ArgumentException($"'{type.Value}' declares no child relation named '{child.Relation}'.", nameof(children));
+            var target = relation.Target
+                ?? throw new ArgumentException($"The child relation '{child.Relation}' of '{type.Value}' names no form type to read its rows from.", nameof(children));
+
+            var (childSchema, childStale) = await ResolveProjectionAsync(target, cancellationToken).ConfigureAwait(false);
+            RefuseUnanswerable(target, [child.Condition], [], childSchema);
+            var parentColumn = schema.Columns.Any(c => string.Equals(c.Name, relation.KeyColumn, StringComparison.Ordinal))
+                ? relation.KeyColumn
+                : ProjectionSystemColumns.Record;
+            resolved.Add(child with
+            {
+                Condition = Coerce([child.Condition], childSchema)![0],
+                Join = new ChildJoin(childSchema.TableName, relation.KeyColumn, parentColumn),
+            });
+            stale |= childStale;
+        }
+
+        return (resolved, stale);
+    }
 
     private static QuerySpec WithDeterministicOrder(QuerySpec spec, TableSchema schema)
     {

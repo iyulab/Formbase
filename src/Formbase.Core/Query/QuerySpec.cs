@@ -15,12 +15,14 @@ namespace Formbase.Core.Query;
 /// (<see cref="RecordRow.References"/>) — the target record and what reading it found, in the same
 /// read as the value. Off by default: only a caller that asks pays for it.
 /// </param>
+/// <param name="Children">Conditions on child relations (<see cref="ChildFilter"/>); every one applies.</param>
 public sealed record QuerySpec(
     IReadOnlyList<FieldFilter>? Filters = null,
     int? Limit = null,
     int? Offset = null,
     IReadOnlyList<OrderKey>? OrderBy = null,
-    bool ReferenceSources = false)
+    bool ReferenceSources = false,
+    IReadOnlyList<ChildFilter>? Children = null)
 {
     /// <summary>An unfiltered, unordered, unpaged query.</summary>
     public static QuerySpec All { get; } = new();

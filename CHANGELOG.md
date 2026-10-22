@@ -4,6 +4,14 @@
 
 ### Added
 
+- **A query can filter on a child relation: `QuerySpec.Children` / `AggregateSpec.Children`** — a
+  `ChildFilter(relation, condition)` keeps the rows with at least one row of the child relation's target
+  that the condition keeps (existence, as OData's `any()`): the inspections with a dent checked, the
+  orders with a line over 100. The condition is checked against the target's declared columns, the join is
+  the relation's key field (or the parent's record, for a section whose parent declares none), and the
+  answer is stale when the target's projection is. Every store answers it alike; on SQLite and MorphDB it is
+  an `EXISTS`. `RelationDef.Target` carries the target's form type.
+
 - **A repeated section of values.** A section that declares one field beside its key field takes items
   that are values as well as objects — `"tags": ["rush", "fragile"]` projects two rows, each value in that
   field — so a multiple choice is a one-to-many table whose values filter, group and count like any column.

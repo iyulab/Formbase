@@ -98,6 +98,12 @@ public sealed class InMemoryProjectionStore : IProjectionStore
                 query = query.Where(row => filters.All(f => Matches(row, f)));
             }
 
+            if (spec.Children is { Count: > 0 } children)
+            {
+                var having = HavingChildren(children);
+                query = query.Where(having);
+            }
+
             if (spec.OrderBy is { Count: > 0 } orderBy)
             {
                 query = ApplyOrder(query, orderBy);
@@ -131,6 +137,10 @@ public sealed class InMemoryProjectionStore : IProjectionStore
             var kept = spec.Filters is { Count: > 0 } filters
                 ? rows.Where(row => filters.All(f => Matches(row, f))).ToList()
                 : rows;
+            if (spec.Children is { Count: > 0 } children)
+            {
+                kept = [.. kept.Where(HavingChildren(children))];
+            }
 
             if (groupBy.Count == 0)
             {
@@ -298,6 +308,27 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         }
 
         return ordered ?? query;
+    }
+
+    /// <summary>
+    /// The parent rows with, for every child filter, at least one child row joined to it that the condition
+    /// keeps — an <c>EXISTS</c> per filter, as a SQL store answers it. The parent values that have one are
+    /// gathered once per filter, so each parent row is a set lookup.
+    /// </summary>
+    private Func<Dictionary<string, object?>, bool> HavingChildren(IReadOnlyList<ChildFilter> children)
+    {
+        var sets = children.Select(child =>
+        {
+            var join = child.Join ?? throw new ArgumentException($"The child filter on '{child.Relation}' arrived without its join; the record query sets it.", nameof(children));
+            var linked = Resolved(Require(join.ChildTable))
+                .Where(row => Matches(row, child.Condition))
+                .Select(row => row.GetValueOrDefault(join.ChildKeyColumn))
+                .Where(value => value is not null)
+                .ToHashSet();
+            return (join.ParentColumn, Linked: linked);
+        }).ToList();
+
+        return row => sets.All(set => row.GetValueOrDefault(set.ParentColumn) is { } value && set.Linked.Contains(value));
     }
 
     /// <summary>

@@ -245,7 +245,8 @@ public sealed class SqliteProjectionStore : IProjectionStore
         await using var command = connection.CreateCommand();
         var sql = new StringBuilder(
             $"SELECT * FROM {await SourceAsync(connection, tableName, columns, cancellationToken, spec.ReferenceSources).ConfigureAwait(false)}");
-        AppendWhere(sql, command, spec.Filters, types);
+        var childConditions = await ChildConditionsAsync(connection, command, spec.Children, tableName, cancellationToken).ConfigureAwait(false);
+        AppendWhere(sql, command, spec.Filters, types, childConditions);
 
         if (spec.OrderBy is { Count: > 0 } orderBy)
         {
@@ -289,6 +290,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
         await using var command = connection.CreateCommand();
         var keys = groupBy.Select(SqliteValues.Quote).ToList();
         var table = await SourceAsync(connection, tableName, columns, cancellationToken).ConfigureAwait(false);
+        var childConditions = await ChildConditionsAsync(connection, command, spec.Children, tableName, cancellationToken).ConfigureAwait(false);
 
         // The rows counted: the table, filtered — and, when the records behind each group are asked
         // for, each row numbered within its group in the order it was accepted, so the records are
@@ -302,7 +304,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
         if (records is null)
         {
             source.Append(table);
-            AppendWhere(source, command, spec.Filters, types);
+            AppendWhere(source, command, spec.Filters, types, childConditions);
         }
         else
         {
@@ -310,7 +312,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
                 .Append(keys.Count > 0 ? "PARTITION BY " + string.Join(", ", keys) + " " : string.Empty)
                 .Append("ORDER BY ").Append(acceptedOrder).Append(") AS ").Append(SqliteValues.Quote(RowNumberColumn))
                 .Append(" FROM ").Append(table);
-            AppendWhere(source, command, spec.Filters, types);
+            AppendWhere(source, command, spec.Filters, types, childConditions);
             source.Append(')');
         }
 
@@ -498,20 +500,55 @@ public sealed class SqliteProjectionStore : IProjectionStore
     }
 
     private static void AppendWhere(
-        StringBuilder sql, SqliteCommand command, IReadOnlyList<FieldFilter>? filters, IReadOnlyDictionary<string, ColumnType> types)
+        StringBuilder sql, SqliteCommand command, IReadOnlyList<FieldFilter>? filters, IReadOnlyDictionary<string, ColumnType> types,
+        IReadOnlyList<string>? childConditions = null)
+    {
+        var conditions = Conditions(command, filters, types, qualifier: string.Empty, prefix: "$f");
+        conditions.AddRange(childConditions ?? []);
+        if (conditions.Count > 0)
+        {
+            sql.Append(" WHERE ").Append(string.Join(" AND ", conditions));
+        }
+    }
+
+    /// <summary>
+    /// One <c>EXISTS</c> per child filter: a row of the child table joined to the parent row — its key
+    /// column holding the parent column's value — that the filter's condition keeps.
+    /// </summary>
+    private static async Task<List<string>> ChildConditionsAsync(
+        SqliteConnection connection, SqliteCommand command, IReadOnlyList<ChildFilter>? children, string parentTable, CancellationToken cancellationToken)
+    {
+        var conditions = new List<string>();
+        for (var i = 0; i < (children?.Count ?? 0); i++)
+        {
+            var child = children![i];
+            var join = child.Join ?? throw new ArgumentException($"The child filter on '{child.Relation}' arrived without its join; the record query sets it.", nameof(children));
+            var childColumns = await RequireColumnsAsync(connection, join.ChildTable, cancellationToken).ConfigureAwait(false);
+            var childTypes = childColumns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
+            var alias = $"fb_child{i.ToString(CultureInfo.InvariantCulture)}";
+            var inner = Conditions(command, [child.Condition], childTypes, qualifier: alias + ".", prefix: $"$c{i.ToString(CultureInfo.InvariantCulture)}_");
+            inner.Insert(0, $"{alias}.{SqliteValues.Quote(join.ChildKeyColumn)} = {SqliteValues.Quote(parentTable)}.{SqliteValues.Quote(join.ParentColumn)}");
+            conditions.Add($"EXISTS (SELECT 1 FROM {SqliteValues.Quote(join.ChildTable)} AS {alias} WHERE {string.Join(" AND ", inner)})");
+        }
+
+        return conditions;
+    }
+
+    private static List<string> Conditions(
+        SqliteCommand command, IReadOnlyList<FieldFilter>? filters, IReadOnlyDictionary<string, ColumnType> types, string qualifier, string prefix)
     {
         if (filters is not { Count: > 0 })
         {
-            return;
+            return [];
         }
 
         var conditions = new List<string>(filters.Count);
         for (var i = 0; i < filters.Count; i++)
         {
             var filter = filters[i];
-            var column = SqliteValues.Quote(filter.Column);
+            var column = qualifier + SqliteValues.Quote(filter.Column);
             var type = types.GetValueOrDefault(filter.Column, ColumnType.Text);
-            var parameter = $"$f{i}";
+            var parameter = $"{prefix}{i.ToString(CultureInfo.InvariantCulture)}";
 
             if (filter.Operator is FilterOperator.IsNull || (filter.Operator == FilterOperator.Equal && filter.Value is null))
             {
@@ -562,7 +599,7 @@ public sealed class SqliteProjectionStore : IProjectionStore
             });
         }
 
-        sql.Append(" WHERE ").Append(string.Join(" AND ", conditions));
+        return conditions;
     }
 
     private static bool IsOfType(object? value, ColumnType type) => type switch

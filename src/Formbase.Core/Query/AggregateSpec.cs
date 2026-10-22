@@ -27,13 +27,15 @@ namespace Formbase.Core.Query;
 /// When set, only the first this many groups in that order are returned — the «top N» of a ranking.
 /// Must be positive.
 /// </param>
+/// <param name="Children">Conditions on child relations (<see cref="ChildFilter"/>) the counted rows also meet.</param>
 public sealed record AggregateSpec(
     IReadOnlyList<string>? GroupBy = null,
     IReadOnlyList<FieldFilter>? Filters = null,
     int? RecordsPerGroup = null,
     IReadOnlyList<AggregateMeasure>? Measures = null,
     IReadOnlyList<GroupOrder>? OrderBy = null,
-    int? Limit = null)
+    int? Limit = null,
+    IReadOnlyList<ChildFilter>? Children = null)
 {
     /// <summary>The count of every record.</summary>
     public static AggregateSpec CountAll { get; } = new();

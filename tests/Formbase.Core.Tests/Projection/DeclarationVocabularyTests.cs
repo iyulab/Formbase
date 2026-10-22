@@ -161,8 +161,8 @@ public class DeclarationVocabularyTests
 
         var created = h.Store.CreatedSchemas.Single(s => s.TableName == "qc");
         created.Relations.Should().ContainSingle().Which.Should().BeEquivalentTo(
-            new RelationDef("defects", RelationKind.Child, "qc_defects", "qc_id"),
-            "the declared relation must arrive at the adapter seam with the target's declared table name");
+            new RelationDef("defects", RelationKind.Child, "qc_defects", "qc_id", Defects),
+            "the declared relation must arrive at the adapter seam with the target's declared table name and form type");
     }
 
     [Fact]

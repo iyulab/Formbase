@@ -1,3 +1,4 @@
+using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
@@ -186,6 +187,39 @@ public abstract class SectionStoreContractTests
         rush.Rows.Select(r => (string?)r.Fields["order_no"]).Should().Equal("A-1", "A-2");
         var perTag = await h.Engine.AggregateAsync(Tag, new AggregateSpec(GroupBy: ["tag"]), ct);
         perTag.Groups.Select(g => ((string?)g.Key["tag"], g.Count)).Should().BeEquivalentTo([("fragile", 1), ("rush", 2)]);
+    }
+
+    [Fact]
+    public async Task A_child_filter_keeps_the_parents_with_a_child_row_the_condition_keeps()
+    {
+        var store = CreateStore();
+        var h = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        h.Hints.Declare(new FormTypeHints(Tag, Tag.Value, [new FieldHint("order_no", ColumnType.Text), new FieldHint("tag", ColumnType.Text)]));
+        h.Hints.Declare(new FormTypeHints(Order, Order.Value,
+            [new FieldHint("order_no", ColumnType.Text), new FieldHint("customer", ColumnType.Text)],
+            [new RelationHint("lines", RelationKind.Child, Line, "order_no", "lines"), new RelationHint("tags", RelationKind.Child, Tag, "order_no", "tags")]));
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-1","lines":[{"product":"nut","qty":5},{"product":"bolt","qty":1}],"tags":["rush","fragile"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-2","lines":[{"product":"bolt","qty":2}],"tags":["rush","rush"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-3","tags":[]}"""), cancellationToken: ct);
+        foreach (var type in new[] { Order, Line, Tag })
+        {
+            await h.Engine.ProjectAsync(type, ct);
+        }
+
+        async Task<string?[]> Orders(params ChildFilter[] children) =>
+            [.. (await h.Engine.QueryAsync(Order, new QuerySpec(OrderBy: [new OrderKey("order_no")], Children: children), ct)).Rows.Select(r => (string?)r.Fields["order_no"])];
+
+        (await Orders(new ChildFilter("tags", FieldFilter.Equal("tag", "rush")))).Should().Equal(["A-1", "A-2"], "a parent with two matching rows is one row");
+        (await Orders(new ChildFilter("tags", FieldFilter.Equal("tag", "rush")), new ChildFilter("tags", FieldFilter.Equal("tag", "fragile")))).Should().Equal("A-1");
+        (await Orders(new ChildFilter("lines", new FieldFilter("qty", FilterOperator.GreaterThan, 4)))).Should().Equal("A-1");
+        (await Orders(new ChildFilter("tags", FieldFilter.In("tag", ["urgent"])))).Should().BeEmpty();
+
+        var counted = await h.Engine.AggregateAsync(Order, new AggregateSpec(Children: [new ChildFilter("tags", FieldFilter.Equal("tag", "rush"))]), ct);
+        counted.Groups.Should().ContainSingle().Which.Count.Should().Be(2);
+
+        await FluentActions.Awaiting(() => Orders(new ChildFilter("nope", FieldFilter.Equal("tag", "rush")))).Should().ThrowAsync<ArgumentException>();
+        await FluentActions.Awaiting(() => Orders(new ChildFilter("tags", FieldFilter.Equal("nope", "rush")))).Should().ThrowAsync<InvalidQueryException>();
     }
 
     [Fact]
