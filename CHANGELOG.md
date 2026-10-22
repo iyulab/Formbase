@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.34.0
+
+A minor: a child filter can ask for the parents without such a child row (`ChildQuantifier.None`), and
+its condition is optional — so a section of values answers «no option checked». One source-compatible
+contract change (`ChildFilter.Condition` is nullable). Pairs with MorphDB `0.32.x`, whose `notexists`
+the MorphDB store sends.
 
 ### Added
 
