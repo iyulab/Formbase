@@ -310,7 +310,7 @@ Nine ports define the engine; everything else composes them.
 | `IIntakeService` | Accept documents (raw-first, no declaration required), optionally as a version of a keyed record, and retire records. |
 | `IFieldHintSource` | Supply the declared structure for a form type — the input to schema proposal. |
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
-| `IProjector` | Drop-and-rebuild the projected table from raw. |
+| `IProjector` | Rebuild the projected table from raw — emptied and brought to the declaration, then refilled (on MorphDB the same table, so what is bound to it stays). |
 | `IProjectionState` | Record what the last completed projection did — the watermark it reached, and the `ProjectionSkip`s and `ProjectionFieldSkip`s it produced. |
 | `IProjectionTrigger` | Decide whether a form type's projection should run *now* — the seam where projection-automation policy plugs in. Pure decision; the host owns the cadence. |
 | `IRecordQuery` | Query projected records; distinguish not-projected / stale / unavailable. |
@@ -482,7 +482,7 @@ Implemented:
 - **Record identity** — a document may name its record with a `RecordKey`; the projection shows each record once, its latest document, and a retirement takes it out while the raw stream keeps every version (`RecordFold` is the same fold for any reader of the stream)
 - **Durable Postgres raw store** — Formbase-owned source of truth over Npgsql, contract-verified against a real PostgreSQL (including concurrent appends); the in-memory raw store remains the reference implementation
 - **Durable Postgres projection state and field hints** — `PostgresProjectionState` and `PostgresFieldHintSource` survive a restart alongside the raw store, closing the gap where a restarted process forgot a projection that both databases still held
-- Hint-driven projection (drop-and-rebuild on a shape change; only the documents appended since the last run when nothing else changed — with the same result), deterministic value mapping, skip recording, staleness detection
+- Hint-driven projection (a rebuild on a shape change — on MorphDB in place, keeping the table and the row-level security policies, webhooks and subscriptions bound to it; only the documents appended since the last run when nothing else changed — with the same result), deterministic value mapping, skip recording, staleness detection
 - **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
 - Record query with not-projected / stale / unverified / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
