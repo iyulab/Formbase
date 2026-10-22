@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.33.0
+
+A minor: a repeated section's declaration says which parent form type its rows are cut from, so a
+reader starting from the section can reach the parent documents over HTTP. No breaking change. Pairs
+with MorphDB `0.31.x`.
 
 ### Added
 
