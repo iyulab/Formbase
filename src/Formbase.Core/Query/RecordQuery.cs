@@ -421,16 +421,19 @@ public sealed class RecordQuery : IRecordQuery
     /// backends make differently, so the same query would return different rows depending on the store.
     /// Every comparing operator needs a value to compare against; the null tests take none, and a value
     /// given to one has no reading — ignoring it would answer a question the caller did not ask.
+    /// Equality is left out on JSON columns for the reason a distinct count is: the stores read two JSON
+    /// values as equal differently (key order, spacing), and a scalar never equals the list a checkbox
+    /// group stores — the same query would quietly match nothing on one store and something on another.
     /// </summary>
     private static bool Applies(FieldFilter filter, ColumnType columnType) => filter.Operator switch
     {
-        FilterOperator.Equal => true,
+        FilterOperator.Equal => columnType is not ColumnType.Jsonb,
         FilterOperator.IsNull or FilterOperator.IsNotNull => filter.Value is null,
         FilterOperator.GreaterThan or FilterOperator.GreaterThanOrEqual or FilterOperator.LessThan or FilterOperator.LessThanOrEqual
             => filter.Value is not null && columnType is ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp,
         FilterOperator.Contains or FilterOperator.StartsWith
             => filter.Value is not null && columnType is ColumnType.Text,
-        FilterOperator.In => filter.Value is IReadOnlyList<object?> values && !values.Contains(null),
+        FilterOperator.In => filter.Value is IReadOnlyList<object?> values && !values.Contains(null) && columnType is not ColumnType.Jsonb,
         _ => false,
     };
 

@@ -7,7 +7,7 @@ namespace Formbase.Core.Query;
 /// </summary>
 public enum FilterOperator
 {
-    /// <summary>The column equals the value. Applies to every column type.</summary>
+    /// <summary>The column equals the value. Applies to every column type but <c>Jsonb</c>, whose equality the stores read differently.</summary>
     Equal,
 
     /// <summary>The column is greater than the value. Integer, decimal and timestamp columns.</summary>
@@ -35,7 +35,7 @@ public enum FilterOperator
     IsNotNull,
 
     /// <summary>
-    /// The column equals one of a list of values (<see cref="FieldFilter.In"/>). Applies to every column type,
+    /// The column equals one of a list of values (<see cref="FieldFilter.In"/>). Applies to every column type but <c>Jsonb</c>,
     /// as <see cref="Equal"/> does; an empty list matches no row, and an empty value is not one of the list —
     /// <see cref="IsNull"/> is the condition for that.
     /// </summary>

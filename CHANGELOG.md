@@ -36,7 +36,7 @@
   same from every store. `Limit` keeps the first N — the top of a ranking. A key on a column the
   aggregate does not group by, or on a measure it does not ask for, is refused.
 - **A filter can list values: `FieldFilter.In(column, values)` (`FilterOperator.In`)** — the column equals
-  one of them; every column type, each value coerced to the column's type as an equality is; an empty
+  one of them; every column type but JSON (as for an equality), each value coerced to the column's type as an equality is; an empty
   list keeps no row, and an empty column is never one of the list (`IsNull` asks for that, and a list
   with an empty value in it is refused). Queries and aggregates read it alike. `Formbase.MorphDb` needs
   MorphDB 0.29, which reads a list filter.
@@ -50,6 +50,16 @@
 - **`Formbase.MorphDb` builds on `MorphDB.Client` 0.29.0** (was 0.28.0); the live MorphDB suite and the
   compose file run `ghcr.io/iyulab/morphdb:0.29.0`.
 - Dependencies: Microsoft.Extensions.AI 10.11.0.
+- **An equality filter on a JSON column is refused** (`InvalidQueryException`, `400` from the host), as
+  a distinct count on one already was: the stores read two JSON values as equal differently, and a
+  scalar never equals the list a checkbox group stores, so the filter matched nothing on one store and
+  could match on another. `FilterOperator.Equal` and `In` now apply to every type but `Jsonb`.
+- **`Formbase.Formdown`: a field left empty is no value.** A form can only hand over an empty string for
+  an unchosen option or an unwritten box, so `AdaptData` now writes `null` for an empty text field as it
+  already did for an empty number or date — an unanswered choice reads as `IsNull`, not as a group of its
+  own. A checked list that is empty stays an empty list. `AdaptSchema` reports a `date` field as a gap
+  (`type date` — stored as the instant 00:00 UTC of that day) and a `datetime-local` one (`type
+  datetime-local` — read as UTC), since the hints have no calendar-date type.
 - **A `sourceKey` that starts with `/` is now a JSON Pointer.** A declaration that used one to name a
   top-level key whose name starts with `/` writes it as `/~1…`; a field with no `sourceKey` whose own
   name starts with `/` keeps reading that name.

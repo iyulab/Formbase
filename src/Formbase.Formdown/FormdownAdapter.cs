@@ -79,7 +79,8 @@ public static class FormdownAdapter
     /// <summary>
     /// Adapts a filled formdown form — the data object formdown hands over (field name to a string, a list
     /// of strings, or a boolean) — into a document typed by <paramref name="hints"/>: a number field's text
-    /// becomes a JSON number, and an empty number or date field becomes null.
+    /// becomes a JSON number, and a field left empty — a number, a date, an unchosen option, an unwritten
+    /// box — becomes null, since an empty string is the only way a form can say it has no answer.
     /// </summary>
     /// <remarks>
     /// Only what can be read without guessing is changed. A text that is not a number in the invariant
@@ -207,7 +208,17 @@ public static class FormdownAdapter
                 return ColumnType.Jsonb;
             case "checkbox":
                 return ColumnType.Boolean;
-            case "date" or "datetime-local":
+            case "date":
+                // A calendar date is not a point in time either, but the hints have no date type: it is
+                // stored as the instant it starts at in UTC, and the loss is reported rather than hidden.
+                gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
+                    "type date",
+                    "A calendar date is stored as the instant 00:00 UTC of that day; compare it with that instant, not with midnight in another offset."));
+                return ColumnType.Timestamp;
+            case "datetime-local":
+                gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
+                    "type datetime-local",
+                    "A local date and time carries no offset; it is read as UTC."));
                 return ColumnType.Timestamp;
             case "time" or "month" or "week":
                 gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Unresolved,
@@ -234,7 +245,9 @@ public static class FormdownAdapter
             switch (type)
             {
                 case ColumnType.Integer or ColumnType.Decimal or ColumnType.Timestamp when text.Trim().Length == 0:
-                    // An input left empty: no value, not an empty one.
+                case ColumnType.Text when text.Length == 0:
+                    // An input left empty: no value, not an empty one. A form has no way to hand over
+                    // "no answer" but an empty string, so an unchosen option or an unwritten box is null.
                     writer.WriteNullValue();
                     return;
                 case ColumnType.Integer when long.TryParse(text.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var whole):

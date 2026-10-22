@@ -279,6 +279,29 @@ public class RecordQueryTests
     }
 
     [Fact]
+    public async Task Equality_on_a_json_column_is_refused_as_its_distinct_count_is()
+    {
+        var h = new Harness();
+        h.Hints.Declare(new FormTypeHints(Qc, Table,
+        [
+            new FieldHint("lot", ColumnType.Text, Nullable: false),
+            new FieldHint("checks", ColumnType.Jsonb),
+        ]));
+        await h.Accept("""{"lot":"L-1","checks":["a","b"]}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        // A scalar never equals the list a checkbox group stores, and two JSON values compare equal
+        // differently per store: answering would be zero rows here and something else elsewhere.
+        foreach (var filter in new[] { FieldFilter.Equal("checks", "a"), FieldFilter.In("checks", ["a"]) })
+        {
+            var act = () => h.Query.QueryAsync(Qc, new QuerySpec(Filters: [filter]));
+
+            (await act.Should().ThrowAsync<InvalidQueryException>())
+                .Which.InapplicableFilters.Should().ContainSingle().Which.Column.Should().Be("checks");
+        }
+    }
+
+    [Fact]
     public async Task A_range_filter_value_is_coerced_to_the_column_type()
     {
         var h = new Harness();

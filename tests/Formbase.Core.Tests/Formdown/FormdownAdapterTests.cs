@@ -93,6 +93,7 @@ public class FormdownAdapterTests
             ("defects", VocabularyGapKind.Unresolved, "checkbox group"),
             ("grade", VocabularyGapKind.Constraint, "options [A, B, C] + other"),
             ("shift_start", VocabularyGapKind.Unresolved, "type time"),
+            ("inspected_on", VocabularyGapKind.Unresolved, "type date"),
             ("photo", VocabularyGapKind.Constraint, "accept=image/*"),
             ("photo", VocabularyGapKind.Unresolved, "type file"),
             ("lotCode", VocabularyGapKind.Constraint, "pattern=^[A-Z]{2}-\\d+$"),
@@ -127,7 +128,7 @@ public class FormdownAdapterTests
         root.GetProperty("total").GetDecimal().Should().Be(30m);
         root.GetProperty("passed").GetBoolean().Should().BeTrue();
         root.GetProperty("defects")[0].GetString().Should().Be("dent");
-        root.GetProperty("note").GetString().Should().BeEmpty("an empty text is a text");
+        root.GetProperty("note").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null, "a form hands over an unwritten box as an empty string");
         root.GetProperty("inspected_on").GetString().Should().Be("2026-10-20");
         root.GetProperty("extra").GetString().Should().Be("kept", "the raw document keeps what the form sent");
     }
@@ -143,6 +144,21 @@ public class FormdownAdapterTests
         root.GetProperty("qty").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
         root.GetProperty("inspected_on").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
         root.GetProperty("unit_price").GetString().Should().Be("1,234.5", "a grouping separator is not read as a number");
+    }
+
+    [Fact]
+    public void An_unchosen_option_or_an_unwritten_box_is_no_value_and_a_written_one_is_kept()
+    {
+        var body = FormdownAdapter.AdaptData(
+            """{"result":"","grade":"","note":"","lot_no":" L-1 ","defects":[]}""",
+            Adapted().Hints);
+
+        var root = body.Root;
+        root.GetProperty("result").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null, "no option was chosen");
+        root.GetProperty("grade").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+        root.GetProperty("note").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+        root.GetProperty("lot_no").GetString().Should().Be(" L-1 ", "a written text is kept as written");
+        root.GetProperty("defects").GetArrayLength().Should().Be(0, "an empty checked list is an answer: none of them");
     }
 
     [Fact]
