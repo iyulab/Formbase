@@ -223,6 +223,41 @@ public abstract class SectionStoreContractTests
     }
 
     [Fact]
+    public async Task A_none_child_filter_keeps_the_parents_without_a_child_row_the_condition_keeps()
+    {
+        var store = CreateStore();
+        var h = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        h.Hints.Declare(new FormTypeHints(Tag, Tag.Value, [new FieldHint("order_no", ColumnType.Text), new FieldHint("tag", ColumnType.Text)]));
+        h.Hints.Declare(new FormTypeHints(Order, Order.Value,
+            [new FieldHint("order_no", ColumnType.Text), new FieldHint("customer", ColumnType.Text)],
+            [new RelationHint("lines", RelationKind.Child, Line, "order_no", "lines"), new RelationHint("tags", RelationKind.Child, Tag, "order_no", "tags")]));
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-1","customer":"Kim","lines":[{"product":"nut","qty":5}],"tags":["rush","fragile"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-2","customer":"Kim","tags":["rush"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-3","customer":"Lee","tags":[]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-4","customer":"Kim"}"""), cancellationToken: ct);
+        foreach (var type in new[] { Order, Line, Tag })
+        {
+            await h.Engine.ProjectAsync(type, ct);
+        }
+
+        async Task<string?[]> Orders(params ChildFilter[] children) =>
+            [.. (await h.Engine.QueryAsync(Order, new QuerySpec(OrderBy: [new OrderKey("order_no")], Children: children), ct)).Rows.Select(r => (string?)r.Fields["order_no"])];
+
+        (await Orders(new ChildFilter("tags", Quantifier: ChildQuantifier.None))).Should().Equal(["A-3", "A-4"], "no row at all — an empty list and a missing one alike");
+        (await Orders(new ChildFilter("tags"))).Should().Equal(["A-1", "A-2"], "without a condition, any row");
+        (await Orders(new ChildFilter("tags", FieldFilter.Equal("tag", "fragile"), ChildQuantifier.None))).Should().Equal("A-2", "A-3", "A-4");
+        (await Orders(new ChildFilter("tags", FieldFilter.Equal("tag", "rush")), new ChildFilter("tags", FieldFilter.Equal("tag", "fragile"), ChildQuantifier.None))).Should().Equal("A-2");
+        (await Orders(new ChildFilter("lines", Quantifier: ChildQuantifier.None), new ChildFilter("tags", Quantifier: ChildQuantifier.None))).Should().Equal("A-3", "A-4");
+
+        // The «none checked» group beside the per-option groups: the parents with no row, counted on the parent.
+        var unchecked_ = await h.Engine.AggregateAsync(Order, new AggregateSpec(GroupBy: ["customer"], Children: [new ChildFilter("tags", Quantifier: ChildQuantifier.None)]), ct);
+        unchecked_.Groups.Select(g => ((string?)g.Key["customer"], g.Count)).Should().BeEquivalentTo([("Kim", 1), ("Lee", 1)]);
+
+        await FluentActions.Awaiting(() => Orders(new ChildFilter("tags", FieldFilter.Equal("nope", "rush"), ChildQuantifier.None))).Should().ThrowAsync<InvalidQueryException>();
+    }
+
+    [Fact]
     public async Task A_value_in_a_section_of_objects_is_refused_by_naming_what_a_section_of_values_declares()
     {
         var store = CreateStore();

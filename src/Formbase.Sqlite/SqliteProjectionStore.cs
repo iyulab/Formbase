@@ -512,8 +512,9 @@ public sealed class SqliteProjectionStore : IProjectionStore
     }
 
     /// <summary>
-    /// One <c>EXISTS</c> per child filter: a row of the child table joined to the parent row — its key
-    /// column holding the parent column's value — that the filter's condition keeps.
+    /// One <c>EXISTS</c> per child filter — <c>NOT EXISTS</c> for a <see cref="ChildQuantifier.None"/> one: a
+    /// row of the child table joined to the parent row — its key column holding the parent column's value —
+    /// that the filter's condition, when it has one, keeps.
     /// </summary>
     private static async Task<List<string>> ChildConditionsAsync(
         SqliteConnection connection, SqliteCommand command, IReadOnlyList<ChildFilter>? children, string parentTable, CancellationToken cancellationToken)
@@ -526,9 +527,10 @@ public sealed class SqliteProjectionStore : IProjectionStore
             var childColumns = await RequireColumnsAsync(connection, join.ChildTable, cancellationToken).ConfigureAwait(false);
             var childTypes = childColumns.ToDictionary(c => c.Name, c => c.Type, StringComparer.Ordinal);
             var alias = $"fb_child{i.ToString(CultureInfo.InvariantCulture)}";
-            var inner = Conditions(command, [child.Condition], childTypes, qualifier: alias + ".", prefix: $"$c{i.ToString(CultureInfo.InvariantCulture)}_");
+            var inner = Conditions(command, child.Condition is { } condition ? [condition] : [], childTypes, qualifier: alias + ".", prefix: $"$c{i.ToString(CultureInfo.InvariantCulture)}_");
             inner.Insert(0, $"{alias}.{SqliteValues.Quote(join.ChildKeyColumn)} = {SqliteValues.Quote(parentTable)}.{SqliteValues.Quote(join.ParentColumn)}");
-            conditions.Add($"EXISTS (SELECT 1 FROM {SqliteValues.Quote(join.ChildTable)} AS {alias} WHERE {string.Join(" AND ", inner)})");
+            var quantifier = child.Quantifier == ChildQuantifier.None ? "NOT EXISTS" : "EXISTS";
+            conditions.Add($"{quantifier} (SELECT 1 FROM {SqliteValues.Quote(join.ChildTable)} AS {alias} WHERE {string.Join(" AND ", inner)})");
         }
 
         return conditions;

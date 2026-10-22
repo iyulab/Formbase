@@ -450,7 +450,7 @@ public sealed class RecordQuery : IRecordQuery
 
     /// <summary>
     /// Each child filter as a store reads it: the relation named on the queried form type, its condition
-    /// checked and coerced against the target's columns, and the join — the target's key column against the
+    /// (when it has one) checked and coerced against the target's columns, and the join — the target's key column against the
     /// queried table's column of that name, or its record identity when it declares none (a repeated
     /// section's rows carry the parent's record then). The answer is stale when a target's projection is.
     /// </summary>
@@ -474,13 +474,14 @@ public sealed class RecordQuery : IRecordQuery
                 ?? throw new ArgumentException($"The child relation '{child.Relation}' of '{type.Value}' names no form type to read its rows from.", nameof(children));
 
             var (childSchema, childStale) = await ResolveProjectionAsync(target, cancellationToken).ConfigureAwait(false);
-            RefuseUnanswerable(target, [child.Condition], [], childSchema);
+            IReadOnlyList<FieldFilter> condition = child.Condition is { } given ? [given] : [];
+            RefuseUnanswerable(target, condition, [], childSchema);
             var parentColumn = schema.Columns.Any(c => string.Equals(c.Name, relation.KeyColumn, StringComparison.Ordinal))
                 ? relation.KeyColumn
                 : ProjectionSystemColumns.Record;
             resolved.Add(child with
             {
-                Condition = Coerce([child.Condition], childSchema)![0],
+                Condition = child.Condition is null ? null : Coerce(condition, childSchema)![0],
                 Join = new ChildJoin(childSchema.TableName, relation.KeyColumn, parentColumn),
             });
             stale |= childStale;

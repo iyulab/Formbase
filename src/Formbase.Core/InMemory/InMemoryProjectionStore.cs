@@ -311,9 +311,11 @@ public sealed class InMemoryProjectionStore : IProjectionStore
     }
 
     /// <summary>
-    /// The parent rows with, for every child filter, at least one child row joined to it that the condition
-    /// keeps — an <c>EXISTS</c> per filter, as a SQL store answers it. The parent values that have one are
-    /// gathered once per filter, so each parent row is a set lookup.
+    /// The parent rows that, for every child filter, have at least one child row joined to it that the
+    /// condition keeps — or, for a <see cref="ChildQuantifier.None"/> filter, have none: an <c>EXISTS</c> or
+    /// <c>NOT EXISTS</c> per filter, as a SQL store answers it (a parent whose join column is null has no
+    /// child row). The parent values that have one are gathered once per filter, so each parent row is a
+    /// set lookup.
     /// </summary>
     private Func<Dictionary<string, object?>, bool> HavingChildren(IReadOnlyList<ChildFilter> children)
     {
@@ -321,14 +323,14 @@ public sealed class InMemoryProjectionStore : IProjectionStore
         {
             var join = child.Join ?? throw new ArgumentException($"The child filter on '{child.Relation}' arrived without its join; the record query sets it.", nameof(children));
             var linked = Resolved(Require(join.ChildTable))
-                .Where(row => Matches(row, child.Condition))
+                .Where(row => child.Condition is not { } condition || Matches(row, condition))
                 .Select(row => row.GetValueOrDefault(join.ChildKeyColumn))
                 .Where(value => value is not null)
                 .ToHashSet();
-            return (join.ParentColumn, Linked: linked);
+            return (join.ParentColumn, Linked: linked, Wanted: child.Quantifier == ChildQuantifier.Any);
         }).ToList();
 
-        return row => sets.All(set => row.GetValueOrDefault(set.ParentColumn) is { } value && set.Linked.Contains(value));
+        return row => sets.All(set => (row.GetValueOrDefault(set.ParentColumn) is { } value && set.Linked.Contains(value)) == set.Wanted);
     }
 
     /// <summary>

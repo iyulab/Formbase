@@ -82,7 +82,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
     /// <summary>
     /// A query's conditions as MorphDB filters: each field filter as itself, and each child filter as an
-    /// <c>exists</c> — the child table's rows whose key column holds the row's join column, kept by the
+    /// <c>exists</c> (a <see cref="ChildQuantifier.None"/> one as a <c>notexists</c>) — the child table's rows whose key column holds the row's join column, kept by the
     /// child condition — so the server answers it in the same statement as the rest.
     /// </summary>
     private static List<Filter> Filters(IReadOnlyList<FieldFilter>? filters, IReadOnlyList<ChildFilter>? children) =>
@@ -91,9 +91,9 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         .. (children ?? []).Select(child =>
         {
             var join = child.Join ?? throw new ArgumentException($"The child filter on '{child.Relation}' arrived without its join; the record query sets it.", nameof(children));
-            var condition = child.Condition;
-            return new Filter(join.ParentColumn, MorphOperator.Exists,
-                new RelatedRows(join.ChildTable, join.ChildKeyColumn, [new Filter(condition.Column, ToMorph(condition), condition.Value)]));
+            List<Filter> where = child.Condition is { } condition ? [new Filter(condition.Column, ToMorph(condition), condition.Value)] : [];
+            return new Filter(join.ParentColumn, child.Quantifier == ChildQuantifier.None ? MorphOperator.NotExists : MorphOperator.Exists,
+                new RelatedRows(join.ChildTable, join.ChildKeyColumn, where));
         }),
     ];
 

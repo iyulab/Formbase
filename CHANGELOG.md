@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A child filter can ask for the parents without such a child row.** `ChildFilter` takes a quantifier:
+  `ChildQuantifier.Any` (the default — at least one child row the condition keeps, OData's `any()`) or
+  `ChildQuantifier.None` (no such row, `not any()`), and its condition is optional — without one every
+  row of the relation counts. A section of values now answers what a JSON column of several values
+  answered before 0.31: `new ChildFilter("options", Quantifier: ChildQuantifier.None)` keeps the documents
+  with no option checked, and an aggregate with that filter counts them as their own group beside the
+  per-option counts. Every store gives the same answer; a parent whose join column is empty has no child
+  row. On the MorphDB store a `None` filter needs a MorphDB service that takes `notexists` (0.32.0 or
+  later).
+
+### Changed
+
+- `ChildFilter.Condition` is nullable (`FieldFilter?`) and defaults to none. Code that reads it from a
+  filter it did not build checks for null; constructing one as before is unchanged.
+
 ## 0.33.0
 
 A minor: a repeated section's declaration says which parent form type its rows are cut from, so a
