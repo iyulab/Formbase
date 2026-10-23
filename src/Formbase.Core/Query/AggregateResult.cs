@@ -5,9 +5,18 @@ namespace Formbase.Core.Query;
 /// <summary>
 /// The answer to an <see cref="AggregateSpec"/>. <see cref="Groups"/> are ordered by their key columns
 /// in <see cref="AggregateSpec.GroupBy"/> order, nulls first, so the same question gets the same list.
-/// <see cref="Stale"/> flags that the projection was current-but-behind the raw head when read.
+/// <see cref="Stale"/> flags that the projection was current-but-behind the raw head when read;
+/// <see cref="SkippedDocuments"/> counts the documents the tables it read could not project, as
+/// <see cref="QueryResult.SkippedDocuments"/> does — non-zero, the counts are not over every accepted document.
 /// </summary>
-public sealed record AggregateResult(IReadOnlyList<AggregateGroup> Groups, bool Stale);
+public sealed record AggregateResult(IReadOnlyList<AggregateGroup> Groups, bool Stale)
+{
+    /// <summary>
+    /// How many documents the tables the aggregate read could not project, counted once — see
+    /// <see cref="QueryResult.SkippedDocuments"/>. Non-zero, the counts are not over every accepted document.
+    /// </summary>
+    public int SkippedDocuments { get; init; }
+}
 
 /// <summary>
 /// One group: the value of each grouping column (empty when the aggregate is ungrouped), how many

@@ -135,7 +135,7 @@ internal static class RecordEndpoints
         var result = await engine.QueryAsync(FormTypeRef.Create(type), spec, cancellationToken)
             .ConfigureAwait(false);
 
-        return Results.Ok(new RecordQueryResponse([.. result.Rows.Select(RecordRowResponse.From)], result.Stale));
+        return Results.Ok(new RecordQueryResponse([.. result.Rows.Select(RecordRowResponse.From)], result.Stale, result.SkippedDocuments));
     }
 
     private static IResult Problem(string detail) =>

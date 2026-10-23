@@ -696,9 +696,15 @@ GET /formtypes/orders/records?filter=total:42&orderBy=-total&limit=20&offset=0
       "fields": { "total": 42 }
     }
   ],
-  "stale": false
+  "stale": false,
+  "skippedDocuments": 0
 }
 ```
+
+`skippedDocuments` is how many accepted documents the form type's projection could not project
+(`GET /formtypes/{type}/projection/skips` names them and why). Those documents are in none of the rows, so a
+non-zero count says the answer is not over every document — a filter on an empty field, say, cannot have
+seen them.
 
 Each row is **which record it is** and **its declared fields**:
 

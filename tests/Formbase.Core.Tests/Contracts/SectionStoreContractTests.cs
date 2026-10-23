@@ -258,6 +258,37 @@ public abstract class SectionStoreContractTests
     }
 
     [Fact]
+    public async Task An_answer_that_reads_a_section_says_how_many_documents_its_projection_could_not_read()
+    {
+        var store = CreateStore();
+        var h = Engine(store);
+        var ct = TestContext.Current.CancellationToken;
+        h.Hints.Declare(new FormTypeHints(Tag, Tag.Value, [new FieldHint("order_no", ColumnType.Text), new FieldHint("tag", ColumnType.Text)]));
+        h.Hints.Declare(new FormTypeHints(Order, Order.Value,
+            [new FieldHint("order_no", ColumnType.Text), new FieldHint("customer", ColumnType.Text)],
+            [new RelationHint("tags", RelationKind.Child, Tag, "order_no", "tags")]));
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-1","customer":"Kim","tags":["rush"]}"""), cancellationToken: ct);
+        await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-2","customer":"Kim","tags":[]}"""), cancellationToken: ct);
+        // Written by something other than the form: a lone value where the section holds a list.
+        var unreadable = await h.Engine.AcceptAsync(Order, DocumentBody.Parse("""{"order_no":"A-3","customer":"Lee","tags":"rush"}"""), cancellationToken: ct);
+        await h.Engine.ProjectAsync(Order, ct);
+        (await h.Engine.ProjectAsync(Tag, ct)).Skipped.Should().ContainSingle().Which.DocumentId.Should().Be(unreadable);
+
+        var none = await h.Engine.QueryAsync(Order, new QuerySpec(OrderBy: [new OrderKey("order_no")], Children: [new ChildFilter("tags", Quantifier: ChildQuantifier.None)]), ct);
+        none.Rows.Select(r => (string?)r.Fields["order_no"]).Should().Equal(["A-2", "A-3"], "the parent row stands; its section has no rows");
+        none.SkippedDocuments.Should().Be(1, "A-3 is kept for having no tag only because its tags could not be read");
+
+        var any = await h.Engine.QueryAsync(Order, new QuerySpec(Children: [new ChildFilter("tags", FieldFilter.Equal("tag", "rush"))]), ct);
+        any.Rows.Should().ContainSingle();
+        any.SkippedDocuments.Should().Be(1, "A-3's rush cannot be found");
+
+        (await h.Engine.QueryAsync(Order, QuerySpec.All, ct)).SkippedDocuments.Should().Be(0, "an answer that does not read the section is over every document");
+        (await h.Engine.AggregateAsync(Order, new AggregateSpec(Children: [new ChildFilter("tags", Quantifier: ChildQuantifier.None)]), ct))
+            .SkippedDocuments.Should().Be(1);
+        (await h.Engine.QueryAsync(Tag, QuerySpec.All, ct)).SkippedDocuments.Should().Be(1, "the section's own table is missing A-3's rows");
+    }
+
+    [Fact]
     public async Task A_value_in_a_section_of_objects_is_refused_by_naming_what_a_section_of_values_declares()
     {
         var store = CreateStore();

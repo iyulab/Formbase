@@ -15,9 +15,14 @@ namespace Formbase.Host.Contracts;
 /// an earlier point in the stream. The rows are still served: a stale answer a caller knows is
 /// stale is more useful than a refusal.
 /// </param>
+/// <param name="SkippedDocuments">
+/// How many accepted documents the form type's projection could not project — they are in none of the
+/// rows, so the answer is not over every document. Zero when every document stands. `GET /formtypes/{type}/projection/skips` names them and why.
+/// </param>
 public sealed record RecordQueryResponse(
     IReadOnlyList<RecordRowResponse> Rows,
-    bool Stale);
+    bool Stale,
+    int SkippedDocuments);
 
 /// <summary>
 /// One projected record.

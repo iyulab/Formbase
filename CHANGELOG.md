@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `QueryResult.SkippedDocuments` and `AggregateResult.SkippedDocuments` (and `skippedDocuments` on the
+  host's record query response): how many accepted documents the tables an answer read could not project —
+  the form type's own table and each child filter's relation. Those documents are in no row, so a
+  `ChildQuantifier.None` filter keeps a parent whose section could not be read (a lone value where a list
+  belongs) and an `Any` filter cannot find it; the count says the answer is not over every document. Zero
+  when every document stands.
+
+### Changed
+
+- README: `ChildQuantifier.None` keeps the documents with no row of the relation — those that answered with
+  none, those that never carried the field, and those whose section could not be read — not only "no option
+  checked".
+
 ## 0.34.0
 
 A minor: a child filter can ask for the parents without such a child row (`ChildQuantifier.None`), and

@@ -38,7 +38,7 @@ public sealed class RecordQuery : IRecordQuery
         var (schema, stale) = await ResolveProjectionAsync(type, cancellationToken).ConfigureAwait(false);
 
         RefuseUnanswerable(type, spec.Filters, (spec.OrderBy ?? []).Select(k => k.Column), schema);
-        var (children, childrenStale) = await ResolveChildrenAsync(type, spec.Children, schema, cancellationToken).ConfigureAwait(false);
+        var (children, targets, childrenStale) = await ResolveChildrenAsync(type, spec.Children, schema, cancellationToken).ConfigureAwait(false);
         var coerced = WithDeterministicOrder(spec with { Filters = Coerce(spec.Filters, schema), Children = children }, schema);
 
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows;
@@ -52,7 +52,10 @@ public sealed class RecordQuery : IRecordQuery
             throw new ProjectionUnavailableException(type, ex);
         }
 
-        return new QueryResult(Shape(rows, schema, spec.ReferenceSources), stale || childrenStale);
+        return new QueryResult(Shape(rows, schema, spec.ReferenceSources), stale || childrenStale)
+        {
+            SkippedDocuments = await SkippedDocumentsAsync([type, .. targets], cancellationToken).ConfigureAwait(false),
+        };
     }
 
     public async Task<AggregateResult> AggregateAsync(FormTypeRef type, AggregateSpec spec, CancellationToken cancellationToken = default)
@@ -75,7 +78,7 @@ public sealed class RecordQuery : IRecordQuery
         var orderBy = spec.OrderBy ?? [];
         RefuseUnorderable(orderBy, groupBy, measures);
         RefuseUnanswerable(type, spec.Filters, groupBy, schema, measures, groupBy);
-        var (children, childrenStale) = await ResolveChildrenAsync(type, spec.Children, schema, cancellationToken).ConfigureAwait(false);
+        var (children, targets, childrenStale) = await ResolveChildrenAsync(type, spec.Children, schema, cancellationToken).ConfigureAwait(false);
         var coerced = spec with { GroupBy = groupBy, Filters = Coerce(spec.Filters, schema), Measures = measures, Children = children };
 
         IReadOnlyList<AggregateGroup> groups;
@@ -89,7 +92,10 @@ public sealed class RecordQuery : IRecordQuery
         }
 
         var ordered = Ordered(Typed(groups, schema), groupBy, orderBy);
-        return new AggregateResult(spec.Limit is { } top && ordered.Count > top ? ordered[..top] : ordered, stale || childrenStale);
+        return new AggregateResult(spec.Limit is { } top && ordered.Count > top ? ordered[..top] : ordered, stale || childrenStale)
+        {
+            SkippedDocuments = await SkippedDocumentsAsync([type, .. targets], cancellationToken).ConfigureAwait(false),
+        };
     }
 
     /// <summary>
@@ -449,21 +455,42 @@ public sealed class RecordQuery : IRecordQuery
     };
 
     /// <summary>
+    /// How many documents the tables an answer read could not project: the form type's own, and each child
+    /// filter's relation target — one document skipped in several of them is counted once. The skips are
+    /// the ones the last projection of each table recorded, the same list <c>GetProjectionSkipsAsync</c>
+    /// returns, so the number and the list cannot disagree.
+    /// </summary>
+    private async Task<int> SkippedDocumentsAsync(IEnumerable<FormTypeRef> read, CancellationToken cancellationToken)
+    {
+        var skipped = new HashSet<DocumentId>();
+        foreach (var type in read.Distinct())
+        {
+            foreach (var skip in await _projectionState.GetSkipsAsync(type, cancellationToken).ConfigureAwait(false))
+            {
+                skipped.Add(skip.DocumentId);
+            }
+        }
+
+        return skipped.Count;
+    }
+
+    /// <summary>
     /// Each child filter as a store reads it: the relation named on the queried form type, its condition
     /// (when it has one) checked and coerced against the target's columns, and the join — the target's key column against the
     /// queried table's column of that name, or its record identity when it declares none (a repeated
     /// section's rows carry the parent's record then). The answer is stale when a target's projection is.
     /// </summary>
     /// <exception cref="ArgumentException">The form type declares no child relation of that name, or the relation names no form type.</exception>
-    private async Task<(IReadOnlyList<ChildFilter>? Children, bool Stale)> ResolveChildrenAsync(
+    private async Task<(IReadOnlyList<ChildFilter>? Children, IReadOnlyList<FormTypeRef> Targets, bool Stale)> ResolveChildrenAsync(
         FormTypeRef type, IReadOnlyList<ChildFilter>? children, TableSchema schema, CancellationToken cancellationToken)
     {
         if (children is not { Count: > 0 })
         {
-            return (children, false);
+            return (children, [], false);
         }
 
         var resolved = new List<ChildFilter>(children.Count);
+        var targets = new List<FormTypeRef>(children.Count);
         var stale = false;
         foreach (var child in children)
         {
@@ -484,10 +511,11 @@ public sealed class RecordQuery : IRecordQuery
                 Condition = child.Condition is null ? null : Coerce(condition, childSchema)![0],
                 Join = new ChildJoin(childSchema.TableName, relation.KeyColumn, parentColumn),
             });
+            targets.Add(target);
             stale |= childStale;
         }
 
-        return (resolved, stale);
+        return (resolved, targets, stale);
     }
 
     private static QuerySpec WithDeterministicOrder(QuerySpec spec, TableSchema schema)

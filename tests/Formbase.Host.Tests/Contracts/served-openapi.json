@@ -1530,7 +1530,8 @@
       "RecordQueryResponse": {
         "required": [
           "rows",
-          "stale"
+          "stale",
+          "skippedDocuments"
         ],
         "type": "object",
         "properties": {
@@ -1542,6 +1543,14 @@
           },
           "stale": {
             "type": "boolean"
+          },
+          "skippedDocuments": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },

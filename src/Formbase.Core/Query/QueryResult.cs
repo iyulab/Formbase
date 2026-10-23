@@ -4,11 +4,26 @@ namespace Formbase.Core.Query;
 
 /// <summary>
 /// Result of a record query against a projected table. <see cref="Stale"/> flags that the
-/// projection was current-but-behind the raw head when read.
+/// projection was current-but-behind the raw head when read; <see cref="SkippedDocuments"/> that the
+/// answer is over fewer documents than were accepted.
 /// </summary>
+/// <param name="Rows">The records the query kept.</param>
+/// <param name="Stale">Whether a table the answer read was behind the raw head, or read a target that was.</param>
 public sealed record QueryResult(
     IReadOnlyList<RecordRow> Rows,
-    bool Stale);
+    bool Stale)
+{
+    /// <summary>
+    /// How many documents a table the answer read could not project — the form type's own table, and the
+    /// table of each child relation a <see cref="QuerySpec.Children"/> filter read — each counted once, as the
+    /// last projection of each table recorded them (<c>GetProjectionSkipsAsync</c> names them and why). Zero
+    /// means every accepted document stands in those tables. Otherwise the answer is not over all of them: a
+    /// document missing from the form type's table is in no row, and a parent whose section could not be read
+    /// has no rows there — so a child filter that keeps rows with none (<see cref="ChildQuantifier.None"/>)
+    /// keeps it, and one that keeps rows with some cannot find it.
+    /// </summary>
+    public int SkippedDocuments { get; init; }
+}
 
 /// <summary>
 /// One record read from a projection: which record it is, and its declared fields.
