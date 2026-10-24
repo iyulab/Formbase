@@ -37,6 +37,12 @@
 
 ### Fixed
 
+- **A record key or document id shaped like a number or an id no longer fails a projection over MorphDB.**
+  The MorphDB store finds the rows a projection replaces by an equality filter on the record key; MorphDB
+  `0.32.x` read a value shaped like a number, a boolean, a date or a GUID as that type and failed the read
+  against the text column (`503` `projection-unavailable` on the next run). `MorphDB.Client` `0.33.0` sends a
+  string filter value quoted, which every MorphDB server reads as text; MorphDB `0.33.0` also reads a filter
+  value as its column's type.
 - **A host failure answered with a `5xx` problem now logs its cause.** The framework does not log an exception a
   handler answers, so a `503` `projection-unavailable` named the store and nothing else; the host now logs the
   request and the exception at `Error`. A problem the caller can fix (`4xx`) is not logged as a failure.
