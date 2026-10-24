@@ -251,6 +251,27 @@ public sealed class HostDurableRoundTripTests : IAsyncLifetime
         records.GetProperty("rows")[0].GetProperty("fields").GetProperty("total").GetInt64().Should().Be(5);
     }
 
+    /// <summary>
+    /// A form type whose only record is retired projects to an empty table through the surface — a store that files
+    /// one record per thing and retires what is gone reaches this whenever the last thing goes.
+    /// </summary>
+    [Fact]
+    public async Task Retiring_the_only_record_projects_an_empty_table_through_the_surface()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var type = NewFormType();
+        await DeclareAsync(type);
+        (await _client.PostAsync($"/formtypes/{type}/documents?recordKey=k1", new StringContent("""{"total":1}""", Encoding.UTF8, "application/json"), ct))
+            .StatusCode.Should().Be(HttpStatusCode.Created);
+        await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, ct));
+
+        await ReadAsync(await _client.DeleteAsync($"/formtypes/{type}/records?recordKey=k1", ct));
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, ct));
+
+        run.GetProperty("inserted").GetInt32().Should().Be(0);
+        (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", ct))).GetProperty("rows").GetArrayLength().Should().Be(0);
+    }
+
     private static string NewFormType() => $"hostdur{Guid.NewGuid():N}"[..18];
 
     /// <summary>

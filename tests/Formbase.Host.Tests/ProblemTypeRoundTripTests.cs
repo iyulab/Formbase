@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
@@ -463,6 +464,63 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         ((int)response.StatusCode).Should().Be(503);
         (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
             .Should().Contain("/problems/projection-unavailable");
+    }
+
+    /// <summary>
+    /// A 5xx is the host's failure, so its cause reaches the log with the exception — the framework does not log an
+    /// exception a handler took, and the problem body names the store, not what went wrong with it.
+    /// </summary>
+    [Fact]
+    public async Task A_projection_answered_503_logs_its_cause()
+    {
+        var logged = new RecordingLoggerProvider();
+        using var factory = WithStore<IProjectionStore>(new FailingRunProjectionStore(
+            new InMemoryProjectionStore(), new HttpRequestException("Connection refused")))
+            .WithWebHostBuilder(builder => builder.ConfigureLogging(logging => logging.AddProvider(logged)));
+        using var client = factory.CreateClient();
+
+        using var response = await RunProjectionOfNewTypeAsync(factory, client);
+
+        ((int)response.StatusCode).Should().Be(503);
+        var entry = logged.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Category.EndsWith("FormbaseProblemHandler", StringComparison.Ordinal)).Which;
+        entry.Exception!.InnerException.Should().BeOfType<HttpRequestException>().Which.Message.Should().Be("Connection refused");
+        entry.Message.Should().Contain("/projection").And.Contain("503");
+    }
+
+    /// <summary>A 4xx is the caller's to fix and is not logged as the host's failure.</summary>
+    [Fact]
+    public async Task A_problem_the_caller_can_fix_is_not_logged_as_a_failure()
+    {
+        var logged = new RecordingLoggerProvider();
+        using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureLogging(logging => logging.AddProvider(logged)));
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync($"/formtypes/{NewFormType()}/records", TestContext.Current.CancellationToken);
+
+        ((int)response.StatusCode).Should().BeInRange(400, 499);
+        logged.Entries.Should().NotContain(e => e.Category.EndsWith("FormbaseProblemHandler", StringComparison.Ordinal));
+    }
+
+    private sealed class RecordingLoggerProvider : ILoggerProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<(string Category, LogLevel Level, string Message, Exception? Exception)> Entries { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new Recording(this, categoryName);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Recording(RecordingLoggerProvider owner, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                owner.Entries.Enqueue((category, logLevel, formatter(state, exception), exception));
+        }
     }
 
     private static async Task<HttpResponseMessage> RunProjectionOfNewTypeAsync(WebApplicationFactory<Program> factory, HttpClient client)

@@ -35,6 +35,12 @@
   none, those that never carried the field, and those whose section could not be read — not only "no option
   checked".
 
+### Fixed
+
+- **A host failure answered with a `5xx` problem now logs its cause.** The framework does not log an exception a
+  handler answers, so a `503` `projection-unavailable` named the store and nothing else; the host now logs the
+  request and the exception at `Error`. A problem the caller can fix (`4xx`) is not logged as a failure.
+
 ## 0.34.0
 
 A minor: a child filter can ask for the parents without such a child row (`ChildQuantifier.None`), and

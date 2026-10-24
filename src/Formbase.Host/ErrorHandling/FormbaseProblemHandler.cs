@@ -16,8 +16,13 @@ namespace Formbase.Host.ErrorHandling;
 /// error raised anywhere answers the same way — including from a path added later that forgot to
 /// catch it.
 /// </para>
+/// <para>
+/// A problem the host answers with a 5xx is the host's failure, not the caller's, so its cause is logged with the
+/// exception: the framework does not log an exception a handler took, and the problem names the store, not what
+/// went wrong with it.
+/// </para>
 /// </summary>
-internal sealed class FormbaseProblemHandler : IExceptionHandler
+internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -133,9 +138,17 @@ internal sealed class FormbaseProblemHandler : IExceptionHandler
             return false;
         }
 
+        if (problem.StatusCode >= StatusCodes.Status500InternalServerError)
+        {
+            LogHostFailure(logger, exception, httpContext.Request.Method, httpContext.Request.Path, problem.StatusCode);
+        }
+
         await problem.ExecuteAsync(httpContext).ConfigureAwait(false);
         return true;
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "{Method} {Path} answered {Status}: the host could not do what was asked.")]
+    private static partial void LogHostFailure(ILogger logger, Exception exception, string method, PathString path, int status);
 
     /// <summary>
     /// Says what the caller got wrong without saying what the host is made of.

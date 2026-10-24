@@ -834,6 +834,22 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>A record retired when it was the only one: its row goes, nothing comes in, and the table is empty.</summary>
+    [Fact]
+    public async Task Replacing_the_only_row_with_none_leaves_the_table_empty()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(ProjectedSchema(), TestContext.Current.CancellationToken);
+        var (only, retired) = (DocumentId.New(), DocumentId.New());
+        await store.BulkInsertAsync(TableName, [ProjectedRow(only, "k1", 1)], TestContext.Current.CancellationToken);
+
+        var inserted = await store.ReplaceRowsAsync(TableName, [RecordKey.Create("k1")], [retired], [], TestContext.Current.CancellationToken);
+
+        inserted.Should().Be(0);
+        (await store.QueryAsync(TableName, QuerySpec.All, TestContext.Current.CancellationToken)).Should().BeEmpty();
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task Replacing_rows_in_a_missing_table_fails()
     {
