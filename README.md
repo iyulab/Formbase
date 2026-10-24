@@ -261,7 +261,10 @@ wrote becomes the field's `BusinessName` — and a filled form, whose values for
 text, becomes a document typed by that declaration. What the declaration has no slot for (option
 lists, ranges, patterns, formulas) comes back as gaps instead of being dropped silently. A checkbox group
 is not a column: it becomes a repeated section of values (`schema.Sections`), one row per checked option,
-so options can be filtered on, grouped and counted — declare `schema.Declarations`.
+so options can be filtered on, grouped and counted — declare `schema.Declarations`. A form keeps the
+value of a field its conditions hide; pass `getConditionStates()` beside the data
+(`AdaptData(data, schema.Hints, states)`) and a field that was hidden or disabled is left out of the
+document — counted as absent, not as a blank answer.
 
 <!-- snippet: compile packages="Formbase.Core Formbase.DependencyInjection Formbase.Formdown Microsoft.Extensions.DependencyInjection" -->
 ```csharp

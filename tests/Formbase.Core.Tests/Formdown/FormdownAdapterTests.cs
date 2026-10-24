@@ -268,4 +268,96 @@ public class FormdownAdapterTests
 
         act.Should().Throw<FormatException>().WithMessage($"*{message}*");
     }
+
+    // conditional.schema.json and the states below are what formdown core 0.25.0's getSchema() and
+    // conditionStates() returned for conditional.fd and the data beside them — generated, not hand-written.
+    private static readonly FormTypeRef Corrective = FormTypeRef.Create("corrective");
+
+    private static FormdownAdapter.SchemaResult AdaptedConditional() =>
+        FormdownAdapter.AdaptSchema(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Formdown", "conditional.schema.json")),
+            Corrective, "correctives");
+
+    private const string PassData = """{"lot_no":"L-1","result":"pass","reason":"x","action":"re-weld","defects":["dent"],"note":""}""";
+
+    private const string PassStates = """
+        {"lot_no":{"visible":true,"enabled":true,"required":false},"result":{"visible":true,"enabled":true,"required":false},
+         "reason":{"visible":true,"enabled":false,"required":false},"action":{"visible":false,"enabled":true,"required":false},
+         "defects":{"visible":false,"enabled":true,"required":false},"note":{"visible":true,"enabled":true,"required":false}}
+        """;
+
+    [Fact]
+    public void A_field_its_conditions_hid_or_disabled_is_left_out_of_the_document()
+    {
+        // The writer chose "fail", filled the follow-up fields, then chose "pass": the form still hands
+        // over what was written in the fields that are now hidden or disabled.
+        var root = FormdownAdapter.AdaptData(PassData, AdaptedConditional().Hints, PassStates).Root;
+
+        root.TryGetProperty("action", out _).Should().BeFalse("a hidden field holds no answer");
+        root.TryGetProperty("defects", out _).Should().BeFalse("a hidden checkbox group checked nothing");
+        root.TryGetProperty("reason", out _).Should().BeFalse("a disabled field could not be filled in");
+        root.GetProperty("note").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null, "a visible field left blank is still no value");
+        root.GetProperty("lot_no").GetString().Should().Be("L-1");
+    }
+
+    [Fact]
+    public void Without_condition_states_every_field_the_form_sent_is_kept()
+    {
+        var root = FormdownAdapter.AdaptData(PassData, AdaptedConditional().Hints).Root;
+
+        root.GetProperty("action").GetString().Should().Be("re-weld");
+        root.GetProperty("reason").GetString().Should().Be("x");
+        root.GetProperty("defects").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public void A_field_a_condition_can_take_away_is_optional_and_its_condition_is_reported()
+    {
+        var adapted = AdaptedConditional();
+        var nullable = adapted.Hints.Fields.ToDictionary(f => f.Name, f => f.Nullable);
+
+        nullable["lot_no"].Should().BeFalse("no condition can take it away");
+        nullable["reason"].Should().BeTrue("required, but missing from every form filled while it was disabled");
+        nullable["action"].Should().BeTrue("required, but missing from every form filled while it was hidden");
+        adapted.Gaps.Should().Contain(g => g.Field == "action" && g.Kind == VocabularyGapKind.Constraint && g.Construct == "visible-if result=fail");
+        adapted.Gaps.Should().Contain(g => g.Field == "reason" && g.Construct == "disabled-if result=pass");
+    }
+
+    [Fact]
+    public async Task A_hidden_field_projects_as_absent_and_a_blank_one_as_null()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var services = new ServiceCollection();
+        services.AddFormbaseInMemory();
+        await using var provider = services.BuildServiceProvider();
+        var engine = provider.GetRequiredService<FormbaseEngine>();
+        var hints = provider.GetRequiredService<InMemoryFieldHintSource>();
+        var adapted = AdaptedConditional();
+        foreach (var declaration in adapted.Declarations)
+        {
+            hints.Declare(declaration);
+        }
+
+        await engine.AcceptAsync(Corrective, FormdownAdapter.AdaptData(PassData, adapted.Hints, PassStates), cancellationToken: ct);
+        await engine.AcceptAsync(Corrective, FormdownAdapter.AdaptData(
+            """{"lot_no":"L-2","result":"fail","reason":"crack","action":"","defects":[],"note":""}""", adapted.Hints,
+            """{"lot_no":{"visible":true,"enabled":true,"required":false},"result":{"visible":true,"enabled":true,"required":false},"reason":{"visible":true,"enabled":true,"required":false},"action":{"visible":true,"enabled":true,"required":false},"defects":{"visible":true,"enabled":true,"required":false},"note":{"visible":true,"enabled":true,"required":false}}"""),
+            cancellationToken: ct);
+        var projected = await engine.ProjectAsync(Corrective, ct);
+
+        projected.Skipped.Should().BeEmpty("a required field a condition hid does not cost the row");
+        projected.AbsentFieldCounts.Should().Contain("action", 1).And.Contain("reason", 1);
+        var blankActions = await engine.QueryAsync(Corrective, new QuerySpec([new FieldFilter("action", FilterOperator.IsNull, null)]), ct);
+        blankActions.Rows.Should().HaveCount(2, "the projected column holds no value for either — the absence count tells them apart");
+    }
+
+    [Theory]
+    [InlineData("[]", "must be a JSON object")]
+    [InlineData("""{"action":true}""", "map each field name to an object")]
+    public void Condition_states_that_are_not_formdowns_are_refused(string json, string message)
+    {
+        var act = () => FormdownAdapter.AdaptData(PassData, AdaptedConditional().Hints, json);
+
+        act.Should().Throw<FormatException>().WithMessage($"*{message}*");
+    }
 }

@@ -1,0 +1,103 @@
+{
+  "lot_no": {
+    "type": "text",
+    "label": "Lot No",
+    "required": true,
+    "position": 1,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-조치"
+  },
+  "result": {
+    "type": "radio",
+    "label": "Result",
+    "required": true,
+    "position": 2,
+    "options": [
+      {
+        "value": "pass"
+      },
+      {
+        "value": "fail"
+      }
+    ],
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-조치"
+  },
+  "reason": {
+    "type": "text",
+    "label": "Reason",
+    "required": true,
+    "position": 3,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-조치",
+    "conditions": {
+      "disabledIf": {
+        "field": "result",
+        "operator": "=",
+        "value": "pass"
+      }
+    }
+  },
+  "action": {
+    "type": "textarea",
+    "label": "Action",
+    "required": true,
+    "position": 4,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-조치",
+    "conditions": {
+      "visibleIf": {
+        "field": "result",
+        "operator": "=",
+        "value": "fail"
+      }
+    }
+  },
+  "defects": {
+    "type": "checkbox",
+    "label": "Defects",
+    "position": 5,
+    "options": [
+      {
+        "value": "dent"
+      },
+      {
+        "value": "stain"
+      }
+    ],
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-조치",
+    "conditions": {
+      "visibleIf": {
+        "field": "result",
+        "operator": "=",
+        "value": "fail"
+      }
+    }
+  },
+  "note": {
+    "type": "textarea",
+    "label": "Note",
+    "position": 6,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical",
+    "group": "formdown-group-조치"
+  }
+}

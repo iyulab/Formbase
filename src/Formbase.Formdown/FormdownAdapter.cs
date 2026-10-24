@@ -117,19 +117,32 @@ public static class FormdownAdapter
     /// box — becomes null, since an empty string is the only way a form can say it has no answer.
     /// </summary>
     /// <remarks>
-    /// Only what can be read without guessing is changed. A text that is not a number in the invariant
+    /// <para>Only what can be read without guessing is changed. A text that is not a number in the invariant
     /// form (<c>1234.5</c>, not <c>1,234.5</c>) is kept as it came, so the projection reports the field as
     /// not convertible instead of storing a value someone misread. Fields the hints do not declare pass
-    /// through unchanged — the raw document keeps everything the form sent.
+    /// through unchanged — the raw document keeps everything the form sent.</para>
+    /// <para>A form hands over the value of a field its conditions hide or disable — hiding a field keeps
+    /// what was written in it — so the data alone cannot tell such a field from one left blank, or a value
+    /// left behind from an answer. Pass the form's condition states (formdown's <c>getConditionStates()</c>,
+    /// read at the moment the data is) and a field that was hidden or disabled is left out of the document:
+    /// no one could answer it, so it holds no answer, not even an empty one — as a questionnaire response
+    /// carries no item its conditions switched off. Without the states every field is kept, and a blank
+    /// value may be one of those fields.</para>
     /// </remarks>
     /// <param name="formDataJson">The form's data as JSON.</param>
     /// <param name="hints">The declaration the data is typed by — normally the one <see cref="AdaptSchema"/> made from the same form.</param>
-    /// <exception cref="FormatException">The JSON is not an object.</exception>
-    public static DocumentBody AdaptData(string formDataJson, FormTypeHints hints)
+    /// <param name="conditionStatesJson">
+    /// The form's condition states as JSON — field name to <c>{"visible", "enabled", "required"}</c>, as
+    /// formdown's <c>conditionStates(schema, data)</c> returns them for the same data — or null when the
+    /// form has none to pass.
+    /// </param>
+    /// <exception cref="FormatException">A JSON is not an object, or a condition state is not an object.</exception>
+    public static DocumentBody AdaptData(string formDataJson, FormTypeHints hints, string? conditionStatesJson = null)
     {
         ArgumentNullException.ThrowIfNull(formDataJson);
         ArgumentNullException.ThrowIfNull(hints);
 
+        HashSet<string> unanswerable = conditionStatesJson is null ? [] : Unanswerable(conditionStatesJson);
         using var document = ParseObject(formDataJson, "Form data");
         var types = new Dictionary<string, ColumnType>(StringComparer.Ordinal);
         foreach (var field in hints.Fields)
@@ -143,6 +156,11 @@ public static class FormdownAdapter
             writer.WriteStartObject();
             foreach (var property in document.RootElement.EnumerateObject())
             {
+                if (unanswerable.Contains(property.Name))
+                {
+                    continue;
+                }
+
                 writer.WritePropertyName(property.Name);
                 if (types.TryGetValue(property.Name, out var columnType))
                 {
@@ -158,6 +176,30 @@ public static class FormdownAdapter
         }
 
         return DocumentBody.Parse(Encoding.UTF8.GetString(buffer.ToArray()));
+    }
+
+    /// <summary>The fields a condition state says were hidden or disabled when the data was read.</summary>
+    private static HashSet<string> Unanswerable(string conditionStatesJson)
+    {
+        using var states = ParseObject(conditionStatesJson, "Condition states");
+        var fields = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in states.RootElement.EnumerateObject())
+        {
+            if (field.Value.ValueKind != JsonValueKind.Object)
+            {
+                throw new FormatException($"Condition states map each field name to an object; '{field.Name}' maps to {field.Value.ValueKind}.");
+            }
+
+            if (Is(field.Value, "visible", false) || Is(field.Value, "enabled", false))
+            {
+                fields.Add(field.Name);
+            }
+        }
+
+        return fields;
+
+        static bool Is(JsonElement state, string name, bool value) =>
+            state.TryGetProperty(name, out var flag) && flag.ValueKind == (value ? JsonValueKind.True : JsonValueKind.False);
     }
 
     private static FieldHint? AdaptField(string declaration, string name, JsonElement schema, List<VocabularyGap> gaps)
@@ -176,7 +218,12 @@ public static class FormdownAdapter
         var validation = schema.TryGetProperty("validation", out var v) && v.ValueKind == JsonValueKind.Object ? v : default;
         var hasOptions = schema.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array && options.GetArrayLength() > 0;
         var columnType = MapType(declaration, name, formdownType, hasOptions, gaps);
-        var nullable = !(schema.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.True);
+        // A field a condition can hide or disable is missing from every document filled while it was, so
+        // a required one is still optional as a column: formdown never requires a field no one can fill.
+        var conditions = schema.TryGetProperty("conditions", out var c) && c.ValueKind == JsonValueKind.Object ? c : default;
+        var canBeTakenAway = conditions.ValueKind == JsonValueKind.Object
+            && conditions.EnumerateObject().Any(condition => condition.Name is "visibleIf" or "hiddenIf" or "enabledIf" or "disabledIf");
+        var nullable = canBeTakenAway || !(schema.TryGetProperty("required", out var required) && required.ValueKind == JsonValueKind.True);
 
         // formdown fills a missing label from the name (snake_case and camelCase become capitalized
         // words); only a label someone wrote is a name a person reads the field by.
@@ -207,6 +254,16 @@ public static class FormdownAdapter
                 gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Constraint,
                     $"{rule.Name}={FormatScalar(rule.Value)}",
                     "A declared value rule has no hint slot; the form checks it when it is filled, the projection does not."));
+            }
+        }
+
+        if (conditions.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var condition in conditions.EnumerateObject())
+            {
+                gaps.Add(new VocabularyGap(declaration, name, VocabularyGapKind.Constraint,
+                    $"{ConditionAttribute(condition.Name)} {FormatCondition(condition.Value)}",
+                    "A condition has no hint slot; pass the form's condition states to AdaptData so a field it hid or disabled is left out of the document instead of read as blank."));
             }
         }
 
@@ -291,6 +348,42 @@ public static class FormdownAdapter
         }
 
         value.WriteTo(writer);
+    }
+
+    /// <summary>The attribute a condition is written with — formdown keeps <c>visible-if</c> as <c>visibleIf</c>.</summary>
+    private static string ConditionAttribute(string property)
+    {
+        var attribute = new StringBuilder(property.Length + 2);
+        foreach (var c in property)
+        {
+            if (char.IsAsciiLetterUpper(c))
+            {
+                attribute.Append('-').Append(char.ToLowerInvariant(c));
+            }
+            else
+            {
+                attribute.Append(c);
+            }
+        }
+
+        return attribute.ToString();
+    }
+
+    private static string FormatCondition(JsonElement condition)
+    {
+        if (condition.ValueKind != JsonValueKind.Object || !condition.TryGetProperty("field", out var field))
+        {
+            return FormatScalar(condition);
+        }
+
+        var op = condition.TryGetProperty("operator", out var o) && o.ValueKind == JsonValueKind.String ? o.GetString() : null;
+        var value = condition.TryGetProperty("value", out var v) ? FormatScalar(v) : string.Empty;
+        return op switch
+        {
+            "=" or "!=" => $"{FormatScalar(field)}{op}{value}",
+            "falsy" => $"!{FormatScalar(field)}",
+            _ => FormatScalar(field),
+        };
     }
 
     private static int? Position(JsonElement schema) =>

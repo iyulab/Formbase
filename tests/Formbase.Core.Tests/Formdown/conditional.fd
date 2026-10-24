@@ -1,0 +1,7 @@
+## [조치]
+@lot_no*: [text]
+@result*: [radio options="pass,fail"]
+@reason*: [text disabled-if="result=pass"]
+@action*: [textarea visible-if="result=fail"]
+@defects: [checkbox options="dent,stain" visible-if="result=fail"]
+@note: [textarea]

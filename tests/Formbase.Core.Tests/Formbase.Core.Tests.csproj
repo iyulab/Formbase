@@ -99,7 +99,7 @@
 
   <ItemGroup>
     <None Include="Regression/Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Formdown/inspection.*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Formdown/*.schema.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

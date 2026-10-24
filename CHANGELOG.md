@@ -10,8 +10,21 @@
   `ChildQuantifier.None` filter keeps a parent whose section could not be read (a lone value where a list
   belongs) and an `Any` filter cannot find it; the count says the answer is not over every document. Zero
   when every document stands.
+- **`Formbase.Formdown`: a field a condition hid or disabled is left out of the document.**
+  `FormdownAdapter.AdaptData` takes the form's condition states (formdown `0.25.0`'s `getConditionStates()`
+  or `conditionStates(schema, data)`, as JSON) as an optional third argument. A form keeps what was written
+  in a field its conditions later hid, and hands a hidden field over as the same empty string as one left
+  blank; with the states, a field that was hidden or disabled is not in the document — it projects as
+  absent (`AbsentFieldCounts`), while a visible field left blank stays `null`. Without the states nothing
+  changes.
 
 ### Changed
+
+- **`Formbase.Formdown`: a field a condition can hide or disable is declared nullable**, even when it is
+  required (`*`) — every document filled while it was hidden lacks it, and a non-nullable column skipped
+  that whole document. Its condition (`visible-if result=fail`) is reported as a `Constraint` gap instead
+  of being dropped silently. Re-declare forms that use `visible-if`, `hidden-if`, `enabled-if` or
+  `disabled-if`.
 
 - README: `ChildQuantifier.None` keeps the documents with no row of the relation — those that answered with
   none, those that never carried the field, and those whose section could not be read — not only "no option
