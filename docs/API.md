@@ -72,6 +72,30 @@ and fails on the first proposal. Credentials are never reported back.
 
 ---
 
+## Who may call
+
+```
+Formbase__Access__Keys__0=<a generated key of at least 32 characters>
+```
+
+With no key configured — the default — the host answers every caller that can reach it, and logs a
+warning saying so when it starts; keep such a host on a network only its callers reach. With one or
+more keys configured, every request except the probes (`/health`, `/health/live`, `/health/ready`) must
+present one of them:
+
+```http
+Authorization: Bearer <key>
+```
+
+A missing key and a wrong one are refused alike, with `401` and `/problems/access-key-required`.
+`/settings` and `/openapi` are not exempt: they name where the data is kept.
+
+A key identifies a calling **service**, not a person — the host still knows nothing about who uses the
+data it holds. Configure two keys while rotating one, so callers can move to the new key before the
+old one is removed. A key shorter than 32 characters is refused at startup as a configuration error.
+
+---
+
 ## Which data a request is addressed to
 
 A host serves one namespace — the connection, schema and projection target it was composed with.
@@ -793,6 +817,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
 | 400 | `/problems/invalid-declaration` | A declaration named no table or a reserved `fb_` table, carried no fields, or declared one twice |
 | 400 | `/problems/schema-proposal-invalid` | Schema intelligence is installed and the model responded, but the proposal was not valid JSON, not the requested shape, or named a property never observed in the sampled documents |
+| 401 | `/problems/access-key-required` | The host requires an access key and the request presented none, or not one of its keys |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
 | 404 | `/problems/unknown-namespace` | The request named a namespace this host does not serve |

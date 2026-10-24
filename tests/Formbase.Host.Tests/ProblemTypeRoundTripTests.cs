@@ -13,8 +13,10 @@ using Formbase.Core.Schema;
 using Formbase.Host.Composition;
 using Formbase.Host.Namespaces;
 using Formbase.SchemaIntelligence;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
@@ -149,6 +151,19 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
             ["/problems/invalid-declaration"] = t => t._client.PutAsJsonAsync(
                 $"/formtypes/{NewFormType()}/declaration",
                 new { tableName = "declared", declarationVersion = 1, fields = Array.Empty<object>() }),
+
+            ["/problems/access-key-required"] = async t =>
+            {
+                using var keyed = t._factory.WithWebHostBuilder(builder =>
+                    builder.ConfigureAppConfiguration((_, config) =>
+                        config.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["Formbase:Access:Keys:0"] = new string('k', 32),
+                        })));
+                using var client = keyed.CreateClient();
+
+                return await client.GetAsync($"/documents/{Guid.NewGuid()}");
+            },
 
             ["/problems/no-such-document"] = t => t._client.GetAsync($"/documents/{Guid.NewGuid()}"),
 

@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Host access keys.** `Formbase__Access__Keys__<n>` configures one or more keys; when set, every request
+  except the health probes must send `Authorization: Bearer <key>` and is otherwise refused with `401`
+  `/problems/access-key-required`. A key names a calling service, not a person. Unset, the host behaves as
+  before and logs a warning at startup that it answers every caller that can reach it. Keys shorter than 32
+  characters stop the host as a configuration error.
 - `QueryResult.SkippedDocuments` and `AggregateResult.SkippedDocuments` (and `skippedDocuments` on the
   host's record query response): how many accepted documents the tables an answer read could not project —
   the form type's own table and each child filter's relation. Those documents are in no row, so a

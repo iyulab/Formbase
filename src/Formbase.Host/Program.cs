@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Formbase.Host.Access;
 using Formbase.Host.Composition;
 using Formbase.Host.Endpoints;
 using Formbase.Host.ErrorHandling;
@@ -101,6 +102,10 @@ static WebApplication Compose(string[] args)
     // composition time is fixed before any configuration source added later can be seen.
     builder.Services.AddSingleton(sp => new NamespaceSelector(
         sp.GetRequiredService<IConfiguration>()["Formbase:Namespace"] ?? NamespaceSelector.Default));
+    // Who may call: a service key, or nobody asked (the default). Read from the container's
+    // configuration for the same reason as the namespace above; a key it refuses ends the host as a
+    // configuration error when the pipeline is built.
+    builder.Services.AddSingleton(sp => AccessKeys.From(sp.GetRequiredService<IConfiguration>()));
     builder.Services.AddOpenApi(options =>
         options.AddDocumentTransformer<NamespaceHeaderDocumentTransformer>());
 
@@ -114,6 +119,10 @@ static WebApplication Compose(string[] args)
 
     app.UseExceptionHandler();
     app.UseStatusCodePages();
+
+    // First of all: a caller without a key learns nothing else about this host, not even which
+    // namespace it serves.
+    app.UseMiddleware<AccessKeyMiddleware>();
 
     // Ahead of routing: a request addressed elsewhere must not reach an endpoint that would answer
     // from this host's own data.
