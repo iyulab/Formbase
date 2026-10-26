@@ -5,8 +5,8 @@
 
   <ItemGroup>
     <!-- Composition / adapters -->
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
     <!-- The host's optional schema-intelligence extension, and the LLM live suite. Any
          OpenAI-compatible endpoint. -->
@@ -14,9 +14,9 @@
     <PackageVersion Include="M3L.Native" Version="0.24.0" />
     <PackageVersion Include="MorphDB.Client" Version="0.33.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <!-- Host: the HTTP surface and its OpenAPI document -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
     <!--
       Pinned above the version Microsoft.AspNetCore.OpenApi resolves transitively: 2.0.0 carries
       GHSA-v5pm-xwqc-g5wc, and the vulnerability scan in CI fails the build on it. Stays on the
@@ -35,6 +35,6 @@
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
     <PackageVersion Include="Testcontainers" Version="4.16.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
   </ItemGroup>
 </Project>
