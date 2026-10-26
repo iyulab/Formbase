@@ -4,6 +4,12 @@
 
 ### Added
 
+- **A read-only MCP door.** With `Formbase__Mcp__Enabled=true` the host answers Model Context Protocol clients at `/mcp`
+  with three tools — `describe_form_type`, `query_records` and `projection_status` — and nothing that writes. It sits
+  behind the host's access key and namespace selection, reads through the same paths as the REST endpoints and answers in
+  their JSON, is off by default, and the host refuses to start with it on while no access key is configured. The rules that
+  read a record query (filters, ordering, paging) moved into one place that the REST read and the tool both use. See
+  `docs/API.md`.
 - **Host access keys.** `Formbase__Access__Keys__<n>` configures one or more keys; when set, every request
   except the health probes must send `Authorization: Bearer <key>` and is otherwise refused with `401`
   `/problems/access-key-required`. A key names a calling service, not a person. Unset, the host behaves as

@@ -19,9 +19,10 @@
     kind that publishes that way): IsAotCompatible marks the assembly trimmable and turns on the trim and
     AOT analyzers, so reflection that would only fail at run time in such a host fails this build
     instead, under TreatWarningsAsErrors. The host is an application, not a package — it is published
-    as a container image and keeps ASP.NET Core's own reflection-based surfaces.
+    as a container image and keeps ASP.NET Core's own reflection-based surfaces. Formbase.Mcp is the host's MCP door:
+    it serves through the MCP SDK's reflection-based ASP.NET Core surface and is built into the host, not shipped.
   -->
-  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Formbase.Host'">
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Formbase.Host' And '$(MSBuildProjectName)' != 'Formbase.Mcp'">
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 </Project>

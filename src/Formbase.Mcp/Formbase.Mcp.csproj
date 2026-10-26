@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Formbase.Mcp</RootNamespace>
+    <!--
+      The host's MCP door, built into the host (a container image), not a package of its own: the host is the only
+      thing that serves it, and an embedding consumer reads through the engine, not through MCP.
+    -->
+    <IsPackable>false</IsPackable>
+    <!-- Not a package, so no API documentation file (src/Directory.Build.props). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Description>A read-only MCP door for a Formbase host: tools that describe a form type, read its projected records and report whether its projection can be trusted, as the host's own access key allows.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Formbase.Host.Tests" />
+  </ItemGroup>
+
+</Project>

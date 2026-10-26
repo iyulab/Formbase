@@ -4,6 +4,7 @@
     <Project Path="src/Formbase.DependencyInjection/Formbase.DependencyInjection.csproj" />
     <Project Path="src/Formbase.Formdown/Formbase.Formdown.csproj" />
     <Project Path="src/Formbase.Host/Formbase.Host.csproj" />
+    <Project Path="src/Formbase.Mcp/Formbase.Mcp.csproj" />
     <Project Path="src/Formbase.M3L/Formbase.M3L.csproj" />
     <Project Path="src/Formbase.MorphDb/Formbase.MorphDb.csproj" />
     <Project Path="src/Formbase.Postgres/Formbase.Postgres.csproj" />

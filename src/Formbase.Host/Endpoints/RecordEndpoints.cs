@@ -87,55 +87,12 @@ internal static class RecordEndpoints
         bool? referenceSources,
         CancellationToken cancellationToken)
     {
-        if (limit is < 0 || offset is < 0)
+        if (RecordReads.Spec([.. request.Query["filter"]], orderBy, limit, offset, referenceSources, out var problem) is not { } spec)
         {
-            return Problem("limit and offset cannot be negative.");
+            return Problem(problem!);
         }
 
-        var filters = new List<FieldFilter>();
-        foreach (var expression in request.Query["filter"])
-        {
-            if (string.IsNullOrEmpty(expression))
-            {
-                continue;
-            }
-
-            var separator = expression.IndexOf(':', StringComparison.Ordinal);
-            if (separator <= 0)
-            {
-                return Problem(
-                    $"The filter '{expression}' is not a `column:value` pair. A filter that could " +
-                    "not be read would otherwise widen the result rather than narrow it.");
-            }
-
-            filters.Add(FieldFilter.Equal(expression[..separator], expression[(separator + 1)..]));
-        }
-
-        var order = new List<OrderKey>();
-        foreach (var key in (orderBy ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries |
-                                                                 StringSplitOptions.TrimEntries))
-        {
-            var descending = key.StartsWith('-');
-            var column = descending ? key[1..] : key;
-            if (column.Length == 0)
-            {
-                return Problem($"The ordering key '{key}' names no column.");
-            }
-
-            order.Add(new OrderKey(column, descending));
-        }
-
-        var spec = new QuerySpec(
-            filters.Count > 0 ? filters : null,
-            limit,
-            offset,
-            order.Count > 0 ? order : null,
-            referenceSources ?? false);
-
-        var result = await engine.QueryAsync(FormTypeRef.Create(type), spec, cancellationToken)
-            .ConfigureAwait(false);
-
-        return Results.Ok(new RecordQueryResponse([.. result.Rows.Select(RecordRowResponse.From)], result.Stale, result.SkippedDocuments));
+        return Results.Ok(await RecordReads.ReadAsync(engine, type, spec, cancellationToken).ConfigureAwait(false));
     }
 
     private static IResult Problem(string detail) =>

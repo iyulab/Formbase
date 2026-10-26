@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Formbase.Core\Formbase.Core.csproj" />
     <ProjectReference Include="..\Formbase.DependencyInjection\Formbase.DependencyInjection.csproj" />
+    <ProjectReference Include="..\Formbase.Mcp\Formbase.Mcp.csproj" />
     <ProjectReference Include="..\Formbase.MorphDb\Formbase.MorphDb.csproj" />
     <ProjectReference Include="..\Formbase.Postgres\Formbase.Postgres.csproj" />
     <ProjectReference Include="..\Formbase.SchemaIntelligence\Formbase.SchemaIntelligence.csproj" />

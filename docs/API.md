@@ -792,6 +792,32 @@ A form type with no projection **refuses** rather than reading empty — see bel
 
 ---
 
+## MCP door (read-only)
+
+A host can answer [Model Context Protocol](https://modelcontextprotocol.io) clients, so an agent can read a form type
+without writing REST calls. It is off by default and it only reads.
+
+```bash
+Formbase__Mcp__Enabled=true      # the door, at /mcp (Formbase__Mcp__Path)
+Formbase__Mcp__MaxRows=100       # the most rows one query_records call returns
+```
+
+It is the same host, not a second one: a request passes the access key and the namespace selection first, and the tools
+read through the same paths as the REST endpoints, answering in their JSON. A host that asks for no access key refuses to
+start with the door on (see [Who may call](#who-may-call)). Streamable HTTP, stateless.
+
+**An access key opens the whole host.** Formbase knows no individual callers, so whoever holds a key given to an MCP client can
+read everything that key reads. Give an agent a key meant for it and rotate it like any other.
+
+| Tool | Reads |
+|---|---|
+| `describe_form_type` | The declaration in force — [Reading the declaration](#reading-the-declaration) |
+| `query_records` | A window of the projected records — `filter` (`column:value`), `orderBy`, `limit`, `offset`, `referenceSources` as on `GET /formtypes/{type}/records`, with the window applied (`limit` is capped at `MaxRows`). The answer carries `stale` and `skippedDocuments` as the REST answer does |
+| `projection_status` | `notProjected`, `projected`, `stale` or `unverified` — [Projection state](#projection-state) |
+
+There is no tool that writes. What the REST API refuses (a form type never projected, a filter it cannot read) is the tool's
+error, in the same words.
+
 ## Errors
 
 Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details. **Branch on `type`**,

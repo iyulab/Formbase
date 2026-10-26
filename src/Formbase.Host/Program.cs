@@ -6,8 +6,10 @@ using Formbase.Host.Composition;
 using Formbase.Host.Endpoints;
 using Formbase.Host.ErrorHandling;
 using Formbase.Host.Health;
+using Formbase.Host.Mcp;
 using Formbase.Host.Namespaces;
 using Formbase.Host.Projection;
+using Formbase.Mcp;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 // Before anything is composed: invoked with the probe flag this process is a client of a host
@@ -106,6 +108,10 @@ static WebApplication Compose(string[] args)
     // configuration for the same reason as the namespace above; a key it refuses ends the host as a
     // configuration error when the pipeline is built.
     builder.Services.AddSingleton(sp => AccessKeys.From(sp.GetRequiredService<IConfiguration>()));
+
+    // The read-only MCP door: off unless Formbase__Mcp__Enabled, and never on a host that asks for no access key.
+    builder.Services.AddFormbaseMcp(builder.Configuration, accessKeysRequired: AccessKeys.From(builder.Configuration).Required);
+    builder.Services.AddScoped<IFormbaseReadPort, HostReadPort>();
     builder.Services.AddOpenApi(options =>
         options.AddDocumentTransformer<NamespaceHeaderDocumentTransformer>());
 
@@ -140,6 +146,7 @@ static WebApplication Compose(string[] args)
     app.MapRecordEndpoints();
     app.MapDeclarationEndpoints();
     app.MapSettingsEndpoints();
+    app.MapFormbaseMcp(); // maps nothing while the door is off
 
     return app;
 }

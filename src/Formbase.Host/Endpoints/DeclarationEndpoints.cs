@@ -263,7 +263,7 @@ internal static class DeclarationEndpoints
                 : throw new ArgumentException($"The target on '{target.FormType}' names both a lookup field and a lookup by record; give one.")
             : target.LookupKey is null ? null : TargetLookup.Field(target.LookupKey);
 
-    private static DeclarationResponse Describe(FormTypeHints declaration, SectionSource? section) =>
+    internal static DeclarationResponse Describe(FormTypeHints declaration, SectionSource? section) =>
         new(
             declaration.Type.Value,
             declaration.TableName,
@@ -296,7 +296,7 @@ internal static class DeclarationEndpoints
                 ? null
                 : new DeclaredSectionOfResponse(section.Parent.Type.Value, section.Relation.Name, section.SectionField, section.Relation.KeyField));
 
-    private static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
+    internal static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
         new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value, LastRunResponse.FromTracked(lastRun));
 
     private static IResult Invalid(string detail) =>
