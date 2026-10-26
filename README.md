@@ -26,9 +26,10 @@ Formbase sits on top of [MorphDB](https://github.com/iyulab/MorphDB) (runtime-fl
         ▼
   [Record query]  query / aggregate the projected records
 
-── Intelligence layer: ontology (future) ────────────────
-  An LLM-based schema proposer plugs into the same port and
-  infers structure from the raw documents themselves.
+── Intelligence layer: schema intelligence (optional) ──
+  Formbase.SchemaIntelligence plugs into the same port: an
+  LLM-backed proposer, composed declared-first, proposes the
+  schema of one FormType. Cross-form ontology is Eyu's job.
 ```
 
 Three things make this different from "define a table, then insert rows":

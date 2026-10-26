@@ -34,6 +34,8 @@
 - **`Formbase.MorphDb` builds on `MorphDB.Client` 0.34.0** (was 0.32.0); the live MorphDB suite and the compose
   file run `ghcr.io/iyulab/morphdb:0.34.0`. The Microsoft.* packages move to 10.0.14.
 
+- README: the overview diagram no longer calls the schema-intelligence layer future — `Formbase.SchemaIntelligence` is
+  implemented — and says cross-form ontology inference is Eyu's.
 - README: `ChildQuantifier.None` keeps the documents with no row of the relation — those that answered with
   none, those that never carried the field, and those whose section could not be read — not only "no option
   checked".
