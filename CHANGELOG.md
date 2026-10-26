@@ -40,6 +40,8 @@
 
 - README: the overview diagram no longer calls the schema-intelligence layer future — `Formbase.SchemaIntelligence` is
   implemented — and says cross-form ontology inference is Eyu's.
+- README: the design notes no longer describe the schema-intelligence proposer as future work (it is implemented), and the
+  "Planned" list drops its "Ontology layer" entry; ontology inference across FormTypes is Eyu's, as the overview already said.
 - README: `ChildQuantifier.None` keeps the documents with no row of the relation — those that answered with
   none, those that never carried the field, and those whose section could not be read — not only "no option
   checked".

@@ -330,7 +330,7 @@ Nine ports define the engine; everything else composes them.
 
 **Design decisions worth knowing**
 
-- **`ISchemaProposer` is where the ontology layer will live.** The current `HintSchemaProposer` reads declared field hints. A later proposer plugs into the same port — no core change. Its job is to **read what a form already declares**, not to invent structure from values: looking at a `product_name` column alone can never tell you whether it is a snapshot, a denormalization, or a mistake. The form can — a "filled-in" box and an "attached" box are different boxes.
+- **`ISchemaProposer` is the seam for schema intelligence.** `HintSchemaProposer` reads declared field hints, and the LLM-backed proposer in `Formbase.SchemaIntelligence` plugs into the same port, composed declared-first — no core change. Both stay within one FormType; inferring an ontology across FormTypes is not built on this port and is [Eyu](https://github.com/iyulab/Eyu)'s job. The port's job is to **read what a form already declares**, not to invent structure from values: looking at a `product_name` column alone can never tell you whether it is a snapshot, a denormalization, or a mistake. The form can — a "filled-in" box and an "attached" box are different boxes.
 - **Raw lives in Formbase, not MorphDB.** Formbase owns its source of truth, so a MorphDB outage never blocks intake or document reads, and re-projection is a full scan Formbase controls rather than something tunneled through a REST API.
 - **`FormType` never reaches MorphDB.** Projected tables are generic; the form concept is a Formbase-internal string.
 - **Layout is outside; structure is inside.** How a form is laid out, rendered, or printed is an adapter/UI concern and never enters the engine. Which parts of a form define an entity boundary is *derivation policy* and belongs in the core; the vocabulary that carries the distinction is declared through `FieldHint`/`RelationHint` (see below).
@@ -506,7 +506,6 @@ Known gaps (audited 2026-07-20 against Formology):
 
 Planned (later stages, each its own effort):
 
-- **Ontology layer** — proposals that read structure a form already declares, growing from the `ISchemaProposer` seam
 - More input adapters that produce `FormType` + `Document` — `Formbase.Formdown` ships for formdown forms; the `Formbase.M3L` spike now fills the vocabulary axes it once measured as gaps, and productizing it is a separate decision
 - Non-blocking re-projection
 
