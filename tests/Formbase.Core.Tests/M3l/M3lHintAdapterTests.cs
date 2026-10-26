@@ -478,6 +478,44 @@ public class M3lHintAdapterTests
             "the form type is still the bare model name — that is the loss being measured");
     }
 
+    // A name declared twice in one document is kept by the parser (it reports the clash as a
+    // diagnostic, not a failure). A reference by that name cannot say which declaration it means,
+    // so the adapter resolves it to neither and measures the owners — it neither throws nor picks one.
+    // (Two namespaces are one file-level scope to the single-document entry point this adapter uses,
+    // so the same-name-in-two-namespaces shape the resolver separates is not reachable from here.)
+    private const string SameNameTwiceForm =
+        """
+        # Namespace: sales
+
+        ## Product
+        - id: identifier @pk
+        - price: decimal(10,2)
+
+        ## Order
+        - id: identifier @pk
+        - product_id: identifier @reference(Product)
+
+        ### Lookup
+        - product_price: decimal @lookup(product_id.price)
+
+        ## Product
+        - id: identifier @pk
+        - stock: integer
+        """;
+
+    [Fact]
+    public void A_model_name_declared_twice_is_adapted_twice_and_never_resolves_a_lookup()
+    {
+        var result = M3lHintAdapter.Adapt(SameNameTwiceForm);
+
+        result.Hints.Where(h => h.TableName == "product").Should().HaveCount(2,
+            "both declarations are adapted; the bare name is what collides, and that is the loss being measured");
+        result.Gaps.Where(g => g.Declaration == "Product" && g.Construct == "owner sales").Should().HaveCount(2);
+        result.Hints.Single(h => h.TableName == "order").Fields.Should().NotContain(f => f.Name == "product_price",
+            "which Product the key points at is not this adapter's call");
+        result.Gaps.Should().Contain(g => g.Field == "product_price" && g.Kind == VocabularyGapKind.Derived);
+    }
+
     [Fact]
     public void A_document_without_owners_or_bases_records_none_of_these_gaps()
     {

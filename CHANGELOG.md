@@ -34,6 +34,10 @@
 - **`Formbase.MorphDb` builds on `MorphDB.Client` 0.34.0** (was 0.32.0); the live MorphDB suite and the compose
   file run `ghcr.io/iyulab/morphdb:0.34.0`. The Microsoft.* packages move to 10.0.14.
 
+- **The M3L adapter builds on `M3L.Native` 0.25.0** (was 0.24.0). The adapter is not packaged. A model name
+  declared twice in one document is now covered by a test: both declarations are adapted, each records its
+  owner as a gap, and a lookup through a reference to that name stays unresolved.
+
 - README: the overview diagram no longer calls the schema-intelligence layer future — `Formbase.SchemaIntelligence` is
   implemented — and says cross-form ontology inference is Eyu's.
 - README: `ChildQuantifier.None` keeps the documents with no row of the relation — those that answered with
