@@ -19,7 +19,7 @@ public static class FormbaseMcpExtensions
     /// Whether the host refuses callers that present no access key. Turning the door on while it does not is refused at
     /// start-up: agents call a door by themselves, and a host that asks nothing would let any of them read.
     /// </param>
-    /// <exception cref="InvalidOperationException">The door is enabled and the host asks for no access key.</exception>
+    /// <exception cref="McpConfigurationException">The door is enabled and the host asks for no access key.</exception>
     public static IServiceCollection AddFormbaseMcp(this IServiceCollection services, IConfiguration configuration, bool accessKeysRequired)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -38,7 +38,7 @@ public static class FormbaseMcpExtensions
 
         if (!accessKeysRequired)
         {
-            throw new InvalidOperationException(
+            throw new McpConfigurationException(
                 "Formbase:Mcp:Enabled is set but the host asks for no access key (Formbase:Access:Keys is not set). " +
                 "The MCP door is not opened on a host that answers anyone: configure an access key, or leave the door off.");
         }

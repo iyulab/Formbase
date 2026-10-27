@@ -110,7 +110,15 @@ static WebApplication Compose(string[] args)
     builder.Services.AddSingleton(sp => AccessKeys.From(sp.GetRequiredService<IConfiguration>()));
 
     // The read-only MCP door: off unless Formbase__Mcp__Enabled, and never on a host that asks for no access key.
-    builder.Services.AddFormbaseMcp(builder.Configuration, accessKeysRequired: AccessKeys.From(builder.Configuration).Required);
+    try
+    {
+        builder.Services.AddFormbaseMcp(builder.Configuration, accessKeysRequired: AccessKeys.From(builder.Configuration).Required);
+    }
+    catch (McpConfigurationException refused)
+    {
+        throw new HostConfigurationException(refused.Message);
+    }
+
     builder.Services.AddScoped<IFormbaseReadPort, HostReadPort>();
     builder.Services.AddOpenApi(options =>
         options.AddDocumentTransformer<NamespaceHeaderDocumentTransformer>());

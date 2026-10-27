@@ -22,6 +22,7 @@ public class HostProcessExitTests
     {
         { "not a store profile", [("Formbase__Store", "sqlite")] },
         { "ConnectionStrings:Formbase", [("Formbase__Store", "Durable")] },
+        { "Formbase:Mcp:Enabled", [("Formbase__Mcp__Enabled", "true")] },
     };
 
     [Theory]
