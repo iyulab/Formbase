@@ -10,6 +10,7 @@ COPY Directory.Build.props Directory.Packages.props nuget.config README.md ./
 # Project files first, so a source-only change does not invalidate the restore layer.
 COPY src/Formbase.Core/Formbase.Core.csproj src/Formbase.Core/
 COPY src/Formbase.DependencyInjection/Formbase.DependencyInjection.csproj src/Formbase.DependencyInjection/
+COPY src/Formbase.Mcp/Formbase.Mcp.csproj src/Formbase.Mcp/
 COPY src/Formbase.MorphDb/Formbase.MorphDb.csproj src/Formbase.MorphDb/
 COPY src/Formbase.Postgres/Formbase.Postgres.csproj src/Formbase.Postgres/
 COPY src/Formbase.SchemaIntelligence/Formbase.SchemaIntelligence.csproj src/Formbase.SchemaIntelligence/
