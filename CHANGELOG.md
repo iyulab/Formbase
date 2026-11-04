@@ -51,6 +51,7 @@
 - README: `ChildQuantifier.None` keeps the documents with no row of the relation — those that answered with
   none, those that never carried the field, and those whose section could not be read — not only "no option
   checked".
+- `ModelContextProtocol.AspNetCore` 2.3.1 (the read-only MCP door).
 
 ### Fixed
 
