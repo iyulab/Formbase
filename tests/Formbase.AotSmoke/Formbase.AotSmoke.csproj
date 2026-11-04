@@ -13,15 +13,6 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
-  <!--
-    The AOT compiler package comes with the SDK at the runtime patch the SDK was cut with. 10.0.13 carries
-    GHSA-p3jp-9v83-76w9 (Brotli decoder out-of-bounds write); raising the pack version here takes the fixed patch
-    without waiting for an SDK that bundles it. Drop this once the SDK in use is at 10.0.14 or later.
-  -->
-  <ItemGroup>
-    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler" ILCompilerPackVersion="10.0.14" />
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\..\src\Formbase.Core\Formbase.Core.csproj" />
     <ProjectReference Include="..\..\src\Formbase.Sqlite\Formbase.Sqlite.csproj" />
