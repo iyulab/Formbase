@@ -384,7 +384,14 @@ This is the shape the next projection run will build. A form type with no declar
   computes and its `binding` `stored`; otherwise, or when a kind lacks its own parameter or carries
   another kind's, the declaration is refused with `400`. A value that is not a time leaves the field
   empty and is listed among the projection's field skips, like any value that does not convert.
-  Changing a derivation changes the table's shape, so the projection is rebuilt.
+  Changing a derivation changes the table's shape, so the projection is rebuilt. A derivation reads
+  the one document it is projecting. A figure *between* records — the hours from a dispatch form to the
+  arrival form that shares its lot, say — is not declared here: project both forms, then read it in
+  MorphDB as a view that joins the two tables on the shared column and computes the difference in a
+  column over both (`EXTRACT(EPOCH FROM (arrivals.arrivedAt - dispatches.sentAt)) / 3600`), where it
+  filters and orders like any other column and a row with no partner stays in the view with an empty
+  value. A projected table's columns carry the names the declaration gave its fields, and the view
+  writes them as they are — unquoted, qualified by the table's name.
 - **`businessName`** — the name a person reads the field by, when one is declared (ODCS v3.1
   `businessName`) — say a label in the language of the form, beside a column name in ASCII. It is
   declaration only: it never becomes part of the projected table, so changing it rebuilds nothing.
