@@ -56,6 +56,12 @@
 
 ### Fixed
 
+- **A table or field name the MorphDB store refuses is answered as `409 /problems/projection-refused`, not as an outage.** A
+  declaration is accepted whatever the names are (the store decides when it is projected), and a name MorphDB does not accept —
+  a table name of 300 characters, a field that starts with an underscore, `fb_doc_id` or `_id` — made the projection answer `503
+  /problems/projection-unavailable`, "the store is not reachable", though the store had answered. Retrying never helped and the
+  cause was the declaration. The answer now says the store refused the table the declaration describes, in the store's words.
+
 - **A record key or document id shaped like a number or an id no longer fails a projection over MorphDB.**
   The MorphDB store finds the rows a projection replaces by an equality filter on the record key; MorphDB
   `0.32.x` read a value shaped like a number, a boolean, a date or a GUID as that type and failed the read

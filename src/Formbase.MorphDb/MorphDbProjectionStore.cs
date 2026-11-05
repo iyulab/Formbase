@@ -58,10 +58,10 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         Translated(async () => { await DropTableCoreAsync(tableName, cancellationToken).ConfigureAwait(false); return true; });
 
     public Task CreateTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
-        Translated(async () => { await CreateTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
+        TranslatedSchema(async () => { await CreateTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
 
     public Task ResetTableAsync(TableSchema schema, CancellationToken cancellationToken = default) =>
-        Translated(async () => { await ResetTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
+        TranslatedSchema(async () => { await ResetTableCoreAsync(schema, cancellationToken).ConfigureAwait(false); return true; });
 
     public Task<int> BulkInsertAsync(string tableName, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, CancellationToken cancellationToken = default) =>
         Translated(() => BulkInsertCoreAsync(tableName, rows, cancellationToken));
@@ -96,6 +96,23 @@ public sealed class MorphDbProjectionStore : IProjectionStore
                 new RelatedRows(join.ChildTable, join.ChildKeyColumn, where));
         }),
     ];
+
+    /// <summary>
+    /// <see cref="Translated{T}"/> for the calls that build a table. A validation answer from MorphDB there
+    /// (<c>400</c>: a reserved or invalid name, a name the table already carries) is about the definition
+    /// this host sent, not about the store being down — it is said so, instead of surfacing as an outage.
+    /// </summary>
+    private static async Task<T> TranslatedSchema<T>(Func<Task<T>> call)
+    {
+        try
+        {
+            return await Translated(call).ConfigureAwait(false);
+        }
+        catch (MorphDBValidationException refused)
+        {
+            throw new ProjectionRefusedException(refused.Message, refused);
+        }
+    }
 
     private static async Task<T> Translated<T>(Func<Task<T>> call)
     {

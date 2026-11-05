@@ -66,6 +66,14 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
 
             // 409: the request is fine on its own; it conflicts with another form type's declaration,
             // and moving that one (or choosing another name) makes it acceptable.
+            // 409, not 503: the store answered, so retrying changes nothing — the declaration it was
+            // asked to build is what the caller can change (the same shape as table-name-in-use).
+            ProjectionRefusedException e => Problem(
+                StatusCodes.Status409Conflict,
+                "projection-refused",
+                "The projection store refused the table this declaration describes",
+                e.Message),
+
             ProjectionTableOwnedElsewhereException e => Problem(
                 StatusCodes.Status409Conflict,
                 "projection-table-owned-elsewhere",

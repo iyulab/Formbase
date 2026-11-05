@@ -265,6 +265,17 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                 return await RunProjectionOfNewTypeAsync(factory, client);
             },
 
+            ["/problems/projection-refused"] = async t =>
+            {
+                // What the MorphDB store raises when MorphDB answers 400 to the table the declaration
+                // describes (a reserved or invalid name) — the store is up, so this is not an outage.
+                using var factory = t.WithStore<IProjectionStore>(new FailingRunProjectionStore(
+                    new InMemoryProjectionStore(),
+                    new ProjectionRefusedException("Column name '_id' is reserved.")));
+                using var client = factory.CreateClient();
+                return await RunProjectionOfNewTypeAsync(factory, client);
+            },
+
             ["/problems/projection-store-missing"] = async t =>
             {
                 // What the MorphDB store raises once its project answers PROJECT_NOT_FOUND.
