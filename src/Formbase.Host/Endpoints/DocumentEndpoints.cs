@@ -154,7 +154,7 @@ internal static class DocumentEndpoints
     {
         if (after is < 0)
         {
-            return Problem("after is a watermark and cannot be negative; omit it to read from the start.");
+            return Problem(DocumentReads.NegativeAfter);
         }
 
         // Refused rather than clamped: a caller who asked for more than a page holds and silently
@@ -164,16 +164,7 @@ internal static class DocumentEndpoints
             return Problem($"limit must be between 0 and {MaxPageSize}.");
         }
 
-        var page = await engine.ReadDocumentsAsync(
-                FormTypeRef.Create(type),
-                new Watermark(after ?? 0),
-                limit ?? DefaultPageSize,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return Results.Ok(new DocumentPageResponse(
-            page.Documents.Select(ToResponse).ToList(),
-            page.RawHead.Value));
+        return Results.Ok(await DocumentReads.ListAsync(engine, type, after ?? 0, limit ?? DefaultPageSize, cancellationToken).ConfigureAwait(false));
     }
 
     private static async Task<IResult> GetAsync(
@@ -181,7 +172,7 @@ internal static class DocumentEndpoints
         FormbaseEngine engine,
         CancellationToken cancellationToken)
     {
-        var stored = await engine.GetDocumentAsync(DocumentId.From(id), cancellationToken).ConfigureAwait(false);
+        var stored = await DocumentReads.GetAsync(engine, id, cancellationToken).ConfigureAwait(false);
 
         return stored is null
             ? Results.Problem(
@@ -189,18 +180,8 @@ internal static class DocumentEndpoints
                 statusCode: StatusCodes.Status404NotFound,
                 title: "No such document",
                 type: "/problems/no-such-document")
-            : Results.Ok(ToResponse(stored));
+            : Results.Ok(stored);
     }
-
-    private static StoredDocumentResponse ToResponse(StoredDocument stored) =>
-        new(
-            stored.Id.Value,
-            stored.Type.Value,
-            stored.Watermark.Value,
-            stored.AppendedAt,
-            stored.Body?.Root,
-            stored.Key?.Value,
-            stored.IsRetirement);
 
     private static IResult Problem(string detail) =>
         Results.Problem(

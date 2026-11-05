@@ -64,5 +64,32 @@ internal sealed class HostReadPort(
         }
     }
 
+    public async ValueTask<JsonElement> ListDocumentsAsync(FormbaseDocumentQuery query, CancellationToken cancellationToken)
+    {
+        if (query.After < 0)
+        {
+            throw new FormbaseReadRefusedException(DocumentReads.NegativeAfter);
+        }
+
+        try
+        {
+            return Wire(await DocumentReads.ListAsync(engine, query.Type, query.After, query.Limit, cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception e) when (e is FormbaseException or ArgumentException)
+        {
+            throw new FormbaseReadRefusedException(e.Message, e);
+        }
+    }
+
+    public async ValueTask<JsonElement?> GetDocumentAsync(string id, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(id, out var documentId))
+        {
+            throw new FormbaseReadRefusedException($"'{id}' is not a document id; a document id is a GUID.");
+        }
+
+        return await DocumentReads.GetAsync(engine, documentId, cancellationToken).ConfigureAwait(false) is { } stored ? Wire(stored) : null;
+    }
+
     private JsonElement Wire<T>(T value) => JsonSerializer.SerializeToElement(value, json.Value.SerializerOptions);
 }

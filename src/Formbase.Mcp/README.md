@@ -2,8 +2,8 @@
 
 A read-only [MCP](https://modelcontextprotocol.io) door for a Formbase host.
 
-The host hosts it: its access key and namespace selection come first, then three tools answer from the same read paths
-the REST API uses — `describe_form_type`, `query_records` and `projection_status`. There are no tools that write, and the
+The host hosts it: its access key and namespace selection come first, then five tools answer from the same read paths
+the REST API uses — `describe_form_type`, `query_records`, `projection_status`, `list_documents` and `get_document`. There are no tools that write, and the
 port the tools stand on (`IFormbaseReadPort`) has no member that could.
 
 It is off unless `Formbase:Mcp:Enabled` is `true`, and the host refuses to start with it on while no access key is

@@ -799,7 +799,7 @@ without writing REST calls. It is off by default and it only reads.
 
 ```bash
 Formbase__Mcp__Enabled=true      # the door, at /mcp (Formbase__Mcp__Path)
-Formbase__Mcp__MaxRows=100       # the most rows one query_records call returns
+Formbase__Mcp__MaxRows=100       # the most rows (or documents) one query_records or list_documents call returns
 ```
 
 It is the same host, not a second one: a request passes the access key and the namespace selection first, and the tools
@@ -814,6 +814,8 @@ read everything that key reads. Give an agent a key meant for it and rotate it l
 | `describe_form_type` | The declaration in force — [Reading the declaration](#reading-the-declaration) |
 | `query_records` | A window of the projected records — `filter` (`column:value`), `orderBy`, `limit`, `offset`, `referenceSources` as on `GET /formtypes/{type}/records`, with the window applied (`limit` is capped at `MaxRows`). The answer carries `stale` and `skippedDocuments` as the REST answer does |
 | `projection_status` | `notProjected`, `projected`, `stale` or `unverified` — [Projection state](#projection-state) |
+| `list_documents` | A page of the form type's raw stream, oldest first — `after` (a watermark; `0` is the start) and `limit` (capped at `MaxRows`; default 20) as on `GET /formtypes/{type}/documents`, whether or not the type has a declaration or a projection. The answer carries `rawHead`: continue from the last watermark you received until it equals `rawHead` |
+| `get_document` | One stored document by id, as on `GET /documents/{id}` — from the raw store, so it answers whether or not the form type has ever been projected |
 
 There is no tool that writes. What the REST API refuses (a form type never projected, a filter it cannot read) is the tool's
 error, in the same words.

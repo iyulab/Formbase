@@ -124,7 +124,7 @@ public sealed class McpDoorTests : IClassFixture<WebApplicationFactory<Program>>
 
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        tools.Select(t => t.Name).Order().Should().Equal("describe_form_type", "projection_status", "query_records");
+        tools.Select(t => t.Name).Order().Should().Equal("describe_form_type", "get_document", "list_documents", "projection_status", "query_records");
         tools.Should().OnlyContain(t => t.ProtocolTool.Annotations!.ReadOnlyHint == true && t.ProtocolTool.Annotations.DestructiveHint != true);
     }
 
@@ -190,5 +190,89 @@ public sealed class McpDoorTests : IClassFixture<WebApplicationFactory<Program>>
         Text(badFilter).Should().Contain("not a `column:value` pair");
         undeclared.IsError.Should().BeTrue();
         Text(undeclared).Should().Contain("no declaration");
+    }
+
+    // The raw stream is the source of truth: a reader through the door gets the same documents, in the same order, as REST.
+    [Fact]
+    public async Task Documents_read_through_the_door_are_the_documents_the_rest_api_gives()
+    {
+        var host = Door();
+        var type = await SeedAsync(host, 1, 2, 3);
+        await using var client = await McpAsync(host, Key);
+        var ct = TestContext.Current.CancellationToken;
+        using var rest = Authorized(host);
+
+        var read = await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = type }, cancellationToken: ct);
+        var viaRest = System.Text.Json.JsonDocument.Parse(await rest.GetStringAsync($"/formtypes/{type}/documents", ct)).RootElement;
+
+        read.IsError.Should().NotBe(true, Text(read));
+        var result = read.StructuredContent!.Value.GetProperty("result");
+        result.GetProperty("documents").EnumerateArray().Select(d => d.GetProperty("documentId").GetGuid())
+            .Should().Equal(viaRest.GetProperty("documents").EnumerateArray().Select(d => d.GetProperty("documentId").GetGuid()));
+        result.GetProperty("documents").EnumerateArray().Select(d => d.GetProperty("body").GetProperty("total").GetInt64()).Should().Equal(1L, 2L, 3L);
+        result.GetProperty("rawHead").GetInt64().Should().Be(viaRest.GetProperty("rawHead").GetInt64());
+    }
+
+    // A window the door cuts says so by its head: a reader continues from the last watermark until it reaches rawHead.
+    [Fact]
+    public async Task A_stream_is_paged_by_watermark_and_capped_by_the_door()
+    {
+        var host = Door(maxRows: 2);
+        var type = await SeedAsync(host, 1, 2, 3);
+        await using var client = await McpAsync(host, Key);
+        var ct = TestContext.Current.CancellationToken;
+
+        var first = (await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = type, ["limit"] = 50 }, cancellationToken: ct)).StructuredContent!.Value;
+        var documents = first.GetProperty("result").GetProperty("documents").EnumerateArray().ToList();
+        var lastSeen = documents[^1].GetProperty("watermark").GetInt64();
+        var second = (await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = type, ["after"] = lastSeen }, cancellationToken: ct)).StructuredContent!.Value;
+        var rest = second.GetProperty("result").GetProperty("documents").EnumerateArray().ToList();
+
+        first.GetProperty("limit").GetInt32().Should().Be(2);
+        documents.Should().HaveCount(2);
+        lastSeen.Should().BeLessThan(first.GetProperty("result").GetProperty("rawHead").GetInt64());
+        rest.Should().HaveCount(1);
+        rest[0].GetProperty("watermark").GetInt64().Should().Be(second.GetProperty("result").GetProperty("rawHead").GetInt64());
+        rest[0].GetProperty("body").GetProperty("total").GetInt64().Should().Be(3);
+    }
+
+    // Documents are kept before anything is declared or projected from them; the door must not hide them behind a projection.
+    [Fact]
+    public async Task The_raw_stream_is_readable_before_anything_is_declared_or_projected()
+    {
+        var host = Door();
+        var type = $"mcp{Guid.NewGuid():N}"[..14];
+        using var rest = Authorized(host);
+        var accepted = await rest.PostAsync($"/formtypes/{type}/documents", new StringContent("""{"undeclared_field":"kept"}""", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        accepted.StatusCode.Should().Be(HttpStatusCode.Created);
+        await using var client = await McpAsync(host, Key);
+        var ct = TestContext.Current.CancellationToken;
+
+        var listed = await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = type }, cancellationToken: ct);
+        var document = listed.StructuredContent!.Value.GetProperty("result").GetProperty("documents").EnumerateArray().Single();
+        var byId = await client.CallToolAsync("get_document", new Dictionary<string, object?> { ["id"] = document.GetProperty("documentId").GetGuid().ToString() }, cancellationToken: ct);
+
+        document.GetProperty("body").GetProperty("undeclared_field").GetString().Should().Be("kept");
+        byId.IsError.Should().NotBe(true, Text(byId));
+        Text(byId).Should().Contain("undeclared_field").And.Contain(type);
+    }
+
+    [Fact]
+    public async Task What_the_rest_api_refuses_about_documents_is_the_tools_error_in_the_same_words()
+    {
+        var host = Door();
+        await using var client = await McpAsync(host, Key);
+        var ct = TestContext.Current.CancellationToken;
+
+        var unknown = await client.CallToolAsync("get_document", new Dictionary<string, object?> { ["id"] = Guid.NewGuid().ToString() }, cancellationToken: ct);
+        var notAnId = await client.CallToolAsync("get_document", new Dictionary<string, object?> { ["id"] = "nope" }, cancellationToken: ct);
+        var negative = await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = "anything", ["after"] = -1 }, cancellationToken: ct);
+
+        unknown.IsError.Should().BeTrue();
+        Text(unknown).Should().Contain("No document with id");
+        notAnId.IsError.Should().BeTrue();
+        Text(notAnId).Should().Contain("GUID");
+        negative.IsError.Should().BeTrue();
+        Text(negative).Should().Contain("cannot be negative");
     }
 }

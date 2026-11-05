@@ -14,7 +14,7 @@ namespace Formbase.Mcp;
 internal sealed class FormbaseMcpTools(IFormbaseReadPort port, IOptions<FormbaseMcpOptions> options)
 {
     /// <summary>The names the door offers, so a test can hold the list to this.</summary>
-    internal static readonly IReadOnlyList<string> ToolNames = ["describe_form_type", "query_records", "projection_status"];
+    internal static readonly IReadOnlyList<string> ToolNames = ["describe_form_type", "query_records", "projection_status", "list_documents", "get_document"];
 
     [McpServerTool(Name = "describe_form_type", Title = "Describe a form type", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("Reads the declaration a form type has in force: its table, fields and their types, relations and indexes. A form type with no declaration is reported as such. Read-only.")]
@@ -47,6 +47,25 @@ internal sealed class FormbaseMcpTools(IFormbaseReadPort port, IOptions<Formbase
         [Description("The form type's name.")] string type,
         CancellationToken cancellationToken) =>
         await Guard(() => port.ProjectionStatusAsync(type, cancellationToken));
+
+    [McpServerTool(Name = "list_documents", Title = "Read a form type's raw documents", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Reads a page of a form type's raw stream: the documents as they were accepted, oldest first, after the 'after' watermark — whether or not the form type has a declaration or a projection, so fields nothing has declared are readable here. The answer carries 'rawHead', the stream's latest watermark: continue from the last watermark you received until it equals rawHead. Read-only; the page is capped.")]
+    public async Task<FormbaseDocumentPage> ListDocuments(
+        [Description("The form type's name.")] string type,
+        [Description("Read the documents after this watermark; 0 reads from the start.")] long after = 0,
+        [Description("The most documents to return; capped by the door.")] int limit = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var applied = Math.Clamp(limit, 1, Math.Max(options.Value.MaxRows, 1));
+        return new FormbaseDocumentPage(applied, after, await Guard(() => port.ListDocumentsAsync(new FormbaseDocumentQuery(type, after, applied), cancellationToken)));
+    }
+
+    [McpServerTool(Name = "get_document", Title = "Read one stored document", ReadOnly = true, Idempotent = true, OpenWorld = false)]
+    [Description("Reads one stored document by its id from the raw store, the source of truth: its form type, watermark, when it was appended, its body, the record key it corrects (if any) and whether it retires that record. Answers whether or not the form type has ever been projected. Read-only.")]
+    public async Task<JsonElement> GetDocument(
+        [Description("The document's id (a GUID).")] string id,
+        CancellationToken cancellationToken) =>
+        await Guard(() => port.GetDocumentAsync(id, cancellationToken)) ?? throw new McpException($"No document with id '{id}'.");
 
     // A refusal the caller can act on is the tool's error, in the refusal's own words — anything else is not shown to them.
     private static async Task<T> Guard<T>(Func<ValueTask<T>> read)
