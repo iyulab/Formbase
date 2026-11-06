@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Formbase.Host.Tests;
 
@@ -18,10 +21,12 @@ namespace Formbase.Host.Tests;
 /// </summary>
 public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFactory<Program>>
 {
+    private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
 
     public ErrorSurfaceContractTests(WebApplicationFactory<Program> factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -31,17 +36,51 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
     /// that refusal, and translating it once in the handler is what keeps a route added later from
     /// answering differently.
     /// </summary>
-    public static TheoryData<string, string> RoutesTakingAFormType() => new()
+    private static readonly (string Method, string Template)[] Probed =
+    [
+        ("POST", "/formtypes/{type}/documents"),
+        ("GET", "/formtypes/{type}/documents"),
+        ("GET", "/formtypes/{type}/declaration"),
+        ("PUT", "/formtypes/{type}/declaration"),
+        ("DELETE", "/formtypes/{type}/declaration"),
+        ("POST", "/formtypes/{type}/projection"),
+        ("GET", "/formtypes/{type}/projection"),
+        ("GET", "/formtypes/{type}/projection/skips"),
+        ("GET", "/formtypes/{type}/records"),
+        // A retirement also names the record; the form type is the only thing wrong with this request.
+        ("DELETE", "/formtypes/{type}/records?recordKey=k"),
+    ];
+
+    public static TheoryData<string, string> RoutesTakingAFormType()
     {
-        { "POST", "/formtypes/{type}/documents" },
-        { "GET", "/formtypes/{type}/declaration" },
-        { "PUT", "/formtypes/{type}/declaration" },
-        { "DELETE", "/formtypes/{type}/declaration" },
-        { "POST", "/formtypes/{type}/projection" },
-        { "GET", "/formtypes/{type}/projection" },
-        { "GET", "/formtypes/{type}/records" },
-        { "DELETE", "/formtypes/{type}/records?recordKey=k" },
-    };
+        var data = new TheoryData<string, string>();
+        foreach (var (method, template) in Probed)
+        {
+            data.Add(method, template);
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// The list above is only as complete as the person who last edited it, and a route added later is the one
+    /// most likely to be missing the guard. So the host says which routes take a form type, and the list has
+    /// to name every one of them.
+    /// </summary>
+    [Fact]
+    public void Every_route_that_takes_a_form_type_is_probed()
+    {
+        var routed = _factory.Services.GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(e => e.RoutePattern.RawText?.Contains("{type}", StringComparison.Ordinal) == true)
+            .SelectMany(e => (e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? []).Select(m => $"{m} {e.RoutePattern.RawText}"))
+            .ToHashSet(StringComparer.Ordinal);
+        var probed = Probed.Select(p => $"{p.Method} {p.Template.Split('?')[0]}").ToHashSet(StringComparer.Ordinal);
+
+        routed.Should().NotBeEmpty("the host maps routes that take a form type");
+        routed.Except(probed).Should().BeEmpty("every route that takes a form type is probed for a blank one");
+        probed.Except(routed).Should().BeEmpty("a probe names a route the host maps");
+    }
 
     [Theory]
     [MemberData(nameof(RoutesTakingAFormType))]
