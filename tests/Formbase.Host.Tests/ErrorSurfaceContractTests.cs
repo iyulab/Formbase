@@ -35,9 +35,12 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
     {
         { "POST", "/formtypes/{type}/documents" },
         { "GET", "/formtypes/{type}/declaration" },
+        { "PUT", "/formtypes/{type}/declaration" },
+        { "DELETE", "/formtypes/{type}/declaration" },
         { "POST", "/formtypes/{type}/projection" },
         { "GET", "/formtypes/{type}/projection" },
         { "GET", "/formtypes/{type}/records" },
+        { "DELETE", "/formtypes/{type}/records?recordKey=k" },
     };
 
     [Theory]
