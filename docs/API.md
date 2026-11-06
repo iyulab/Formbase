@@ -94,6 +94,24 @@ A key identifies a calling **service**, not a person — the host still knows no
 data it holds. Configure two keys while rotating one, so callers can move to the new key before the
 old one is removed. A key shorter than 32 characters is refused at startup as a configuration error.
 
+### What the host trusts, and what leaves it
+
+- **The key is the only credential, and it opens the whole host.** Any request carrying a valid key may read every
+  stored document, every projected record and `/settings`, and may write through every endpoint. The host has no
+  per-caller permissions to narrow that; put them in the service that holds the key.
+- **No other header establishes anything.** The `Formbase-Namespace` header only says which namespace the caller
+  believes it is addressing; a request naming another namespace than the one this host serves is refused with `404`
+  (`/problems/unknown-namespace`), never answered from this host's data. Client addresses and forwarding headers are
+  not read.
+- **The host does not configure TLS.** The key travels as a bearer token, so serve the host behind a TLS-terminating
+  proxy or keep it on a network only its callers reach; a key sent over plain HTTP can be read by anyone on the path.
+- **The probes carry no data.** `/health`, `/health/live` and `/health/ready` answer without a key and report status
+  only.
+- **Documents leave the host only through the optional model.** When a model endpoint is configured and a form type
+  has fields nobody declared, projecting that form type sends up to 20 of its stored documents, in full, to that
+  endpoint to infer the missing structure. With no model configured nothing is sent anywhere. Choose the endpoint as
+  you would choose where the documents themselves may be stored.
+
 ---
 
 ## Which data a request is addressed to
