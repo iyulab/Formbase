@@ -32,6 +32,12 @@
 
 ### Changed
 
+- **A document that is not a JSON object is refused at intake.** `POST /formtypes/{type}/documents` stored any JSON value —
+  `[]`, `42`, `"text"`, `null` — as a document, so a list of documents sent to the route for one became a success holding one
+  document whose body is the list, which no declaration can project. It now answers `400` `/problems/invalid-request`.
+  What an object holds is still stored as sent. Separately, the model-assisted schema proposal no longer counts such bodies
+  among the sampled documents or sends them to the model.
+
 - **`Formbase.Formdown`: a field a condition can hide or disable is declared nullable**, even when it is
   required (`*`) — every document filled while it was hidden lacks it, and a non-nullable column skipped
   that whole document. Its condition (`visible-if result=fail`) is reported as a `Constraint` gap instead

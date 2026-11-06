@@ -54,16 +54,20 @@ public sealed class LlmSchemaProposer : ISchemaProposer
                 continue;
             }
 
+            // Only an object has fields to observe. A body of any other shape neither shows the model a structure nor
+            // earns a place among the samples — and it is not sent to the model for nothing.
             var root = body.Root;
-            samples.Add(root);
-            if (root.ValueKind == JsonValueKind.Object)
+            if (root.ValueKind != JsonValueKind.Object)
             {
-                foreach (var property in root.EnumerateObject())
+                continue;
+            }
+
+            samples.Add(root);
+            foreach (var property in root.EnumerateObject())
+            {
+                if (seen.Add(property.Name))
                 {
-                    if (seen.Add(property.Name))
-                    {
-                        observedFields.Add(property.Name);
-                    }
+                    observedFields.Add(property.Name);
                 }
             }
 

@@ -105,6 +105,17 @@ internal static class DocumentEndpoints
         {
             using var document = await JsonDocument.ParseAsync(request.Body, DocumentBody.ParseOptions, cancellationToken)
                 .ConfigureAwait(false);
+
+            // A document is a set of fields, so only a JSON object is one. Anything else could not be projected under
+            // any declaration, and storing it would answer a caller that posted a list of documents to this route
+            // with a success that holds one document whose body is that list.
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return Problem(
+                    $"A document is a JSON object of fields; the request body is {Describe(document.RootElement.ValueKind)}. " +
+                    "To store several documents, post each one on its own.");
+            }
+
             body = DocumentBody.From(document.RootElement);
         }
         catch (JsonException ex)
@@ -182,6 +193,16 @@ internal static class DocumentEndpoints
                 type: "/problems/no-such-document")
             : Results.Ok(stored);
     }
+
+    private static string Describe(JsonValueKind kind) => kind switch
+    {
+        JsonValueKind.Array => "an array",
+        JsonValueKind.String => "a string",
+        JsonValueKind.Number => "a number",
+        JsonValueKind.True or JsonValueKind.False => "a boolean",
+        JsonValueKind.Null => "null",
+        _ => "not an object",
+    };
 
     private static IResult Problem(string detail) =>
         Results.Problem(

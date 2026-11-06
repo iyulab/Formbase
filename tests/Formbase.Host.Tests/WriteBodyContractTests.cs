@@ -36,7 +36,7 @@ public sealed class WriteBodyContractTests : IClassFixture<WebApplicationFactory
         ("an unfinished object", "{\"a\":", "application/json"),
     ];
 
-    /// <summary>JSON that is not an object (or is one under the wrong content type): wrong for a route that takes a declaration.</summary>
+    /// <summary>JSON that is not an object: wrong for a route that takes a declaration, and for the route that takes a document.</summary>
     private static readonly (string Name, string? Body, string ContentType)[] JsonThatIsNotAnObject =
     [
         ("an array where an object is taken", "[]", "application/json"),
@@ -70,9 +70,9 @@ public sealed class WriteBodyContractTests : IClassFixture<WebApplicationFactory
     }
 
     [Fact]
-    public async Task A_document_that_is_not_JSON_is_refused_and_says_so()
+    public async Task A_document_that_is_not_a_JSON_object_is_refused_and_says_so()
     {
-        var failures = await ProbeAsync(HttpMethod.Post, Intake, NotJson);
+        var failures = await ProbeAsync(HttpMethod.Post, Intake, NotJson.Concat(JsonThatIsNotAnObject));
 
         failures.Should().BeEmpty($"POST {Intake}:\n" + string.Join("\n", failures));
     }
@@ -86,18 +86,17 @@ public sealed class WriteBodyContractTests : IClassFixture<WebApplicationFactory
     }
 
     /// <summary>
-    /// The other side of the same stance, pinned so it is a decision and not an accident: a document's body is
-    /// opaque, so intake stores any JSON value it is sent. (A client that posts an array of documents to the
-    /// single-document route stores one document whose body is that array; whether intake should say that is
-    /// a mistake is a question about the contract, not a defect of this route.)
+    /// The other side of the same stance: what intake takes it stores as it was sent. A document is a set of fields, so
+    /// only an object is one (an array posted to this route is the usual mistake — a list of documents sent to the
+    /// route for one), but what an object holds is opaque and is not interpreted.
     /// </summary>
-    [Theory]
-    [InlineData("[]")]
-    [InlineData("42")]
-    [InlineData("null")]
-    public async Task Intake_stores_any_JSON_value_it_is_sent_verbatim(string body)
+    [Fact]
+    public async Task Intake_stores_an_object_it_is_sent_whatever_it_holds()
     {
-        using var response = await _client.PostAsync(Intake, new StringContent(body, Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        using var response = await _client.PostAsync(
+            Intake,
+            new StringContent("""{"a":[1,{"b":null}],"c":{"d":"e"},"f":"g"}""", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(201, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }

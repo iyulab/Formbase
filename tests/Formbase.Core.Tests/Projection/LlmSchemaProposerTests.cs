@@ -180,6 +180,22 @@ public class LlmSchemaProposerTests
             "cancellation is a caller-driven signal, not a proposer failure");
     }
 
+    // A body that is not an object has no fields to observe. It must neither take one of the bounded sample places nor
+    // be sent to the model, which would be handing it a document that cannot inform the structure it is asked for.
+    [Fact]
+    public async Task A_body_that_is_not_an_object_is_neither_sampled_nor_sent_to_the_model()
+    {
+        var raw = await RawWith("[1,2,3]", """{"lot":"L-1"}""", "\"plain text\"", "42");
+        var client = new ScriptedChatClient(
+            """{"type":"object","properties":{"lot":{"type":"string"}},"required":["lot"]}""");
+
+        await new LlmSchemaProposer(raw, client).ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        var prompt = client.LastMessages.Should().ContainSingle(m => m.Role == ChatRole.User).Subject.Text;
+        prompt.Should().Contain("Sample documents (1)");
+        prompt.Should().NotContain("[1,2,3]").And.NotContain("plain text");
+    }
+
     [Fact]
     public async Task Sampling_is_bounded()
     {

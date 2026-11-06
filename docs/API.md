@@ -182,11 +182,13 @@ Content-Type: application/json
 
 The document is stored **verbatim**. Nothing interprets it at intake — not a declaration, not a
 type check — so a form type with no declaration accepts documents exactly as one with a declaration
-does, and they wait in raw until a shape is declared for them. Two things are refused: an object
-that names a property twice (`400` `/problems/invalid-request`) — JSON leaves its meaning open and
-stores disagree on it, so it could not be given back as it was sent — and a document under a form
-type that is a [repeated section](#repeated-sections) of another (`409`
-`/problems/form-type-is-a-section`), whose rows arrive inside the parent's documents.
+does, and they wait in raw until a shape is declared for them. Three things are refused: a body that is
+not a JSON object (`400` `/problems/invalid-request`) — a document is a set of fields, so an array, a
+number, a string or `null` is not one, and an array of documents sent to this route is refused instead of
+being stored as one document whose body is the array; an object that names a property twice (`400`
+`/problems/invalid-request`) — JSON leaves its meaning open and stores disagree on it, so it could not be
+given back as it was sent — and a document under a form type that is a [repeated section](#repeated-sections)
+of another (`409` `/problems/form-type-is-a-section`), whose rows arrive inside the parent's documents.
 
 **`Idempotency-Key` makes a retry safe.** The key becomes the document's identity, so re-sending the
 same request lands on the same document rather than a second copy, takes no new position in the
