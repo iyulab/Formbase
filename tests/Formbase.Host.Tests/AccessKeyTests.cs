@@ -2,7 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 
 namespace Formbase.Host.Tests;
@@ -49,6 +53,58 @@ public sealed class AccessKeyTests : IClassFixture<WebApplicationFactory<Program
         response.Headers.WwwAuthenticate.ToString().Should().Be("Bearer");
         var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
         problem.GetProperty("type").GetString().Should().Be("/problems/access-key-required");
+    }
+
+    /// <summary>
+    /// The sentence above — every route but the probes — held to the routes as the host registers them rather
+    /// than to the few named by hand: a route that answers a caller presenting no key is an unlisted member of
+    /// the unauthenticated surface.
+    /// </summary>
+    [Fact]
+    public async Task A_keyed_host_refuses_every_mapped_route_but_the_probes_for_a_caller_presenting_none()
+    {
+        using var keyed = Keyed(Key);
+        using var client = keyed.CreateClient();
+        var ct = TestContext.Current.CancellationToken;
+
+        var endpoints = keyed.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
+        endpoints.Should().NotBeEmpty("the host maps its routes through the endpoint data source");
+
+        var answered = new List<string>();
+        var probed = 0;
+        foreach (var endpoint in endpoints)
+        {
+            var path = "/" + string.Concat(endpoint.RoutePattern.PathSegments.Select(segment =>
+                "/" + string.Concat(segment.Parts.Select(part => part switch
+                {
+                    RoutePatternLiteralPart literal => literal.Content,
+                    RoutePatternParameterPart => "probe",
+                    _ => string.Empty,
+                })))).TrimStart('/');
+            if (path.StartsWith("/health", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var method in endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["GET"])
+            {
+                using var request = new HttpRequestMessage(new HttpMethod(method), path);
+                if (method is "POST" or "PUT" or "PATCH")
+                {
+                    request.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+                }
+
+                var response = await client.SendAsync(request, ct);
+                probed++;
+                if (response.StatusCode != HttpStatusCode.Unauthorized)
+                {
+                    answered.Add($"{method} {endpoint.RoutePattern.RawText} -> {(int)response.StatusCode}");
+                }
+            }
+        }
+
+        probed.Should().BeGreaterThan(10, "the host maps more than a handful of route and method pairs; a walk that found few is not walking the host");
+        answered.Should().BeEmpty("a route that answers a caller presenting no key is an unlisted member of the unauthenticated surface");
     }
 
     [Fact]
