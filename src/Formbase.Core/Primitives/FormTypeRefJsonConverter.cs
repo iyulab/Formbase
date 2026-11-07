@@ -36,6 +36,10 @@ internal sealed class FormTypeRefJsonConverter : JsonConverter<FormTypeRef>
     public override void Write(Utf8JsonWriter writer, FormTypeRef value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value.Value);
 
+    // TODO(remove-legacy-read): the object form is written by no version since 0.14.1 and is read only for
+    // declarations a store kept from before it. Remove this reader (and the StartObject branch above) once no durable
+    // store holds a declaration written before 0.14.1 — a one-time rewrite of the stored declarations at upgrade, or a
+    // stated minimum version that starts after 0.14.1; the shape is then simply refused with the message below.
     private static string? ReadLegacyObject(ref Utf8JsonReader reader)
     {
         string? value = null;
