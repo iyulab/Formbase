@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main, develop]
 
+# The workflow token only reads the repository: every job checks out, builds, tests and scans, and none
+# writes to it (no comments, releases, packages or pushes). Publishing lives in the release workflows,
+# which declare their own permissions. A job that ever needs more raises it for that job alone.
+permissions:
+  contents: read
+
 # A newer push to the same ref supersedes an in-flight run (saves Actions minutes).
 concurrency:
   group: ci-${{ github.ref }}
