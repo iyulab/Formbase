@@ -210,6 +210,9 @@ jobs:
     env:
       IncludeLiveTests: 'true'
       IncludeLlmLiveTests: 'true'
+      # The JSON benchmark measurement harness is code too: compiled and formatted here, run by hand
+      # (it needs a corpus file CI does not have).
+      IncludeJsonBenchMeasurement: 'true'
 
     steps:
       - name: Checkout
