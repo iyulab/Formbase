@@ -14,7 +14,7 @@ namespace Formbase.Mcp;
 /// <remarks>
 /// The SDK's own opt-in (<c>JsonSerializerOptions.UnmappedMemberHandling = Disallow</c>, honored by the parameter
 /// binding) also refuses an undeclared argument, but its error reads only "An error occurred invoking '…'": it names no
-/// argument and lists none, so a model has nothing to correct. TODO(upstream): drop this filter once the SDK's strict
+/// argument and lists none, so a model has nothing to correct. TODO(upstream: modelcontextprotocol/csharp-sdk#2011): drop this filter once the SDK's strict
 /// binding names the refused argument and the declared ones.
 /// </remarks>
 internal static class UnknownArguments
