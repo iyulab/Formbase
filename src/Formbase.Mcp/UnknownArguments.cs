@@ -11,6 +11,12 @@ namespace Formbase.Mcp;
 /// narrowed from and has no way to tell. The refusal is the tool's own error result, which is how a protocol
 /// client shows a model what it did wrong so it can send the call again.
 /// </summary>
+/// <remarks>
+/// The SDK's own opt-in (<c>JsonSerializerOptions.UnmappedMemberHandling = Disallow</c>, honored by the parameter
+/// binding) also refuses an undeclared argument, but its error reads only "An error occurred invoking '…'": it names no
+/// argument and lists none, so a model has nothing to correct. TODO(upstream): drop this filter once the SDK's strict
+/// binding names the refused argument and the declared ones.
+/// </remarks>
 internal static class UnknownArguments
 {
     /// <summary>The filter the door installs ahead of every tool call.</summary>
