@@ -48,7 +48,7 @@
 - **`Formbase.MorphDb` builds on `MorphDB.Client` 0.36.0** (was 0.32.0); the live MorphDB suite and the compose
   file run `ghcr.io/iyulab/morphdb:0.36.0`. The Microsoft.* packages move to 10.0.14.
 
-- **The M3L adapter builds on `M3L.Native` 0.25.0** (was 0.24.0). The adapter is not packaged. A model name
+- **The M3L adapter builds on `M3L.Native` 0.26.0** (was 0.24.0). The adapter is not packaged. A model name
   declared twice in one document is now covered by a test: both declarations are adapted, each records its
   owner as a gap, and a lookup through a reference to that name stays unresolved.
 
