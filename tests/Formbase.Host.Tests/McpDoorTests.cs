@@ -128,6 +128,61 @@ public sealed class McpDoorTests : IClassFixture<WebApplicationFactory<Program>>
         tools.Should().OnlyContain(t => t.ProtocolTool.Annotations!.ReadOnlyHint == true && t.ProtocolTool.Annotations.DestructiveHint != true);
     }
 
+    // A model's usual mistake is a name: `filters` for `filter`. Unread, it narrows nothing and the answer is every record.
+    [Fact]
+    public async Task A_misspelled_argument_is_refused_and_no_records_come_back()
+    {
+        var host = Door();
+        var type = await SeedAsync(host, 1, 2, 3);
+        await using var client = await McpAsync(host, Key);
+
+        var typo = await client.CallToolAsync("query_records", new Dictionary<string, object?> { ["type"] = type, ["filters"] = TotalIsTwo }, cancellationToken: TestContext.Current.CancellationToken);
+
+        typo.IsError.Should().BeTrue("the call asked for a narrowing the tool did not apply");
+        Text(typo).Should().Contain("Unknown argument 'filters'").And.Contain("query_records")
+            .And.Contain("filter", "the refusal lists the arguments the tool takes so the call can be sent again");
+        typo.StructuredContent.Should().BeNull("a refused call returns no records");
+    }
+
+    [Fact]
+    public async Task Every_tool_refuses_an_argument_it_does_not_declare()
+    {
+        await using var client = await McpAsync(Door(), Key);
+        var failures = new List<string>();
+
+        foreach (var tool in Formbase.Mcp.FormbaseMcpTools.ToolNames)
+        {
+            var result = await client.CallToolAsync(tool, new Dictionary<string, object?> { ["stray"] = 1 }, cancellationToken: TestContext.Current.CancellationToken);
+            if (result.IsError != true || !Text(result).Contains("Unknown argument 'stray'", StringComparison.Ordinal))
+            {
+                failures.Add($"{tool}: {(result.IsError == true ? Text(result) : "answered as if the argument had not been sent")}");
+            }
+        }
+
+        failures.Should().BeEmpty(string.Join("\n", failures));
+    }
+
+    [Fact]
+    public async Task The_arguments_a_tool_declares_still_pass()
+    {
+        var host = Door();
+        var type = await SeedAsync(host, 1, 2, 3);
+        await using var client = await McpAsync(host, Key);
+
+        var read = await client.CallToolAsync("query_records", new Dictionary<string, object?>
+        {
+            ["type"] = type,
+            ["filter"] = TotalIsTwo,
+            ["orderBy"] = "total",
+            ["limit"] = 10,
+            ["offset"] = 0,
+            ["referenceSources"] = false,
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        read.IsError.Should().NotBe(true, Text(read));
+        read.StructuredContent!.Value.GetProperty("result").GetProperty("rows").GetArrayLength().Should().Be(1);
+    }
+
     [Fact]
     public async Task Records_read_through_the_door_are_the_records_the_rest_api_gives()
     {

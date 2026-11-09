@@ -10,7 +10,8 @@
   their JSON, is off by default, and the host refuses to start with it on while no access key is configured. The rules that
   read a record query (filters, ordering, paging) and the document reads (the stream after a watermark, one document by id) moved
   into one place each that the REST reads and the tools both use. `list_documents` reads the raw stream whether or not the form
-  type has a declaration or a projection. See `docs/API.md`.
+  type has a declaration or a projection. A tool answers only the arguments it declares: one it does not take (a model's
+  usual mistake is a name — `filters` for `filter`) is the tool's error naming it, not an input silently dropped. See `docs/API.md`.
 - **Host access keys.** `Formbase__Access__Keys__<n>` configures one or more keys; when set, every request
   except the health probes must send `Authorization: Bearer <key>` and is otherwise refused with `401`
   `/problems/access-key-required`. A key names a calling service, not a person. Unset, the host behaves as

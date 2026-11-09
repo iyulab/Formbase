@@ -45,7 +45,8 @@ public static class FormbaseMcpExtensions
 
         services.AddMcpServer()
             .WithHttpTransport(http => http.Stateless = true)
-            .WithTools<FormbaseMcpTools>();
+            .WithTools<FormbaseMcpTools>()
+            .WithRequestFilters(filters => filters.AddCallToolFilter(UnknownArguments.Refuse));
         return services;
     }
 

@@ -847,6 +847,10 @@ read everything that key reads. Give an agent a key meant for it and rotate it l
 There is no tool that writes. What the REST API refuses (a form type never projected, a filter it cannot read) is the tool's
 error, in the same words.
 
+A tool answers only the arguments it declares. An argument it does not take — `filters` for `filter` — is the tool's error
+(`isError`), naming the argument and listing the ones the tool takes, and no records come back: left unread, it would narrow
+nothing and the answer would be every record the host holds.
+
 ## Errors
 
 Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details. **Branch on `type`**,
