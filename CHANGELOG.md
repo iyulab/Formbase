@@ -60,6 +60,7 @@
   none, those that never carried the field, and those whose section could not be read — not only "no option
   checked".
 - `ModelContextProtocol.AspNetCore` 2.4.0 (the read-only MCP door).
+- `Microsoft.Extensions.DependencyInjection.Abstractions` 11.0.0 (the package carries a `net10.0` target, so the library stays on net10.0).
 
 ### Fixed
 
