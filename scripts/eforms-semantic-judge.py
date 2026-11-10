@@ -276,7 +276,10 @@ def main():
     def rate(rs):
         return sum(1 for r in rs if r["correct"]) / len(rs) if rs else None
 
+    with open(os.path.join(args.corpus_dir, "fields.json"), encoding="utf-8") as fh:
+        sdk_version = json.load(fh).get("sdkVersion", "unknown")
     summary = {
+        "sdk_version": sdk_version,
         "model": model, "n_sampled": len(sample), "n_scored": len(scored),
         "n_errors": len(sample) - len(scored),
         "overall_accuracy": rate(scored),

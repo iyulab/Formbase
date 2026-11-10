@@ -119,7 +119,20 @@ def jaccard(a, b):
     return len(a & b) / len(a | b)
 
 
+def corpus_sdk_version(corpus_dir):
+    """The SDK release a fetched corpus came from, read from the corpus itself.
+
+    The counts below move between SDK releases (a different release declares a different set of
+    sections and fields), so a figure quoted without its release cannot be reproduced. `fields.json`
+    names its own release; `fetch` without `--tag` takes the newest one, so the directory name or the
+    date of the run says nothing.
+    """
+    with open(os.path.join(corpus_dir, "fields.json"), encoding="utf-8") as fh:
+        return json.load(fh).get("sdkVersion", "unknown")
+
+
 def cmd_analyze(args):
+    sdk_version = corpus_sdk_version(args.corpus_dir)
     by_group, group_be, forms_by_field = load_corpus(args.corpus_dir)
     n_forms = len(set(f for per_form in by_group.values() for f in per_form))
 
@@ -179,6 +192,7 @@ def cmd_analyze(args):
     negatives.sort(key=lambda c: -c["jaccard"])
 
     result = {
+        "sdk_version": sdk_version,
         "forms_analysed": n_forms,
         "distinct_declared_sections": len(by_group),
         "section_recurrence": dict(recurrence),
@@ -193,6 +207,7 @@ def cmd_analyze(args):
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2)
 
+    print(f"corpus: {sdk_version}")
     print(f"forms analysed: {n_forms}")
     print(f"distinct declared sections (groups): {len(by_group)}")
     print(f"section recurrence: {dict(recurrence)}")
