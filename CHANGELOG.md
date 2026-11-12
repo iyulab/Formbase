@@ -21,6 +21,16 @@
   refused table or field name already had, and the detail names the document and its record key and carries the store's reason.
   `ProjectionRowRefusedException` is the error behind it.
 
+### Fixed
+
+- **A query that names no limit returns every row it matches on the MorphDB store.** It returned the first 50 and nothing said so,
+  while `QuerySpec` says none means all and the SQLite and in-memory stores did return all. Row-count-sensitive callers (a record read
+  with no `limit`, an engine query with no window) read a short page as the whole answer.
+- **A timestamp value that is a time of day alone is no longer read as today's date at that time.** The same document projected on
+  one day and rebuilt on the next held two different instants. A time of day alone is now not a timestamp (the field skips it, as
+  for any value it cannot read), and the M3L adapter maps `time` to text, as the Formdown adapter already did, instead of to a
+  timestamp.
+
 ## 0.35.0
 
 A minor: Formbase answers Model Context Protocol clients through a read-only door, a host can require an access key, and an
