@@ -4,7 +4,10 @@ namespace Formbase.Core.Schema;
 
 /// <summary>
 /// Reads the text form of a <see cref="ColumnType.Timestamp"/> value. A value that carries an offset
-/// keeps it; a value without one — a date alone, or a date and time with no zone — is read as UTC.
+/// is read at it — it names that instant; a value without one — a date alone, or a date and time with no zone — is read as UTC.
+/// What a store then holds is an instant: whether it keeps the offset the text was written with, or the full 100 ns of the reading,
+/// is the store's (a store that holds instants, as PostgreSQL's <c>timestamptz</c> does, gives the same instant back in its own offset
+/// and at its own precision).
 /// </summary>
 /// <remarks>
 /// Reading an offset-less value in the host's local zone made the same document a different instant
