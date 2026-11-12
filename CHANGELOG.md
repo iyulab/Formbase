@@ -41,6 +41,11 @@
   and refuse it for good, but intake wrapped every store failure as `503` `/problems/intake-failed`, which a caller answers by sending the
   same document again. Intake now refuses the character before any store is asked — in a string value, a property name or a record key,
   on accepting, retiring and in a batch — with `400` `/problems/invalid-document` naming where it is, the same on every store.
+- **Schema intelligence asks the model once per change of a form type's documents, not on every read.** Every read, status check and
+  trigger evaluation asks the schema proposer for the form type's shape, and the model-backed one asked the model each time — so a model
+  call (its latency, its outage) sat under every read of a form type, and the wobble of its answer in `required` changed the shape's
+  fingerprint and read as a stale projection. The proposal is a function of the documents observed: it is now kept until another is
+  appended, a failure is never kept, and a restart asks again.
 - **An `integer` column takes a whole JSON number whatever its spelling.** `100`, `1e2` and `100.0` are one value, and a store that keeps
   the raw document may normalize one into another (PostgreSQL's `jsonb` keeps `1e2` as `100`), so the same document projected on one
   store and was skipped on another. A whole value that fits 64 bits is now taken; `1.5` or a number past 64 bits is still a skipped field,

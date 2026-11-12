@@ -127,6 +127,59 @@ public class LlmSchemaProposerTests
             .WithMessage("*Qty*qty*");
     }
 
+    /// <summary>
+    /// Every read of a form type asks the proposer for its shape, so a proposer that asks the model each time puts a model call (and the
+    /// model's outage, and its answer's wobble in <c>required</c>) under every read. What it proposes is a function of the documents it
+    /// observed: until another is appended, it is the same shape, and is not asked for again.
+    /// </summary>
+    [Fact]
+    public async Task The_same_documents_are_proposed_for_once_not_on_every_read()
+    {
+        var raw = new InMemoryRawStore();
+        var intake = new IntakeService(raw, new InMemoryFieldHintSource());
+        await intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var model = new ScriptedChatClient("""{"type":"object","properties":{"lot":{"type":"string"}},"required":["lot"]}""");
+        var proposer = new LlmSchemaProposer(raw, model);
+
+        var first = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+        var second = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+        var third = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        model.Calls.Should().Be(1);
+        second.Should().BeEquivalentTo(first);
+        third.Should().BeEquivalentTo(first);
+    }
+
+    [Fact]
+    public async Task A_document_appended_since_asks_the_model_again()
+    {
+        var raw = new InMemoryRawStore();
+        var intake = new IntakeService(raw, new InMemoryFieldHintSource());
+        await intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+        var model = new ScriptedChatClient("""{"type":"object","properties":{"lot":{"type":"string"}},"required":[]}""");
+        var proposer = new LlmSchemaProposer(raw, model);
+        await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        await intake.AcceptAsync(Qc, DocumentBody.Parse("""{"lot":"L-2","qty":3}"""), cancellationToken: TestContext.Current.CancellationToken);
+        await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        model.Calls.Should().Be(2, "a new document may bring a field the earlier proposal never saw");
+    }
+
+    [Fact]
+    public async Task A_failed_proposal_is_not_remembered()
+    {
+        var raw = await RawWith("""{"lot":"L-1"}""");
+        var model = new FlakyChatClient("""{"type":"object","properties":{"lot":{"type":"string"}},"required":[]}""");
+        var proposer = new LlmSchemaProposer(raw, model);
+
+        var down = () => proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+        await down.Should().ThrowAsync<SchemaProposerUnavailableException>();
+        var up = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        up.Should().NotBeNull("the model came back, and a failure is not an answer to keep");
+    }
+
     [Fact]
     public async Task A_non_json_reply_fails_loud()
     {
@@ -265,9 +318,13 @@ internal sealed class ScriptedChatClient(string reply) : IChatClient
 {
     public IReadOnlyList<ChatMessage> LastMessages { get; private set; } = [];
 
+    /// <summary>How many times the model was asked.</summary>
+    public int Calls { get; private set; }
+
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
+        Calls++;
         LastMessages = [.. messages];
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
     }
@@ -289,6 +346,28 @@ internal sealed class ThrowingChatClient(Exception toThrow) : IChatClient
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
         => throw toThrow;
+
+    public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("The proposer never streams.");
+
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
+}
+
+/// <summary>A model that is unreachable on the first call and answers on the next ones.</summary>
+internal sealed class FlakyChatClient(string reply) : IChatClient
+{
+    private int _calls;
+
+    public Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+        _calls++ == 0
+            ? throw new HttpRequestException("connection refused")
+            : Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
 
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)

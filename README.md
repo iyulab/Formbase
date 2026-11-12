@@ -118,7 +118,8 @@ refused the same way; a MorphDB it cannot reach is an outage it starts through.
 
 **Schema intelligence is an extension.** Supply a model endpoint, key and name and the engine infers
 structure for fields nobody declared; supply none and every other capability is unchanged — the host
-starts without model credentials, always.
+starts without model credentials, always. The model is asked once per change of a form type's documents, not on every read: the shape it
+proposed stands until another document is appended (a restart asks again), and a model that cannot be reached is not remembered as an answer.
 
 ```bash
 Formbase__Llm__Endpoint=https://api.openai.com Formbase__Llm__ApiKey=… Formbase__Llm__Model=gpt-4o-mini dotnet run --project src/Formbase.Host

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Formbase.Core.Errors;
@@ -35,7 +36,55 @@ public sealed class LlmSchemaProposer : ISchemaProposer
         _chatClient = chatClient;
     }
 
+    /// <summary>What was last proposed for one form type, and the head of its stream when it was.</summary>
+    private sealed class Memo
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public bool Has { get; set; }
+
+        public Watermark Head { get; set; }
+
+        public TableSchema? Schema { get; set; }
+    }
+
+    private readonly ConcurrentDictionary<FormTypeRef, Memo> _memos = new();
+
+    /// <remarks>
+    /// Every read of a form type asks its proposer for the shape, so a proposer that asks the model each time puts a model call under every
+    /// read — its latency, its outage, and the wobble of its answer in <c>required</c>, which changes the shape's fingerprint and
+    /// reads as a stale projection. What is proposed is a function of the documents observed, so until another is appended
+    /// (the stream's head moves) the last answer stands. A failure is not an answer and is not kept. The memory is the instance's: a
+    /// restart asks again, which is the same as a document having arrived.
+    /// </remarks>
     public async Task<TableSchema?> ProposeAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        // Read before sampling: a document appended in between is in the sample but not in the key, so the next call sees a newer head
+        // and asks again — never the reverse.
+        var head = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var memo = _memos.GetOrAdd(type, static _ => new Memo());
+
+        await memo.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (memo.Has && memo.Head == head)
+            {
+                return memo.Schema;
+            }
+
+            var schema = await ProposeFromDocumentsAsync(type, cancellationToken).ConfigureAwait(false);
+            memo.Schema = schema;
+            memo.Head = head;
+            memo.Has = true;
+            return schema;
+        }
+        finally
+        {
+            memo.Gate.Release();
+        }
+    }
+
+    private async Task<TableSchema?> ProposeFromDocumentsAsync(FormTypeRef type, CancellationToken cancellationToken)
     {
         var samples = new List<JsonElement>(SampleLimit);
         // First-seen order: column order must be deterministic from the raw stream, never from the
