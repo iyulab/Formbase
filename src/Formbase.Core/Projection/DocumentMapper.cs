@@ -206,6 +206,19 @@ internal static class DocumentMapper
                     value = i;
                     return true;
                 }
+
+                // JSON writes one value many ways (100, 1e2, 100.0), and a store that keeps the raw document may keep it as written or
+                // normalized (PostgreSQL's jsonb keeps 1e2 as 100): the value is what a column takes, so the same document projects
+                // the same on every store. A number that is not whole, or does not fit, stays a skip — never a rounded value.
+                if (field.ValueKind == JsonValueKind.Number
+                    && field.TryGetDecimal(out var whole)
+                    && whole == decimal.Truncate(whole)
+                    && whole >= long.MinValue
+                    && whole <= long.MaxValue)
+                {
+                    value = (long)whole;
+                    return true;
+                }
                 break;
 
             case ColumnType.Decimal:

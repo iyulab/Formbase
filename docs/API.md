@@ -384,6 +384,9 @@ This is the shape the next projection run will build. A form type with no declar
 `/problems/no-declaration` — a state to read, not a failure to recover from.
 
 - **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`, `date`.
+  An `integer` takes a JSON number whose value is whole and fits 64 bits, however it is written —
+  `100`, `1e2` and `100.0` are the same value, and a store that keeps the raw document may normalize one into
+  another; `1.5`, or a number past 64 bits, is not read (the field is skipped), never rounded.
   A `date` is a calendar day, not a point in time: a document carries it as `yyyy-MM-dd` and a filter
   names it the same way; a timestamp string in a `date` field is not read (the field is skipped).
   A `timestamp` value without an offset — a date alone, or a date and time with no zone — is read as

@@ -41,6 +41,10 @@
   and refuse it for good, but intake wrapped every store failure as `503` `/problems/intake-failed`, which a caller answers by sending the
   same document again. Intake now refuses the character before any store is asked — in a string value, a property name or a record key,
   on accepting, retiring and in a batch — with `400` `/problems/invalid-document` naming where it is, the same on every store.
+- **An `integer` column takes a whole JSON number whatever its spelling.** `100`, `1e2` and `100.0` are one value, and a store that keeps
+  the raw document may normalize one into another (PostgreSQL's `jsonb` keeps `1e2` as `100`), so the same document projected on one
+  store and was skipped on another. A whole value that fits 64 bits is now taken; `1.5` or a number past 64 bits is still a skipped field,
+  never rounded.
 - **The in-memory store orders text by its code units, not by the host's culture.** Text sorted, compared and aggregated through the
   engine's own ordering followed the current culture, so the same rows came back in a different order on a host set to another
   language, and in an order the single-file store (binary collation) does not give.

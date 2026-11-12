@@ -142,6 +142,30 @@ public class ProjectorTests
         result.AbsentFieldCounts.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// JSON writes one number many ways (<c>100</c>, <c>1e2</c>, <c>100.0</c>), and a store that keeps the raw document may keep it
+    /// as written or normalized (PostgreSQL's <c>jsonb</c> keeps <c>1e2</c> as <c>100</c>). An integer column takes the value, so the same
+    /// document projects the same on every store; a number that is not whole, or does not fit, is still a skip.
+    /// </summary>
+    [Fact]
+    public async Task An_integer_column_takes_a_json_number_whatever_its_spelling_when_the_value_is_whole()
+    {
+        var h = new Harness();
+        h.DeclareQcHints();
+        await h.Accept("""{"lot":"a","qty":100}""");
+        await h.Accept("""{"lot":"b","qty":1e2}""");
+        await h.Accept("""{"lot":"c","qty":100.0}""");
+        await h.Accept("""{"lot":"d","qty":1.5}""");
+        await h.Accept("""{"lot":"e","qty":9223372036854775808}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var rows = await h.Store.QueryAsync(Table, new QuerySpec(), TestContext.Current.CancellationToken);
+        rows.Where(r => r["qty"] is not null).Select(r => (string)r["lot"]!).Order().Should().Equal("a", "b", "c");
+        rows.Where(r => r["qty"] is not null).Select(r => Convert.ToInt64(r["qty"], System.Globalization.CultureInfo.InvariantCulture)).Should().OnlyContain(q => q == 100);
+        result.SkippedFields.Should().HaveCount(2, "1.5 is not whole and 2^63 does not fit; each is a skipped field, not a rounded value");
+    }
+
     [Fact]
     public async Task A_required_field_skip_names_absent_and_null_differently()
     {
