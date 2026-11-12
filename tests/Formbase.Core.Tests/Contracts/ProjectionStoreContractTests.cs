@@ -115,6 +115,20 @@ public abstract class ProjectionStoreContractTests
         await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>A query that names no limit returns every row it matches: the spec says «none means all», whichever store answers.</summary>
+    [Fact]
+    public async Task A_query_with_no_limit_returns_every_row_it_matches()
+    {
+        var store = CreateStore();
+        await store.CreateTableAsync(Schema(), TestContext.Current.CancellationToken);
+        await store.BulkInsertAsync(TableName, Enumerable.Range(1, 120).Select(i => Row("k" + i, i)).ToArray(), TestContext.Current.CancellationToken);
+
+        var rows = await store.QueryAsync(TableName, new QuerySpec(), TestContext.Current.CancellationToken);
+
+        rows.Should().HaveCount(120);
+        await store.DropTableAsync(TableName, TestContext.Current.CancellationToken);
+    }
+
     [Fact]
     public async Task Query_orders_by_the_requested_key_in_both_directions()
     {

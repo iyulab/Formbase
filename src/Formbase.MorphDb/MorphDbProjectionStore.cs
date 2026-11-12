@@ -20,7 +20,6 @@ namespace Formbase.MorphDb;
 public sealed class MorphDbProjectionStore : IProjectionStore
 {
     private const int InsertChunkSize = 500;
-    private const int DefaultPageSize = 50;
 
     /// <summary>MorphDB returns at most this many rows per request, so a wider window takes several.</summary>
     private const int MaxPageSize = 1000;
@@ -609,7 +608,8 @@ public sealed class MorphDbProjectionStore : IProjectionStore
 
     private async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> QueryCoreAsync(string tableName, QuerySpec spec, CancellationToken cancellationToken = default)
     {
-        var limit = spec.Limit ?? DefaultPageSize;
+        // None means all (QuerySpec): the window is read page by page until the server says no rows follow.
+        var limit = spec.Limit ?? int.MaxValue;
         var offset = spec.Offset ?? 0;
 
         if (limit <= 0)
