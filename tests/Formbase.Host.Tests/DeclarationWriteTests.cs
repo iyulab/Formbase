@@ -103,6 +103,27 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         outcomes.Count(code => code == HttpStatusCode.Conflict).Should().Be(Writers - 1);
     }
 
+    /// <summary>
+    /// A JSON <c>null</c> where the contract lists an object is a fault in the request, not in the server:
+    /// it answers as one, never with a 500 that reads as an outage to a caller who would retry it.
+    /// </summary>
+    [Theory]
+    [InlineData("\"fields\":[null]")]
+    [InlineData("\"fields\":[{\"name\":\"total\",\"type\":\"integer\"}],\"relations\":[null]")]
+    [InlineData("\"fields\":[{\"name\":\"total\",\"type\":\"integer\"}],\"indexes\":[null]")]
+    public async Task A_null_where_an_object_belongs_is_an_invalid_declaration(string members)
+    {
+        var type = NewFormType();
+        var body = $$"""{"tableName":"declared_{{type}}","declarationVersion":1,{{members}}}""";
+
+        using var response = await _client.PutAsync(
+            $"/formtypes/{type}/declaration",
+            new StringContent(body, Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task Replacing_without_naming_a_version_is_refused()
     {

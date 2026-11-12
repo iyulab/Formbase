@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- **A JSON `null` where a declaration lists an object is a `400`, not a `500`.** `"fields":[null]` (and the same in `relations` and
+  `indexes`) bound without complaint and failed with an unhandled error, which reads as an outage to a caller that would retry it.
+  The declaration is now refused as invalid, naming what is wrong.
 - **Two declaration writes that both named the version they had read no longer both succeed.** `PUT /formtypes/{type}/declaration`
   checked `expectedDeclarationVersion` against a read taken before the write, so two requests that read version 1 and both named
   it passed the check and both wrote — the last one won and the first one's shape was gone, which is the lost update the field

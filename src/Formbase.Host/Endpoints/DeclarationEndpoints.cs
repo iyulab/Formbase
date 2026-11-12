@@ -206,6 +206,22 @@ internal static class DeclarationEndpoints
                 "propose a table with nothing in it, which is not the same as having no declaration.");
         }
 
+        // A JSON null where the contract lists an object binds without complaint and fails later, on first use.
+        if (request.Fields.Any(f => f is null))
+        {
+            return Invalid("A declared field must be an object, not null.");
+        }
+
+        if (request.Relations?.Any(r => r is null) == true)
+        {
+            return Invalid("A declared relation must be an object, not null.");
+        }
+
+        if (request.Indexes?.Any(i => i is null) == true)
+        {
+            return Invalid("A declared index must be an object, not null.");
+        }
+
         var blank = request.Fields.FirstOrDefault(f => string.IsNullOrWhiteSpace(f.Name));
         if (blank is not null)
         {
