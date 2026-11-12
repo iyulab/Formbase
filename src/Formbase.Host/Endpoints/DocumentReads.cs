@@ -22,6 +22,29 @@ internal static class DocumentReads
         return new DocumentPageResponse([.. page.Documents.Select(ToResponse)], page.RawHead.Value);
     }
 
+    /// <summary>
+    /// One page of a repeated section's rows after a watermark of its parent's stream, or <see langword="null"/> when the form
+    /// type is not a repeated section. The rows are the ones the section's projection cuts, named for citation.
+    /// </summary>
+    /// <exception cref="ArgumentException">The form type's name cannot be one.</exception>
+    internal static async Task<SectionRowPageResponse?> ListSectionRowsAsync(FormbaseEngine engine, string type, long after, int limit, CancellationToken cancellationToken)
+    {
+        if (await engine.ReadSectionRowsAsync(FormTypeRef.Create(type), new Watermark(after), limit, cancellationToken).ConfigureAwait(false) is not { } page)
+        {
+            return null;
+        }
+
+        return new SectionRowPageResponse(
+            [.. page.Documents.Select(d => new SectionDocumentResponse(
+                d.Document.Id.Value,
+                d.Document.Watermark.Value,
+                d.Document.Key?.Value,
+                d.Document.IsRetirement,
+                [.. (d.Expansion?.Rows ?? []).Select(r => new SectionRowResponse(r.Position, r.Citation, r.Record, r.Body))],
+                d.Expansion?.Refusal))],
+            page.RawHead.Value);
+    }
+
     /// <summary>One stored document, or <see langword="null"/> when there is none with this id.</summary>
     internal static async Task<StoredDocumentResponse?> GetAsync(FormbaseEngine engine, Guid id, CancellationToken cancellationToken) =>
         await engine.GetDocumentAsync(DocumentId.From(id), cancellationToken).ConfigureAwait(false) is { } stored ? ToResponse(stored) : null;

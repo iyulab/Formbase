@@ -166,6 +166,90 @@
         }
       }
     },
+    "/formtypes/{type}/rows": {
+      "get": {
+        "tags": [
+          "DocumentEndpoints"
+        ],
+        "summary": "Reads a page of a repeated section\u0027s rows",
+        "description": "A repeated section has no documents of its own: its rows are cut from the documents of the parent it belongs to. This reads the parent\u0027s stream the way \u0060ListDocuments\u0060 does \u2014 oldest first, after the \u0060after\u0060 watermark (the parent\u0027s), \u0060limit\u0060 defaults to 100 and is at most 1000 \u2014 and answers each parent document with the rows it holds, cut the way the section\u0027s projection cuts them. Each row\u0027s \u0060name\u0060 is what a claim grounded in it cites (the parent document\u0027s id, a slash, the position): take it as given. \u0060record\u0060 is the row\u0027s record identity in the projection. A document whose section cannot be read answers \u0060refusal\u0060 and no rows, as the projection skips it; a retirement holds none. A form type that is not a repeated section is refused with 404.",
+        "operationId": "ListSectionRows",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SectionRowPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/documents/{id}": {
       "get": {
         "tags": [
@@ -1651,6 +1735,103 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "SectionDocumentResponse": {
+        "required": [
+          "documentId",
+          "watermark",
+          "recordKey",
+          "retired",
+          "rows",
+          "refusal"
+        ],
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "watermark": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "recordKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "retired": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectionRowResponse"
+            }
+          },
+          "refusal": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SectionRowPageResponse": {
+        "required": [
+          "documents",
+          "rawHead"
+        ],
+        "type": "object",
+        "properties": {
+          "documents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SectionDocumentResponse"
+            }
+          },
+          "rawHead": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "SectionRowResponse": {
+        "required": [
+          "position",
+          "name",
+          "record",
+          "body"
+        ],
+        "type": "object",
+        "properties": {
+          "position": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "record": {
+            "type": "string"
+          },
+          "body": {
+            "$ref": "#/components/schemas/JsonElement"
           }
         }
       },

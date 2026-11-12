@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A repeated section's rows can be read, named for citation.** `GET /formtypes/{section}/rows` reads the parent's stream the way
+  `GET /formtypes/{type}/documents` does (oldest first, `after` a watermark of the parent's, `limit` up to 1000) and answers each
+  parent document with the rows it holds, cut the way the section's projection cuts them. Each row's `name` is what a claim grounded in it
+  cites — the parent document's id, a slash, the position — given rather than left to the reader to put together; `record` is
+  the row's record identity in the projection (`fb_record`: the parent's record key when it has one, else its document id,
+  and the position). A document whose section cannot be read answers `refusal` and no rows; a retirement holds none. A form
+  type that is not a repeated section is refused with `404` `/problems/not-a-section`. `Formbase.Core` carries the same name as
+  `SectionRow.Citation`, and `FormbaseEngine.ReadSectionRowsAsync` is the read.
+
 ## 0.35.0
 
 A minor: Formbase answers Model Context Protocol clients through a read-only door, a host can require an access key, and an

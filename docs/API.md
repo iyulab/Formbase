@@ -18,6 +18,7 @@ precondition they must satisfy.
 ```yaml
 POST   /formtypes/{type}/documents     # Accept a document
 GET    /formtypes/{type}/documents     # Read a form type's stream, page by page
+GET    /formtypes/{type}/rows          # Read a repeated section's rows, through its parent's stream
 GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
 PUT    /formtypes/{type}/declaration   # Put a declaration in force
@@ -497,6 +498,15 @@ the array.
 - **A row is part of its parent's record.** Its record identity is the parent's, a slash and the item's
   position (`o-1/0`); it shares the parent's document and record key, and a record query names it with
   `record.row`, its position. Correcting or retiring the parent replaces every row it held.
+- **A section's rows are read through its parent.** `GET /formtypes/orderlines/rows?after=0&limit=100` reads the
+  parent's stream as `GET /formtypes/{type}/documents` does and answers each parent document — `documentId`,
+  `watermark`, `recordKey`, `retired` — with the `rows` it holds, cut as the projection cuts them: `position`, `body`
+  (the item with the parent's key value written under the section's key field), `record` (the projection's identity,
+  `o-1/0`) and `name`, the row's **citation** — the parent *document's* id, a slash and the position
+  (`7b0c2f1e-…/0`). Cite a row by its `name` and take it as given: a document is one version of a record, so the
+  citation names the version a row was cut from while `record` stays the same across the record's corrections.
+  A document whose section cannot be read answers `refusal` (the reason the projection's skip gives) and no rows; a
+  retirement holds none. A form type that is not a repeated section is `404` `/problems/not-a-section`.
 - **A section of values.** When the section declares one field beside its `keyField`, an item may be a
   value instead of an object — a checkbox group's chosen options, a list of tags — and each value becomes
   that field of its row: `"tags": ["rush", "fragile"]` is two rows. Each value can then be filtered on,
@@ -886,6 +896,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/projection-table-owned-elsewhere` | The projection would replace a table another host built from its own raw stream in the same MorphDB project; nothing was dropped |
 | 409 | `/problems/projection-refused` | The projection store is reachable but does not accept the table the declaration describes — a table or field name it refuses (a reserved name, one that is too long or starts with an underscore, a name the host adds to every row itself); change the declaration and project again |
 | 409 | `/problems/table-name-in-use` | Another form type already projects into the table the declaration names |
+| 404 | `/problems/not-a-section` | Rows were read of a form type that is not a repeated section of another |
 | 409 | `/problems/form-type-is-a-section` | A document or retirement was sent under a form type that is a repeated section of another; send the row inside the parent document's section array |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |

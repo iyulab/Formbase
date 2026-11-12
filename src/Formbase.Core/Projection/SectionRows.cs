@@ -57,7 +57,7 @@ public static class SectionRows
                     : $"row {position} of section '{section.SectionField}' is a JSON {Kind(item)}, not an object{(section.ValueMember is null ? string.Empty : " or a value")}");
             }
 
-            rows.Add(new SectionRow(position, $"{parentRecord}/{position}", WithKey(item, section, key, parentRecord)));
+            rows.Add(new SectionRow(position, $"{parentRecord}/{position}", WithKey(item, section, key, parentRecord), $"{parent.Id.Value:D}/{position}"));
             position++;
         }
 
@@ -145,4 +145,10 @@ public sealed record SectionExpansion(IReadOnlyList<SectionRow> Rows, string? Re
 /// long as the parent document it was cut from stands.
 /// </param>
 /// <param name="Body">The item with the parent's key value written under <see cref="SectionDef.RowKey"/>.</param>
-public sealed record SectionRow(int Position, string Record, JsonElement Body);
+/// <param name="Citation">
+/// The name a claim grounded in this row cites: the parent <em>document's</em> id, a slash, and the position. A document is one
+/// version of a record, so the citation names the version the row was cut from, where <paramref name="Record"/> names the
+/// record (the parent's key when it has one) and so is the same across a record's corrections. Readers that cite rows take
+/// the name from here rather than putting it together.
+/// </param>
+public sealed record SectionRow(int Position, string Record, JsonElement Body, string Citation);

@@ -218,6 +218,8 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                     new { tableName = table, declarationVersion = 1, fields = new[] { new { name = "total", type = "integer" } } });
             },
 
+            ["/problems/not-a-section"] = t => t._client.GetAsync($"/formtypes/{NewFormType()}/rows"),
+
             ["/problems/form-type-is-a-section"] = async t =>
             {
                 var parent = NewFormType();

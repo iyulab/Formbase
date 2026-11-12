@@ -59,6 +59,22 @@ internal static class DocumentEndpoints
             .Produces<DocumentPageResponse>()
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
+        routes.MapGet("/formtypes/{type}/rows", ListRowsAsync)
+            .WithName("ListSectionRows")
+            .WithSummary("Reads a page of a repeated section's rows")
+            .WithDescription(
+                "A repeated section has no documents of its own: its rows are cut from the documents of the parent it " +
+                "belongs to. This reads the parent's stream the way `ListDocuments` does — oldest first, after the `after` " +
+                "watermark (the parent's), `limit` defaults to 100 and is at most 1000 — and answers each parent document " +
+                "with the rows it holds, cut the way the section's projection cuts them. Each row's `name` is what a claim " +
+                "grounded in it cites (the parent document's id, a slash, the position): take it as given. `record` is the " +
+                "row's record identity in the projection. A document whose section cannot be read answers `refusal` and no " +
+                "rows, as the projection skips it; a retirement holds none. A form type that is not a repeated section is " +
+                "refused with 404.")
+            .Produces<SectionRowPageResponse>()
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         routes.MapGet("/documents/{id:guid}", GetAsync)
             .WithName("GetDocument")
             .WithSummary("Reads a stored document")
@@ -176,6 +192,32 @@ internal static class DocumentEndpoints
         }
 
         return Results.Ok(await DocumentReads.ListAsync(engine, type, after ?? 0, limit ?? DefaultPageSize, cancellationToken).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> ListRowsAsync(
+        string type,
+        long? after,
+        int? limit,
+        FormbaseEngine engine,
+        CancellationToken cancellationToken)
+    {
+        if (after is < 0)
+        {
+            return Problem(DocumentReads.NegativeAfter);
+        }
+
+        if (limit is < 0 or > MaxPageSize)
+        {
+            return Problem($"limit must be between 0 and {MaxPageSize}.");
+        }
+
+        return await DocumentReads.ListSectionRowsAsync(engine, type, after ?? 0, limit ?? DefaultPageSize, cancellationToken).ConfigureAwait(false) is { } page
+            ? Results.Ok(page)
+            : Results.Problem(
+                detail: $"'{type}' is not a repeated section of another form type, so it has no rows to read.",
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Not a repeated section",
+                type: "/problems/not-a-section");
     }
 
     private static async Task<IResult> GetAsync(

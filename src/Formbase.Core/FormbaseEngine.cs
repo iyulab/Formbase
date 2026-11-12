@@ -92,6 +92,25 @@ public sealed class FormbaseEngine
         return new DocumentPage(documents, head);
     }
 
+    /// <summary>
+    /// Reads a page of the rows of a repeated section after <paramref name="after"/>, as they are cut from the parent's
+    /// documents the way the section's projection cuts them (<see cref="SectionRows"/>): the parent's stream, oldest first,
+    /// each document with the rows it holds. Null when <paramref name="section"/> is not a repeated section of another form
+    /// type — a section has no documents of its own, so there is no stream to read for any other type.
+    /// </summary>
+    public async Task<SectionRowPage?> ReadSectionRowsAsync(FormTypeRef section, Watermark after, int limit, CancellationToken cancellationToken = default)
+    {
+        if ((await _proposer.ProposeAsync(section, cancellationToken).ConfigureAwait(false))?.Section is not { } definition)
+        {
+            return null;
+        }
+
+        var page = await ReadDocumentsAsync(definition.ParentType, after, limit, cancellationToken).ConfigureAwait(false);
+        return new SectionRowPage(
+            [.. page.Documents.Select(d => new SectionDocumentRows(d, d.IsRetirement ? null : SectionRows.Expand(d, definition)))],
+            page.RawHead);
+    }
+
     /// <summary>Projects a form type's raw documents into its queryable table.</summary>
     public Task<ProjectionResult> ProjectAsync(FormTypeRef type, CancellationToken cancellationToken = default)
         => _projector.ProjectAsync(type, cancellationToken);
