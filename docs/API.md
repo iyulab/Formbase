@@ -894,7 +894,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
 | 409 | `/problems/declaration-version-conflict` | The declaration in force is not the one the request expected |
 | 409 | `/problems/projection-table-owned-elsewhere` | The projection would replace a table another host built from its own raw stream in the same MorphDB project; nothing was dropped |
-| 409 | `/problems/projection-refused` | The projection store is reachable but does not accept the table the declaration describes — a table or field name it refuses (a reserved name, one that is too long or starts with an underscore, a name the host adds to every row itself); change the declaration and project again |
+| 409 | `/problems/projection-refused` | The projection store is reachable but does not accept the table the declaration describes — a table or field name it refuses (a reserved name, one that is too long or starts with an underscore, a name the host adds to every row itself) or a row of a document (a value it does not accept for the column — the detail names the document and its record key); correct the declaration, or that document, and project again |
 | 409 | `/problems/table-name-in-use` | Another form type already projects into the table the declaration names |
 | 404 | `/problems/not-a-section` | Rows were read of a form type that is not a repeated section of another |
 | 409 | `/problems/form-type-is-a-section` | A document or retirement was sent under a form type that is a repeated section of another; send the row inside the parent document's section array |

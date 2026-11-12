@@ -74,6 +74,15 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
                 "The projection store refused the table this declaration describes",
                 e.Message),
 
+            // 409, like a refused name: the store answered and said no to a row, so retrying changes nothing — the
+            // document (named) or its declaration is what the caller can change. The same type, since a caller branches on
+            // «the store refused what the projection holds» and not on which part.
+            ProjectionRowRefusedException e => Problem(
+                StatusCodes.Status409Conflict,
+                "projection-refused",
+                "The projection store refused a row",
+                e.Message),
+
             ProjectionTableOwnedElsewhereException e => Problem(
                 StatusCodes.Status409Conflict,
                 "projection-table-owned-elsewhere",

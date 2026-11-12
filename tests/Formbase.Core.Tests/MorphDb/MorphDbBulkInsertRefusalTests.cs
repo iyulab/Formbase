@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Formbase.Core.Errors;
 using Formbase.Core.Projection;
 using Formbase.MorphDb;
 using MorphDB.Client;
@@ -8,7 +9,8 @@ namespace Formbase.Core.Tests.MorphDb;
 
 /// <summary>
 /// MorphDB inserts a chunk all or none and refuses it with a 400 naming the refused row by its position
-/// in the chunk. The store names that row by what a Formbase operator can look up: its document and record key.
+/// in the chunk. The store names that row by what a Formbase operator can look up: its document and record key — and it is a
+/// refusal of that row, not an outage: the store answered, so retrying changes nothing.
 /// </summary>
 public class MorphDbBulkInsertRefusalTests
 {
@@ -26,8 +28,10 @@ public class MorphDbBulkInsertRefusalTests
 
         var act = () => store.BulkInsertAsync("invoices", rows, TestContext.Current.CancellationToken);
 
-        var refused = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+        var refused = (await act.Should().ThrowAsync<ProjectionRowRefusedException>()).Which;
         refused.Message.Should().Contain("'doc-b'").And.Contain("'rec-b'").And.Contain("'invoices'").And.Contain("[1].amount");
+        (refused.Document, refused.RecordKey, refused.Table).Should().Be(("doc-b", "rec-b", "invoices"));
+        refused.Reason.Should().Contain("[1].amount");
         refused.InnerException.Should().BeOfType<MorphDBValidationException>();
     }
 

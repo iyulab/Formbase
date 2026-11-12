@@ -13,6 +13,14 @@
   type that is not a repeated section is refused with `404` `/problems/not-a-section`. `Formbase.Core` carries the same name as
   `SectionRow.Citation`, and `FormbaseEngine.ReadSectionRowsAsync` is the read.
 
+### Changed
+
+- **A row the projection store refuses is a `409`, not a `503`.** When MorphDB answered `400` to a row of a projection run (a null for a
+  required column, a value of another type), the run answered `503` `/problems/projection-unavailable` — an outage that retrying
+  never cures, with the document the row came from lost on the way. It is now `409` `/problems/projection-refused`, the type a
+  refused table or field name already had, and the detail names the document and its record key and carries the store's reason.
+  `ProjectionRowRefusedException` is the error behind it.
+
 ## 0.35.0
 
 A minor: Formbase answers Model Context Protocol clients through a read-only door, a host can require an access key, and an

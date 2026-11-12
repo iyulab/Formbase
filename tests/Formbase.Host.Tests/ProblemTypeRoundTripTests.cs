@@ -85,6 +85,27 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
     }
 
     /// <summary>
+    /// The store refusing a row of a document is the same problem type as the store refusing a name, and says which document: a
+    /// caller told «unavailable» retries something that will never succeed, and one told nothing of the document cannot find it.
+    /// </summary>
+    [Fact]
+    public async Task A_row_the_store_refuses_is_a_409_projection_refused_that_names_the_document()
+    {
+        using var factory = WithStore<IProjectionStore>(new FailingRunProjectionStore(
+            new InMemoryProjectionStore(),
+            new ProjectionRowRefusedException("0b7c1e2a-0000-4000-8000-000000000001", "order-9", "t_orders", "[0].lot: null is not allowed.")));
+        using var client = factory.CreateClient();
+
+        using var response = await RunProjectionOfNewTypeAsync(factory, client);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        ((int)response.StatusCode).Should().Be(409, payload);
+        var problem = JsonDocument.Parse(payload).RootElement;
+        problem.GetProperty("type").GetString().Should().Be("/problems/projection-refused");
+        problem.GetProperty("detail").GetString().Should().Contain("0b7c1e2a-0000-4000-8000-000000000001").And.Contain("order-9").And.Contain("null is not allowed");
+    }
+
+    /// <summary>
     /// One row, two conditions: the table says <c>invalid-request</c> covers a body that is not JSON
     /// <em>or</em> an idempotency key that is not a UUID. The theory above provokes one of them, and
     /// a case that fixes one condition while naming the row is how a gate ends up looking wider than

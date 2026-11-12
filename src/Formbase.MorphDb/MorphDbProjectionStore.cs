@@ -532,9 +532,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
             {
                 row.TryGetValue(ProjectionSystemColumns.DocumentId, out var document);
                 row.TryGetValue(ProjectionSystemColumns.RecordKey, out var record);
-                throw new InvalidOperationException(
-                    $"MorphDB refused the row of document '{document}' (record '{record}') for '{tableName}': {refused.Message}",
-                    refused);
+                throw new ProjectionRowRefusedException(document?.ToString(), record?.ToString(), tableName, refused.Message, refused);
             }
         }
 
