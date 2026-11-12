@@ -221,7 +221,8 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var problem = await ReadAsync(response);
         problem.GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
-        problem.GetProperty("detail").GetString().Should().Contain(fieldName).And.Contain("fb_");
+        problem.GetProperty("detail").GetString().Should().Contain(fieldName).And.Contain("fb_")
+            .And.NotContain("Parameter", "the name of the code's parameter is not what the caller has to fix");
         (await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken))
             .StatusCode.Should().Be(HttpStatusCode.NotFound, "a refused declaration stores nothing");
     }

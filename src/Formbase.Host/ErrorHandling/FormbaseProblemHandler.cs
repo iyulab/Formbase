@@ -164,7 +164,7 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
                 StatusCodes.Status400BadRequest,
                 "invalid-form-type",
                 "The request named something the engine cannot use",
-                e.Message),
+                RefusalText.Of(e)),
 
             _ => null
         };

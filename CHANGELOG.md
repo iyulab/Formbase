@@ -45,6 +45,9 @@
   and refuse it for good, but intake wrapped every store failure as `503` `/problems/intake-failed`, which a caller answers by sending the
   same document again. Intake now refuses the character before any store is asked — in a string value, a property name or a record key,
   on accepting, retiring and in a batch — with `400` `/problems/invalid-document` naming where it is, the same on every store.
+- **A refused declaration no longer ends in `(Parameter 'hints')`.** The detail of a `400` took the framework's message of the argument
+  exception, which appends the name of a parameter in the host's own code — a name the caller of the route has nothing to do with. The
+  wording the engine wrote stays whole.
 - **Schema intelligence asks the model once per change of a form type's documents, not on every read.** Every read, status check and
   trigger evaluation asks the schema proposer for the form type's shape, and the model-backed one asked the model each time — so a model
   call (its latency, its outage) sat under every read of a form type, and the wobble of its answer in `required` changed the shape's

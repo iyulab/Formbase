@@ -6,6 +6,7 @@ using Formbase.Core.Projection;
 using Formbase.Core.Schema;
 using Formbase.Host.Contracts;
 using Formbase.Host.Declarations;
+using Formbase.Host.ErrorHandling;
 using Formbase.Host.Projection;
 
 namespace Formbase.Host.Endpoints;
@@ -129,7 +130,7 @@ internal static class DeclarationEndpoints
             // What only the engine can judge — a bound target naming a field that does not exist, or
             // half of a lookup pair — is still a fault in this declaration, not in the form type the
             // route names, so it answers as one.
-            return Invalid(e.Message);
+            return Invalid(RefusalText.Of(e));
         }
 
         // Read back rather than echo: the caller needs what is in force, and only the store knows
