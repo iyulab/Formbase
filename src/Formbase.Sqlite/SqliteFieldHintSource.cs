@@ -9,7 +9,7 @@ namespace Formbase.Sqlite;
 /// <summary>
 /// The durable <see cref="IFieldHintSource"/> in the same SQLite file as the projection — a restarted
 /// process still knows what each form type projects into. Declaring is this implementation's own
-/// (<see cref="DeclareAsync"/>), as it is for every hint source; the port is the read seam.
+/// (<see cref="DeclareAsync(FormTypeHints, CancellationToken)"/>), as it is for every hint source; the port is the read seam.
 /// </summary>
 /// <remarks>
 /// <see cref="ColumnType"/> is stored by name, not number, so reordering the enum can never reinterpret
@@ -48,7 +48,16 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     /// (<see cref="DeclaredSections"/>) or an index that does (<see cref="DeclaredIndexes"/>) throws
     /// <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
-    public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
+    public Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default) =>
+        DeclareAsync(hints, expected: null, cancellationToken);
+
+    /// <summary>
+    /// <see cref="DeclareAsync(FormTypeHints, CancellationToken)"/> that writes only when the declaration in
+    /// force is the one <paramref name="expected"/> names — checked inside the same write transaction, so a
+    /// declaration that landed after the caller read throws
+    /// <see cref="DeclarationVersionConflictException"/> and stores nothing. <see langword="null"/> writes unconditionally.
+    /// </summary>
+    public async Task DeclareAsync(FormTypeHints hints, DeclarationExpectation? expected, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hints);
         DeclaredTableName.EnsureDeclarable(hints);
@@ -62,6 +71,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
 
         var declared = await ReadAllAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
 
+        expected?.EnsureHolds(hints.Type, declared.FirstOrDefault(d => d.Type == hints.Type));
         DeclaredTableName.EnsureUnclaimed(hints, declared.Select(d => (d.Type, d.TableName)));
         DeclaredTargets.EnsureResolvable(hints, type => declared.FirstOrDefault(d => d.Type == type)?.Fields);
         DeclaredSections.EnsureWellFormed(hints, declared);

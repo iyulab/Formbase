@@ -78,6 +78,31 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
             "the caller has to be told which version is actually in force");
     }
 
+    /// <summary>
+    /// The race itself, not the sequence: every request read version 1 and names it, all in flight at
+    /// once. Exactly one may land — a check made before the write lets all of them pass it.
+    /// </summary>
+    [Fact]
+    public async Task Writers_racing_on_the_version_they_all_read_leave_exactly_one_winner()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, Declaration(type, version: 1));
+
+        const int Writers = 16;
+        using var gate = new ManualResetEventSlim(false);
+        var racing = Enumerable.Range(0, Writers).Select(i => Task.Run(async () =>
+        {
+            gate.Wait(TestContext.Current.CancellationToken);
+            using var response = await DeclareAsync(type, Declaration(type, version: 2 + i, expected: 1));
+            return response.StatusCode;
+        })).ToArray();
+        gate.Set();
+        var outcomes = await Task.WhenAll(racing);
+
+        outcomes.Count(code => code == HttpStatusCode.OK).Should().Be(1, "one writer replaced version 1; the rest read a version that was gone");
+        outcomes.Count(code => code == HttpStatusCode.Conflict).Should().Be(Writers - 1);
+    }
+
     [Fact]
     public async Task Replacing_without_naming_a_version_is_refused()
     {

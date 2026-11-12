@@ -1,4 +1,5 @@
 using Formbase.Core;
+using Formbase.Core.Errors;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
 using Formbase.Core.Projection;
@@ -111,7 +112,17 @@ internal static class DeclarationEndpoints
 
         try
         {
-            await writer.DeclareAsync(ToEngine(formType, request), cancellationToken).ConfigureAwait(false);
+            // The check above spares a write that cannot succeed and answers it with the same words; the
+            // one that decides is the store's, made in the step that writes — another declaration may have
+            // landed since the read above, and two requests that both passed it must not both succeed.
+            var expectation = request.ExpectedDeclarationVersion is { } expected
+                ? DeclarationExpectation.InForce(expected)
+                : DeclarationExpectation.Absent;
+            await writer.DeclareAsync(ToEngine(formType, request), expectation, cancellationToken).ConfigureAwait(false);
+        }
+        catch (DeclarationVersionConflictException e)
+        {
+            return Conflicted(ConflictDetail(e.ActualVersion, e.ExpectedVersion));
         }
         catch (ArgumentException e)
         {
@@ -217,19 +228,20 @@ internal static class DeclarationEndpoints
     /// what it replaces — the two mistakes this catches are opposite beliefs about whether a
     /// declaration is already there.
     /// </summary>
-    private static IResult? Conflict(FormTypeHints? existing, int? expected) => (existing, expected) switch
+    private static IResult? Conflict(FormTypeHints? existing, int? expected) =>
+        existing?.DeclarationVersion == expected ? null : Conflicted(ConflictDetail(existing?.DeclarationVersion, expected));
+
+    private static string ConflictDetail(int? inForce, int? expected) => (inForce, expected) switch
     {
-        (null, null) => null,
-        (null, not null) => Conflicted(
+        (null, not null) =>
             $"No declaration is in force, but the request expected version {expected}. " +
-            "Omit expectedDeclarationVersion to declare for the first time."),
-        (not null, null) => Conflicted(
-            $"A declaration is already in force at version {existing.DeclarationVersion}. " +
-            "Send expectedDeclarationVersion to replace it deliberately."),
-        (not null, not null) when existing.DeclarationVersion != expected => Conflicted(
-            $"The declaration in force is version {existing.DeclarationVersion}, not {expected}. " +
-            "Read it back and replace the one that is actually there."),
-        _ => null,
+            "Omit expectedDeclarationVersion to declare for the first time.",
+        (not null, null) =>
+            $"A declaration is already in force at version {inForce}. " +
+            "Send expectedDeclarationVersion to replace it deliberately.",
+        _ =>
+            $"The declaration in force is version {inForce}, not {expected}. " +
+            "Read it back and replace the one that is actually there.",
     };
 
     private static FormTypeHints ToEngine(FormTypeRef formType, DeclarationRequest request) =>

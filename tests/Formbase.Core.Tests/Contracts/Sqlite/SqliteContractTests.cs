@@ -109,5 +109,8 @@ public sealed class SqliteFieldHintSourceContractTests : FieldHintSourceContract
     protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints) =>
         ((SqliteFieldHintSource)source).DeclareAsync(hints, TestContext.Current.CancellationToken);
 
+    protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected) =>
+        ((SqliteFieldHintSource)source).DeclareAsync(hints, expected, TestContext.Current.CancellationToken);
+
     public void Dispose() => _file.Dispose();
 }

@@ -23,6 +23,14 @@
 
 ### Fixed
 
+- **Two declaration writes that both named the version they had read no longer both succeed.** `PUT /formtypes/{type}/declaration`
+  checked `expectedDeclarationVersion` against a read taken before the write, so two requests that read version 1 and both named
+  it passed the check and both wrote — the last one won and the first one's shape was gone, which is the lost update the field
+  exists to prevent. The store now makes the check in the step that writes (under the same lock or transaction that already
+  serializes declarations), and the request that comes second is refused with `409` `/problems/declaration-version-conflict`.
+  `InMemoryFieldHintSource.Declare` and the `DeclareAsync` of `PostgresFieldHintSource` and `SqliteFieldHintSource` take an optional
+  `DeclarationExpectation` (`Absent` or `InForce(version)`) and throw `DeclarationVersionConflictException` when it does not hold;
+  without one they write unconditionally as before.
 - **A query that names no limit returns every row it matches on the MorphDB store.** It returned the first 50 and nothing said so,
   while `QuerySpec` says none means all and the SQLite and in-memory stores did return all. Row-count-sensitive callers (a record read
   with no `limit`, an engine query with no window) read a short page as the whole answer.

@@ -19,7 +19,15 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
     /// (<see cref="DeclaredSections"/>) or an index that does (<see cref="DeclaredIndexes"/>) throws
     /// <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
-    public void Declare(FormTypeHints hints)
+    public void Declare(FormTypeHints hints) => Declare(hints, expected: null);
+
+    /// <summary>
+    /// <see cref="Declare(FormTypeHints)"/> that writes only when the declaration in force is the one
+    /// <paramref name="expected"/> names — checked in the same step as the write, so a declaration that
+    /// landed after the caller read throws <see cref="Errors.DeclarationVersionConflictException"/> and
+    /// stores nothing. <see langword="null"/> writes unconditionally.
+    /// </summary>
+    public void Declare(FormTypeHints hints, DeclarationExpectation? expected)
     {
         DeclaredTableName.EnsureDeclarable(hints);
         DeclaredIndexes.EnsureWellFormed(hints);
@@ -27,6 +35,7 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
         // The check and the write are one step: two declarations racing for one table must not both see it free.
         lock (_declaring)
         {
+            expected?.EnsureHolds(hints.Type, _hints.GetValueOrDefault(hints.Type));
             DeclaredTableName.EnsureUnclaimed(hints, _hints.Values.Select(h => (h.Type, h.TableName)));
             DeclaredTargets.EnsureResolvable(hints, type => _hints.TryGetValue(type, out var declared) ? declared.Fields : null);
             DeclaredSections.EnsureWellFormed(hints, _hints.Values);

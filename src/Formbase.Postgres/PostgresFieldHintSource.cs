@@ -14,7 +14,7 @@ namespace Formbase.Postgres;
 /// <remarks>
 /// <para>Declaration is deliberately not on the port: <see cref="IFieldHintSource"/> is the read seam an
 /// input adapter fills, and each implementation owns how hints get in (the in-memory source has
-/// <c>Declare</c>). <see cref="DeclareAsync"/> is this implementation's equivalent.</para>
+/// <c>Declare</c>). <see cref="DeclareAsync(FormTypeHints, CancellationToken)"/> is this implementation's equivalent.</para>
 /// <para><see cref="ColumnType"/> is stored <i>by name</i>. Storing the numeric value would make the
 /// meaning of every stored hint depend on the enum's declaration order — reordering it later would
 /// silently reinterpret data already on disk.</para>
@@ -85,7 +85,16 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
     /// (<see cref="DeclaredSections"/>) or an index that does (<see cref="DeclaredIndexes"/>) throws
     /// <see cref="ArgumentException"/>; none stores anything.
     /// </summary>
-    public async Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
+    public Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default) =>
+        DeclareAsync(hints, expected: null, cancellationToken);
+
+    /// <summary>
+    /// <see cref="DeclareAsync(FormTypeHints, CancellationToken)"/> that writes only when the declaration in
+    /// force is the one <paramref name="expected"/> names — checked under the same table lock as the write, so a
+    /// declaration that landed after the caller read throws
+    /// <see cref="DeclarationVersionConflictException"/> and stores nothing. <see langword="null"/> writes unconditionally.
+    /// </summary>
+    public async Task DeclareAsync(FormTypeHints hints, DeclarationExpectation? expected, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(hints);
         DeclaredTableName.EnsureDeclarable(hints);
@@ -108,6 +117,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
 
         var declared = await ReadAllAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
 
+        expected?.EnsureHolds(hints.Type, declared.FirstOrDefault(d => d.Type == hints.Type));
         DeclaredTableName.EnsureUnclaimed(hints, declared.Select(d => (d.Type, d.TableName)));
         DeclaredTargets.EnsureResolvable(hints, type => declared.FirstOrDefault(d => d.Type == type)?.Fields);
         DeclaredSections.EnsureWellFormed(hints, declared);

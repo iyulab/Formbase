@@ -1,3 +1,4 @@
+using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
@@ -21,7 +22,12 @@ namespace Formbase.Host.Declarations;
 /// </summary>
 internal interface IDeclarationWriter
 {
-    Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Writes the declaration only if the one in force is the one <paramref name="expected"/> names —
+    /// checked by the store in the same step as the write, so a declaration that landed after the caller
+    /// read it throws <see cref="DeclarationVersionConflictException"/> instead of being overwritten.
+    /// </summary>
+    Task DeclareAsync(FormTypeHints hints, DeclarationExpectation expected, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Removes a form type's declaration, answering whether one was there.
@@ -36,9 +42,9 @@ internal sealed class InMemoryDeclarationWriter : IDeclarationWriter
 
     public InMemoryDeclarationWriter(InMemoryFieldHintSource hints) => _hints = hints;
 
-    public Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default)
+    public Task DeclareAsync(FormTypeHints hints, DeclarationExpectation expected, CancellationToken cancellationToken = default)
     {
-        _hints.Declare(hints);
+        _hints.Declare(hints, expected);
         return Task.CompletedTask;
     }
 
@@ -53,8 +59,8 @@ internal sealed class PostgresDeclarationWriter : IDeclarationWriter
 
     public PostgresDeclarationWriter(PostgresFieldHintSource hints) => _hints = hints;
 
-    public Task DeclareAsync(FormTypeHints hints, CancellationToken cancellationToken = default) =>
-        _hints.DeclareAsync(hints, cancellationToken);
+    public Task DeclareAsync(FormTypeHints hints, DeclarationExpectation expected, CancellationToken cancellationToken = default) =>
+        _hints.DeclareAsync(hints, expected, cancellationToken);
 
     public Task<bool> DeleteAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
         _hints.DeleteAsync(type, cancellationToken);

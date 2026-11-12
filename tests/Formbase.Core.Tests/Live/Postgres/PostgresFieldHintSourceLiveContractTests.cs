@@ -23,4 +23,7 @@ public sealed class PostgresFieldHintSourceLiveContractTests : FieldHintSourceCo
 
     protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints)
         => ((PostgresFieldHintSource)source).DeclareAsync(hints);
+
+    protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected)
+        => ((PostgresFieldHintSource)source).DeclareAsync(hints, expected);
 }

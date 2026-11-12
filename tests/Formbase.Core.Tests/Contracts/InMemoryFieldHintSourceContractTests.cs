@@ -14,4 +14,10 @@ public sealed class InMemoryFieldHintSourceContractTests : FieldHintSourceContra
         ((InMemoryFieldHintSource)source).Declare(hints);
         return Task.CompletedTask;
     }
+
+    protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected)
+    {
+        ((InMemoryFieldHintSource)source).Declare(hints, expected);
+        return Task.CompletedTask;
+    }
 }

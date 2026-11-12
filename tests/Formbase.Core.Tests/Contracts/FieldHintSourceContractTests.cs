@@ -17,6 +17,9 @@ public abstract class FieldHintSourceContractTests
     /// <summary>Declares hints the way this implementation does it.</summary>
     protected abstract Task DeclareAsync(IFieldHintSource source, FormTypeHints hints);
 
+    /// <summary>Declares hints the way this implementation does it, writing only if <paramref name="expected"/> holds.</summary>
+    protected abstract Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected);
+
     private static readonly FormTypeRef Qc = FormTypeRef.Create("qc");
     private static readonly FormTypeRef Work = FormTypeRef.Create("work");
 
@@ -571,5 +574,62 @@ public abstract class FieldHintSourceContractTests
         var act = () => DeclareAsync(source, LinesWithoutKey);
 
         (await act.Should().ThrowAsync<ArgumentException>()).WithMessage("*order_no*does not declare*");
+    }
+
+    private static FormTypeHints QcAtVersion(int version, string table = "qc_table") =>
+        new(Qc, table, [new FieldHint("serial", ColumnType.Text)], DeclarationVersion: version);
+
+    [Fact]
+    public async Task A_declaration_that_expects_the_version_in_force_replaces_it()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+
+        await DeclareAsync(source, QcAtVersion(2), DeclarationExpectation.InForce(1));
+
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken))!.DeclarationVersion.Should().Be(2);
+    }
+
+    /// <summary>
+    /// Two writers read version 1 and both write: the check is the store's, made in the step that writes,
+    /// so the one that comes second is refused instead of overwriting what the first put in force.
+    /// </summary>
+    [Fact]
+    public async Task A_declaration_that_expects_a_version_no_longer_in_force_is_refused_and_stores_nothing()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        await DeclareAsync(source, QcAtVersion(2, "qc_table_2"), DeclarationExpectation.InForce(1));
+
+        var act = () => DeclareAsync(source, QcAtVersion(99, "qc_table_99"), DeclarationExpectation.InForce(1));
+
+        var refused = (await act.Should().ThrowAsync<DeclarationVersionConflictException>()).Which;
+        (refused.ExpectedVersion, refused.ActualVersion).Should().Be((1, 2));
+        var inForce = await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken);
+        (inForce!.DeclarationVersion, inForce.TableName).Should().Be((2, "qc_table_2"));
+    }
+
+    [Fact]
+    public async Task A_declaration_that_expects_none_is_refused_when_one_is_in_force()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+
+        var act = () => DeclareAsync(source, QcAtVersion(2), DeclarationExpectation.Absent);
+
+        var refused = (await act.Should().ThrowAsync<DeclarationVersionConflictException>()).Which;
+        (refused.ExpectedVersion, refused.ActualVersion).Should().Be((null, 1));
+    }
+
+    [Fact]
+    public async Task A_declaration_that_expects_a_version_is_refused_when_none_is_in_force()
+    {
+        var source = CreateSource();
+
+        var act = () => DeclareAsync(source, QcAtVersion(2), DeclarationExpectation.InForce(1));
+
+        var refused = (await act.Should().ThrowAsync<DeclarationVersionConflictException>()).Which;
+        (refused.ExpectedVersion, refused.ActualVersion).Should().Be((1, null));
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 }
