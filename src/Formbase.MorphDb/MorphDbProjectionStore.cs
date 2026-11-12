@@ -803,16 +803,10 @@ public sealed class MorphDbProjectionStore : IProjectionStore
     /// </summary>
     private const string CountAlias = "fb_count";
 
-    /// <summary>Each formbase operator is one MorphDB answers natively — a translation, not a policy.</summary>
     /// <summary>
     /// MorphDB's operator for a filter. Equality with null asks whether the column is empty, so it goes as
     /// <c>isnull</c>: sent as <c>eq</c>, the missing value would reach the server as an empty string and
     /// compare against that instead.
-    /// </summary>
-    /// <summary>
-    /// A filter value as the row query sends it. A day goes as its ISO text: <c>MorphDB.Client</c> 0.29
-    /// formats a <see cref="DateOnly"/> in the query string with the invariant culture's short date
-    /// (<c>10/21/2026</c>), which the server does not read as a date.
     /// </summary>
     private static MorphOperator ToMorph(FieldFilter filter) => filter switch
     {
@@ -820,6 +814,7 @@ public sealed class MorphDbProjectionStore : IProjectionStore
         _ => ToMorph(filter.Operator),
     };
 
+    /// <summary>Each formbase operator is one MorphDB answers natively — a translation, not a policy.</summary>
     private static MorphOperator ToMorph(FormbaseOperator op) => op switch
     {
         FormbaseOperator.Equal => MorphOperator.Equal,
