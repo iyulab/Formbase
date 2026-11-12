@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.35.0
+
+A minor: Formbase answers Model Context Protocol clients through a read-only door, a host can require an access key, and an
+answer says how many documents its tables could not project (`SkippedDocuments`). A document that is not a JSON object is
+now refused at intake (`400`), and a table or field name the store refuses is a `409`, not an outage. Pairs with MorphDB
+`0.36.x`.
 
 ### Added
 
@@ -61,6 +66,7 @@
   checked".
 - `ModelContextProtocol.AspNetCore` 2.4.0 (the read-only MCP door).
 - `Microsoft.Extensions.DependencyInjection.Abstractions` 11.0.0 (the package carries a `net10.0` target, so the library stays on net10.0).
+- `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.AI.Abstractions`, `Microsoft.Extensions.AI.OpenAI` and `Microsoft.Data.Sqlite` 11.0.0; each restores and builds on net10.0, so the libraries stay on net10.0.
 
 ### Fixed
 
