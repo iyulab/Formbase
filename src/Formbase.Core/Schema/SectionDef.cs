@@ -24,6 +24,23 @@ namespace Formbase.Core.Schema;
 public sealed record SectionDef(FormTypeRef ParentType, string SectionField, string? ParentKey, string RowKey, string? ValueMember = null)
 {
     /// <summary>
+    /// A section's key field is written into each row under its key, so it names a member to write, not a
+    /// place to read from — a pointer has nowhere to write to. Held by the declaration (so a declaration
+    /// that could never be read is refused when it is made) and again when the section is rendered.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="keyField"/> reads from a JSON Pointer.</exception>
+    internal static void EnsureKeyFieldIsAMember(FormTypeRef section, FieldHint keyField)
+    {
+        if (keyField.SourceKey is { } sourceKey && SourceKeys.IsPointer(sourceKey))
+        {
+            throw new ArgumentException(
+                $"'{section}' reads its key field '{keyField.Name}' from the JSON Pointer '{sourceKey}'. The key field of a " +
+                "repeated section is written into each row under its key, so it must be a top-level member name.",
+                nameof(keyField));
+        }
+    }
+
+    /// <summary>
     /// The section a declaration gives <paramref name="section"/>'s rows: <paramref name="source"/> names
     /// where they come from, and <paramref name="section"/>'s own declaration names the key field they carry.
     /// </summary>
@@ -38,15 +55,7 @@ public sealed record SectionDef(FormTypeRef ParentType, string SectionField, str
             ?? throw new ArgumentException(
                 $"'{section.Type}' is a repeated section of '{source.Parent.Type}' joined on '{keyField}', which it does not declare.",
                 nameof(section));
-        if (rowKey.SourceKey is { } rowSourceKey && SourceKeys.IsPointer(rowSourceKey))
-        {
-            // Each row is written with the parent's value under this key, so it names a member to write,
-            // not a place to read from — a pointer has nowhere to write to.
-            throw new ArgumentException(
-                $"'{section.Type}' reads its key field '{keyField}' from the JSON Pointer '{rowSourceKey}'. The key field of a " +
-                "repeated section is written into each row under its key, so it must be a top-level member name.",
-                nameof(section));
-        }
+        EnsureKeyFieldIsAMember(section.Type, rowKey);
 
         var parentKey = source.Parent.Fields.FirstOrDefault(f => string.Equals(f.Name, keyField, StringComparison.Ordinal));
 

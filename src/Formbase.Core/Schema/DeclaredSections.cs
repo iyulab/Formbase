@@ -127,12 +127,11 @@ public static class DeclaredSections
 
     private static void EnsureKeyField(FormTypeHints child, string keyField, FormTypeRef parent)
     {
-        if (!child.Fields.Any(f => string.Equals(f.Name, keyField, StringComparison.Ordinal)))
-        {
-            throw new ArgumentException(
+        var declared = child.Fields.FirstOrDefault(f => string.Equals(f.Name, keyField, StringComparison.Ordinal))
+            ?? throw new ArgumentException(
                 $"'{child.Type}' is a repeated section of '{parent}' joined on '{keyField}', which '{child.Type}' does not declare. " +
                 "Each row carries the parent's value in that field — declare it on the section.",
                 nameof(child));
-        }
+        SectionDef.EnsureKeyFieldIsAMember(child.Type, declared);
     }
 }

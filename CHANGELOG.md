@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- **A repeated section whose key field is read from a JSON Pointer is refused when it is declared.** The key field is written into
+  each row under its key, so a pointer has nowhere to write to; the declaration was accepted, and every later read of the section
+  answered `400`. It is now refused at the declaration, whichever of the parent and the section is declared first, and nothing is stored.
 - **A JSON `null` where a declaration lists an object is a `400`, not a `500`.** `"fields":[null]` (and the same in `relations` and
   `indexes`) bound without complaint and failed with an unhandled error, which reads as an outage to a caller that would retry it.
   The declaration is now refused as invalid, naming what is wrong.

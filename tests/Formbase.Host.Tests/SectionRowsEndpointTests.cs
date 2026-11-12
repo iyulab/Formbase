@@ -127,6 +127,118 @@ public sealed class SectionRowsEndpointTests : IClassFixture<WebApplicationFacto
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    /// <summary>A parent that reads its key field from a nested place still joins its rows to it.</summary>
+    [Fact]
+    public async Task A_parent_whose_key_field_is_read_from_a_json_pointer_still_gives_its_rows_the_key()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var parent = $"orders_{suffix}";
+        var section = $"lines_{suffix}";
+        using (var declared = await _client.PutAsJsonAsync(
+            $"/formtypes/{section}/declaration",
+            new { tableName = $"t_{section}", declarationVersion = 1, fields = new[] { new { name = "orderNo", type = "text" }, new { name = "product", type = "text" } } },
+            TestContext.Current.CancellationToken))
+        {
+            declared.IsSuccessStatusCode.Should().BeTrue(await declared.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
+
+        using (var declared = await _client.PutAsJsonAsync(
+            $"/formtypes/{parent}/declaration",
+            new
+            {
+                tableName = $"t_{parent}",
+                declarationVersion = 1,
+                fields = new[] { new { name = "orderNo", type = "text", sourceKey = "/header/orderNo" } },
+                relations = new[] { new { name = "lines", kind = "child", target = section, keyField = "orderNo", sectionField = "lines" } },
+            },
+            TestContext.Current.CancellationToken))
+        {
+            declared.IsSuccessStatusCode.Should().BeTrue(await declared.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
+
+        await AcceptAsync(parent, """{"header":{"orderNo":"A-9"},"lines":[{"product":"bolt"}]}""");
+
+        var rows = (await ReadRowsAsync(section)).GetProperty("documents")[0].GetProperty("rows");
+
+        rows[0].GetProperty("body").GetProperty("orderNo").GetString().Should().Be("A-9");
+    }
+
+    /// <summary>
+    /// The key field is written into each row under its key, so a section that reads it from a JSON Pointer can never be read. It
+    /// is refused when declared — accepted, it made every later read of the section answer 400.
+    /// </summary>
+    [Fact]
+    public async Task A_section_whose_key_field_is_read_from_a_json_pointer_is_refused_when_declared_after_its_parent()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var parent = $"orders_{suffix}";
+        var section = $"lines_{suffix}";
+        using (var declared = await _client.PutAsJsonAsync(
+            $"/formtypes/{parent}/declaration",
+            new
+            {
+                tableName = $"t_{parent}",
+                declarationVersion = 1,
+                fields = new[] { new { name = "orderNo", type = "text" } },
+                relations = new[] { new { name = "lines", kind = "child", target = section, keyField = "orderNo", sectionField = "lines" } },
+            },
+            TestContext.Current.CancellationToken))
+        {
+            declared.IsSuccessStatusCode.Should().BeTrue(await declared.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
+
+        using var response = await _client.PutAsJsonAsync(
+            $"/formtypes/{section}/declaration",
+            new
+            {
+                tableName = $"t_{section}",
+                declarationVersion = 1,
+                fields = new object[] { new { name = "orderNo", type = "text", sourceKey = "/link/orderNo" }, new { name = "product", type = "text" } },
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("JSON Pointer");
+        using var stored = await _client.GetAsync($"/formtypes/{section}/declaration", TestContext.Current.CancellationToken);
+        stored.StatusCode.Should().Be(HttpStatusCode.NotFound, "a refused declaration stores nothing");
+    }
+
+    [Fact]
+    public async Task A_parent_naming_a_section_whose_key_field_is_read_from_a_json_pointer_is_refused()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var parent = $"orders_{suffix}";
+        var section = $"lines_{suffix}";
+        using (var declared = await _client.PutAsJsonAsync(
+            $"/formtypes/{section}/declaration",
+            new
+            {
+                tableName = $"t_{section}",
+                declarationVersion = 1,
+                fields = new object[] { new { name = "orderNo", type = "text", sourceKey = "/link/orderNo" }, new { name = "product", type = "text" } },
+            },
+            TestContext.Current.CancellationToken))
+        {
+            declared.IsSuccessStatusCode.Should().BeTrue(await declared.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
+
+        using var response = await _client.PutAsJsonAsync(
+            $"/formtypes/{parent}/declaration",
+            new
+            {
+                tableName = $"t_{parent}",
+                declarationVersion = 1,
+                fields = new[] { new { name = "orderNo", type = "text" } },
+                relations = new[] { new { name = "lines", kind = "child", target = section, keyField = "orderNo", sectionField = "lines" } },
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("JSON Pointer");
+        using var stored = await _client.GetAsync($"/formtypes/{parent}/declaration", TestContext.Current.CancellationToken);
+        stored.StatusCode.Should().Be(HttpStatusCode.NotFound, "a refused declaration stores nothing");
+    }
+
     private async Task<(string Parent, string Section)> DeclareAsync()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
