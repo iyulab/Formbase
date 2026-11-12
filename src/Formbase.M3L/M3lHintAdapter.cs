@@ -317,8 +317,12 @@ public static class M3lHintAdapter
                 return ColumnType.Boolean;
             case "date":
                 return ColumnType.Date;
-            case "timestamp" or "datetime" or "time":
+            case "timestamp" or "datetime":
                 return ColumnType.Timestamp;
+            case "time":
+                // A time of day is not a point in time (the Formdown adapter reads it so too): as a timestamp it would be read as
+                // today's date at that time.
+                return ColumnType.Text;
             case "identifier" or "uuid":
                 return ColumnType.Uuid;
             case "json" or "object":

@@ -41,6 +41,22 @@ public class M3lHintAdapterTests
         """;
 
     [Fact]
+    public void A_time_of_day_is_text_and_a_datetime_is_a_timestamp()
+    {
+        var result = M3lHintAdapter.Adapt("""
+            ## Shift
+
+            - id: identifier @pk @generated
+            - starts_at: time
+            - logged_at: datetime
+            """);
+
+        var types = result.Hints[0].Fields.ToDictionary(f => f.Name, f => f.Type);
+        types["starts_at"].Should().Be(ColumnType.Text, "a time of day is not a point in time");
+        types["logged_at"].Should().Be(ColumnType.Timestamp);
+    }
+
+    [Fact]
     public void Models_map_to_one_flat_hint_set_each()
     {
         var result = M3lHintAdapter.Adapt(InspectionForm);

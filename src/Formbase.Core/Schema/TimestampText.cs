@@ -17,9 +17,25 @@ internal static class TimestampText
 {
     private const DateTimeStyles Styles = DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal;
 
-    public static bool TryParse(string? text, out DateTimeOffset value) =>
-        DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, Styles, out value);
+    /// <summary>
+    /// Whether <paramref name="text"/> names an instant. A value with no date — a time of day —
+    /// does not: the parser fills what is missing in from today's date, and the same document would be a different instant on every
+    /// day it was projected. (<see cref="DateTimeStyles.NoCurrentDateDefault"/> is refused by <see cref="DateTimeOffset"/>, so whether a
+    /// date was written is asked of <see cref="DateTime"/>: with the clock's default off, a missing date reads as year 1, which only a
+    /// text that spells that year — <c>0001-…</c> — means. A day and month with no year is filled in with the year and is not caught here.)
+    /// </summary>
+    public static bool TryParse(string? text, out DateTimeOffset value)
+    {
+        value = default;
+        if (!DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.NoCurrentDateDefault, out var written)
+            || (written.Year == 1 && !text!.Contains("0001", StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, Styles, out value);
+    }
 
     public static DateTimeOffset Parse(string text) =>
-        DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, Styles);
+        TryParse(text, out var value) ? value : throw new FormatException($"'{text}' is not a timestamp: it names no complete date.");
 }

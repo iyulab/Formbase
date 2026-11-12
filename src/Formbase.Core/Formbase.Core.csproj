@@ -5,4 +5,8 @@
     <Description>formbase core engine — raw-first document intake and hint-driven projection over MorphDB.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Formbase.Core.Tests" />
+  </ItemGroup>
+
 </Project>
