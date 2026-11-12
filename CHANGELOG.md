@@ -41,6 +41,9 @@
   and refuse it for good, but intake wrapped every store failure as `503` `/problems/intake-failed`, which a caller answers by sending the
   same document again. Intake now refuses the character before any store is asked — in a string value, a property name or a record key,
   on accepting, retiring and in a batch — with `400` `/problems/invalid-document` naming where it is, the same on every store.
+- **The in-memory store orders text by its code units, not by the host's culture.** Text sorted, compared and aggregated through the
+  engine's own ordering followed the current culture, so the same rows came back in a different order on a host set to another
+  language, and in an order the single-file store (binary collation) does not give.
 - **A field named in the engine's `fb_` namespace is refused when it is declared, on every store.** A declared field is a column, and the
   engine's own columns (`fb_doc_id`, `fb_record_key`, …) share the namespace: one store refused the duplicate column when the
   projection ran, another let the declared field overwrite the system column without a word. The declaration is now refused with
