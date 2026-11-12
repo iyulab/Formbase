@@ -340,6 +340,16 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                 return await client.PostAsync($"/formtypes/{NewFormType()}/projection", null);
             },
 
+            ["/problems/store-unavailable"] = async t =>
+            {
+                // The database went away after the host started: a read of the declaration store fails with the
+                // driver's own transient error, which no Formbase exception wraps.
+                using var factory = t.WithStore<IFieldHintSource>(new UnreachableFieldHintSource());
+                using var client = factory.CreateClient();
+
+                return await client.GetAsync($"/formtypes/{NewFormType()}/declaration");
+            },
+
             ["/problems/namespace-unverified"] = async t =>
             {
                 // A durable host whose database did not answer: the binding it must confirm before
@@ -618,6 +628,17 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
     }
 
     /// <summary>A schema proposer that fails exactly one way, every time — the failure under test.</summary>
+    /// <summary>A hint source whose database stopped answering: the exception the driver raises, as it raises it.</summary>
+    private sealed class UnreachableFieldHintSource : IFieldHintSource
+    {
+        private static NpgsqlException Down() =>
+            new("Failed to connect to a host nobody names here", new System.Net.Sockets.SocketException());
+
+        public Task<FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default) => throw Down();
+
+        public Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default) => throw Down();
+    }
+
     private sealed class ThrowingSchemaProposer(Exception toThrow) : ISchemaProposer
     {
         public Task<TableSchema?> ProposeAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>

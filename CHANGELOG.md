@@ -28,6 +28,9 @@
 
 ### Fixed
 
+- **A durable store that stops answering after the host started is a `503`, not a `500`.** The driver's transient errors (a lost connection,
+  a timeout) reached the caller unhandled, which reads as a bug in the host to a caller that should retry. They answer `503`
+  `/problems/store-unavailable`; a query the database refuses stays a `500`, and the response does not repeat the driver's message.
 - **A decimal filter value with a comma no longer reads as a number without it.** `filter=price:1,5` on a decimal column was read
   as `15` (the text was parsed with thousands separators), so a value that does not fit the column matched the rows of another
   number instead of matching nothing. Decimal text in a filter is now a plain number: an optional sign, digits and a decimal point.

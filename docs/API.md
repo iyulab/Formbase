@@ -909,6 +909,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-store-missing` | The MorphDB project the host projects into was deleted after it started; retrying does not help — give the host a project again and restart (documents are still accepted) |
 | 503 | `/problems/projection-unavailable` | The projection store is not reachable right now |
+| 503 | `/problems/store-unavailable` | The durable store did not answer a request (connection refused or lost, timeout); retrying later is right |
 | 503 | `/problems/schema-proposer-unavailable` | Schema intelligence is installed but the model could not be reached (connection, timeout, auth, rate limit) |
 
 The three refusals a query can meet are deliberately separate, because their remedies are: run a

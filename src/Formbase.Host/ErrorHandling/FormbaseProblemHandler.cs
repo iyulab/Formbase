@@ -3,6 +3,7 @@ using Formbase.Core.Errors;
 using Formbase.SchemaIntelligence;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Npgsql;
 
 namespace Formbase.Host.ErrorHandling;
 
@@ -100,6 +101,16 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
                 "table-name-in-use",
                 "Another form type already projects into this table",
                 e.Message),
+
+            // The driver's own error for a database that stopped answering after the host started — a lost connection, a timeout. Nothing
+            // wraps it, so it reached the caller as an unhandled 500, which reads as a bug in the host to a caller that should simply
+            // retry. Only the errors the driver itself calls transient: a query the database refused is the host's fault, and stays a 500.
+            // The detail does not repeat the driver's message, which names the database's address.
+            NpgsqlException { IsTransient: true } => Problem(
+                StatusCodes.Status503ServiceUnavailable,
+                "store-unavailable",
+                "The durable store is not reachable",
+                "The durable store did not answer this request. Retry it later."),
 
             IntakeException e => Problem(
                 StatusCodes.Status503ServiceUnavailable,
