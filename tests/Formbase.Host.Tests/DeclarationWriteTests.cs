@@ -209,6 +209,23 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         problem.GetProperty("detail").GetString().Should().Contain("fb_");
     }
 
+    [Theory]
+    [InlineData("fb_record_key")]
+    [InlineData("FB_doc_id")]
+    public async Task A_field_name_in_the_engines_reserved_namespace_is_refused_and_nothing_is_stored(string fieldName)
+    {
+        var type = NewFormType();
+
+        var response = await DeclareAsync(type, Declaration(type, version: 1, extraField: fieldName));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await ReadAsync(response);
+        problem.GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
+        problem.GetProperty("detail").GetString().Should().Contain(fieldName).And.Contain("fb_");
+        (await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound, "a refused declaration stores nothing");
+    }
+
     [Fact]
     public async Task A_declaration_that_would_build_nothing_is_refused()
     {

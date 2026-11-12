@@ -98,6 +98,7 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
     {
         ArgumentNullException.ThrowIfNull(hints);
         DeclaredTableName.EnsureDeclarable(hints);
+        DeclaredFieldName.EnsureDeclarable(hints);
         DeclaredIndexes.EnsureWellFormed(hints);
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 

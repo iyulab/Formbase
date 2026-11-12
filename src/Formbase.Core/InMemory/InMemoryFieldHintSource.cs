@@ -30,6 +30,7 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
     public void Declare(FormTypeHints hints, DeclarationExpectation? expected)
     {
         DeclaredTableName.EnsureDeclarable(hints);
+        DeclaredFieldName.EnsureDeclarable(hints);
         DeclaredIndexes.EnsureWellFormed(hints);
 
         // The check and the write are one step: two declarations racing for one table must not both see it free.

@@ -87,6 +87,47 @@ public class LlmSchemaProposerTests
     }
 
     [Fact]
+    public async Task A_proposed_property_in_the_engines_reserved_namespace_fails_loud()
+    {
+        // A document key that matches an engine column would project into one beside it (or over it).
+        // The declaration refuses such a name; inference has to say the same instead of building the table.
+        var raw = await RawWith("""{"lot":"L-1","fb_record_key":"x"}""");
+        var proposer = new LlmSchemaProposer(raw, new ScriptedChatClient(
+            """{"type":"object","properties":{"lot":{"type":"string"},"fb_record_key":{"type":"string"}},"required":[]}"""));
+
+        var act = () => proposer.ProposeAsync(Qc);
+
+        (await act.Should().ThrowAsync<SchemaProposalFormatException>())
+            .WithMessage("*fb_record_key*fb_*");
+    }
+
+    [Fact]
+    public async Task A_reserved_key_the_model_leaves_out_is_simply_not_projected()
+    {
+        var raw = await RawWith("""{"lot":"L-1","fb_record_key":"x"}""");
+        var proposer = new LlmSchemaProposer(raw, new ScriptedChatClient(
+            """{"type":"object","properties":{"lot":{"type":"string"}},"required":[]}"""));
+
+        var schema = await proposer.ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        schema!.Columns.Select(c => c.Name).Should().Equal(["lot"]);
+    }
+
+    [Fact]
+    public async Task Two_proposed_properties_that_differ_only_by_case_fail_loud()
+    {
+        // The stores name columns ignoring case (SQLite: "duplicate column name"), so the table cannot be built.
+        var raw = await RawWith("""{"Qty":1,"qty":2}""");
+        var proposer = new LlmSchemaProposer(raw, new ScriptedChatClient(
+            """{"type":"object","properties":{"Qty":{"type":"integer"},"qty":{"type":"integer"}},"required":[]}"""));
+
+        var act = () => proposer.ProposeAsync(Qc);
+
+        (await act.Should().ThrowAsync<SchemaProposalFormatException>())
+            .WithMessage("*Qty*qty*");
+    }
+
+    [Fact]
     public async Task A_non_json_reply_fails_loud()
     {
         var raw = await RawWith("""{"lot":"L-1"}""");

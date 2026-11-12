@@ -54,6 +54,19 @@ public class DeclaredFirstSchemaProposerTests
     }
 
     [Fact]
+    public async Task An_inferred_column_whose_name_differs_from_a_declared_one_only_by_case_is_not_added()
+    {
+        // The stores name columns ignoring case; a `qty` beside a declared `Qty` is a second column of the
+        // same name to them (SQLite: "duplicate column name"). The raw keys stay case-sensitive — JSON's rule.
+        var declared = new TableSchema("qc", [new ColumnDef("Qty", ColumnType.Decimal)]);
+        var inferred = new TableSchema("qc", [new ColumnDef("qty", ColumnType.Integer), new ColumnDef("lot", ColumnType.Text)]);
+
+        var schema = await Compose(declared, inferred).ProposeAsync(Qc, TestContext.Current.CancellationToken);
+
+        schema!.Columns.Select(c => c.Name).Should().Equal(["Qty", "lot"]);
+    }
+
+    [Fact]
     public async Task An_inferred_column_never_collides_with_a_declared_name()
     {
         // The declaration reads `lot_no` and lands it under `lot`; the documents happen to carry a

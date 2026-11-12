@@ -134,6 +134,27 @@ public abstract class FieldHintSourceContractTests
         (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
+    /// <summary>
+    /// A declared field is a column, and the engine's own columns (<c>fb_doc_id</c>, <c>fb_record_key</c>,
+    /// …) share its namespace. Whether a clash is caught used to depend on the store behind the
+    /// declaration — one refused the duplicate column at projection time, another let the declared field
+    /// overwrite the system one — so the rule is the declaration's, held the same on every source.
+    /// </summary>
+    [Theory]
+    [InlineData("fb_record_key")]
+    [InlineData("FB_doc_id")]
+    [InlineData("fb_anything")]
+    public async Task A_field_name_in_the_reserved_namespace_is_refused_and_nothing_is_stored(string fieldName)
+    {
+        var source = CreateSource();
+
+        var declare = () => DeclareAsync(source, new FormTypeHints(Qc, "qc_table", [new FieldHint(fieldName, ColumnType.Text)]));
+
+        (await declare.Should().ThrowAsync<ArgumentException>()).Which.Message
+            .Should().Contain(fieldName).And.Contain(DeclaredTableName.ReservedPrefix);
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
     [Fact]
     public async Task A_blank_table_name_is_refused()
     {

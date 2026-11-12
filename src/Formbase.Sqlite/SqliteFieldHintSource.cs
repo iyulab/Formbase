@@ -61,6 +61,7 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
     {
         ArgumentNullException.ThrowIfNull(hints);
         DeclaredTableName.EnsureDeclarable(hints);
+        DeclaredFieldName.EnsureDeclarable(hints);
         DeclaredIndexes.EnsureWellFormed(hints);
 
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);

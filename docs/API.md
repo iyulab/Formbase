@@ -560,7 +560,8 @@ table, which is not a cost to spend on your behalf without being asked.
 
 A declaration is refused with `400` `/problems/invalid-declaration` when it names no table, names a
 table starting with `fb_` (the engine's own namespace — its system columns, and on a single-file store
-its own tables, live there), carries no fields, or declares one field twice — each would otherwise land
+its own tables, live there), carries no fields, declares one field twice, or names a field starting with
+`fb_` (it would be a column beside the engine's own, or replace one) — each would otherwise land
 as a projected table nobody meant to declare, or replace one the engine keeps.
 
 A table belongs to one form type. Declaring a form type into a table another form type already
@@ -890,7 +891,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
 | 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON (or named a property twice), the idempotency key was not a UUID, or a parameter did not bind |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
-| 400 | `/problems/invalid-declaration` | A declaration named no table or a reserved `fb_` table, carried no fields, or declared one twice |
+| 400 | `/problems/invalid-declaration` | A declaration named no table, a reserved `fb_` table or field, carried no fields, or declared one twice |
 | 400 | `/problems/schema-proposal-invalid` | Schema intelligence is installed and the model responded, but the proposal was not valid JSON, not the requested shape, or named a property never observed in the sampled documents |
 | 401 | `/problems/access-key-required` | The host requires an access key and the request presented none, or not one of its keys |
 | 404 | `/problems/no-such-document` | No document has that id |

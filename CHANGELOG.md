@@ -34,6 +34,10 @@
 - **A decimal filter value with a comma no longer reads as a number without it.** `filter=price:1,5` on a decimal column was read
   as `15` (the text was parsed with thousands separators), so a value that does not fit the column matched the rows of another
   number instead of matching nothing. Decimal text in a filter is now a plain number: an optional sign, digits and a decimal point.
+- **A field named in the engine's `fb_` namespace is refused when it is declared, on every store.** A declared field is a column, and the
+  engine's own columns (`fb_doc_id`, `fb_record_key`, …) share the namespace: one store refused the duplicate column when the
+  projection ran, another let the declared field overwrite the system column without a word. The declaration is now refused with
+  `400` `/problems/invalid-declaration` (names are compared ignoring case) and nothing is stored.
 - **A repeated section whose key field is read from a JSON Pointer is refused when it is declared.** The key field is written into
   each row under its key, so a pointer has nowhere to write to; the declaration was accepted, and every later read of the section
   answered `400`. It is now refused at the declaration, whichever of the parent and the section is declared first, and nothing is stored.

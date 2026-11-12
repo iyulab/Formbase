@@ -179,12 +179,32 @@ public sealed class LlmSchemaProposer : ISchemaProposer
             }
 
             var proposed = new Dictionary<string, ColumnDef>(StringComparer.Ordinal);
+            // The stores name columns ignoring case, so two properties that differ only by case are one
+            // column to them — the table could not be built (SQLite: "duplicate column name").
+            var byFoldedName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in properties.EnumerateObject())
             {
                 if (!observedFields.Contains(property.Name))
                 {
                     throw new SchemaProposalFormatException(
                         $"The proposal names a property '{property.Name}' that appears in no sampled document.");
+                }
+
+                // The same rule a declaration is held to: a column in the engine's namespace would sit
+                // beside the engine's own columns, or replace one. Left out of the proposal it is merely
+                // not projected, so only a proposed property is refused.
+                if (DeclaredFieldName.IsReserved(property.Name))
+                {
+                    throw new SchemaProposalFormatException(
+                        $"The proposal names a property '{property.Name}' that starts with '{DeclaredTableName.ReservedPrefix}', " +
+                        "which the engine reserves for its own columns. Declare the field under another name, reading this key.");
+                }
+
+                if (!byFoldedName.TryAdd(property.Name, property.Name))
+                {
+                    throw new SchemaProposalFormatException(
+                        $"The proposal names the properties '{byFoldedName[property.Name]}' and '{property.Name}', which differ only by case " +
+                        "and would be one column in a store. Declare them under names that differ by more than case.");
                 }
 
                 proposed[property.Name] = new ColumnDef(

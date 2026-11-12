@@ -50,15 +50,19 @@ public sealed class DeclaredFirstSchemaProposer : ISchemaProposer
         // A declared column claims both the raw key it reads and the name it lands under. An
         // inferred column touching either is describing something already stated — under a
         // different name, perhaps, which is exactly what makes it invisible to a name-only check.
-        var claimed = new HashSet<string>(StringComparer.Ordinal);
+        // The raw key is a JSON key, so it is compared as JSON does — exactly. The column name is a
+        // store's, and the stores name columns ignoring case: an inferred `qty` beside a declared `Qty`
+        // would be a second column of the same name to them (SQLite: "duplicate column name").
+        var claimedKeys = new HashSet<string>(StringComparer.Ordinal);
+        var claimedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var column in declared.Columns)
         {
-            claimed.Add(column.ExtractionKey);
-            claimed.Add(column.Name);
+            claimedKeys.Add(column.ExtractionKey);
+            claimedNames.Add(column.Name);
         }
 
         var columns = new List<ColumnDef>(declared.Columns);
-        columns.AddRange(inferred.Columns.Where(c => !claimed.Contains(c.ExtractionKey) && !claimed.Contains(c.Name)));
+        columns.AddRange(inferred.Columns.Where(c => !claimedKeys.Contains(c.ExtractionKey) && !claimedNames.Contains(c.Name)));
 
         // Relations follow the same rule rather than a separate one — a declared link stands, an
         // inferred link the declaration never named is kept. Dropping the latter would be the very
