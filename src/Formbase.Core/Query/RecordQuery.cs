@@ -569,7 +569,11 @@ public sealed class RecordQuery : IRecordQuery
             return type switch
             {
                 ColumnType.Integer => Convert.ToInt64(value, CultureInfo.InvariantCulture),
-                ColumnType.Decimal => Convert.ToDecimal(value, CultureInfo.InvariantCulture),
+                // Text is read as a plain decimal number. Convert.ToDecimal(string) accepts thousands separators, so «1,5» would
+                // be 15: a filter that asks for rows the caller did not name, which a value that does not fit must never do.
+                ColumnType.Decimal => value is string text
+                    ? decimal.Parse(text, NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite | NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture)
+                    : Convert.ToDecimal(value, CultureInfo.InvariantCulture),
                 ColumnType.Boolean => Convert.ToBoolean(value, CultureInfo.InvariantCulture),
                 ColumnType.Text => value as string ?? Convert.ToString(value, CultureInfo.InvariantCulture),
                 ColumnType.Uuid => value is Guid ? value : Guid.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),

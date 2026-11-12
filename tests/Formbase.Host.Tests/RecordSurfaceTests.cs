@@ -163,6 +163,42 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
                 type,
                 [.. fields.Select(f => new FieldHint(f.Name, f.Type))]));
 
+    /// <summary>
+    /// A decimal in a filter is a number in invariant form: a comma is not a thousands separator there. Read as one, «1,5» asked
+    /// for 15 and the caller was shown rows they did not ask for — the failure the surface refuses everywhere else it can be
+    /// told: a value that does not fit its column matches nothing.
+    /// </summary>
+    [Theory]
+    [InlineData("1,5")]
+    [InlineData("1,000")]
+    public async Task A_decimal_filter_value_with_a_comma_matches_nothing_rather_than_a_number_without_it(string value)
+    {
+        var type = NewFormType();
+        Declare(type, ("price", ColumnType.Decimal));
+        await AcceptAsync(type, """{"price":15}""");
+        await AcceptAsync(type, """{"price":1000}""");
+        (await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?filter=price:{value}", TestContext.Current.CancellationToken));
+
+        result.GetProperty("rows").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_decimal_filter_value_in_plain_form_still_matches()
+    {
+        var type = NewFormType();
+        Declare(type, ("price", ColumnType.Decimal));
+        await AcceptAsync(type, """{"price":15}""");
+        (await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        foreach (var value in new[] { "15", "15.0", "+15" })
+        {
+            var result = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?filter=price:{Uri.EscapeDataString(value)}", TestContext.Current.CancellationToken));
+            result.GetProperty("rows").GetArrayLength().Should().Be(1, $"'{value}' is the number 15");
+        }
+    }
+
     private async Task<string> SeedProjectedAsync(params (string Field, int Value)[] documents)
     {
         var type = NewFormType();
