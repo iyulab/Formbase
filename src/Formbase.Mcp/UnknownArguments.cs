@@ -42,8 +42,16 @@ internal static class UnknownArguments
         var declared = Declared(tool);
         foreach (var name in sent)
         {
-            if (!declared.Contains(name, StringComparer.OrdinalIgnoreCase))
+            // Compared exactly: the SDK binds an argument by its exact name, so a `Filter` that passed a comparison
+            // ignoring case was then not read — the silent no-narrowing this refusal exists to prevent.
+            if (!declared.Contains(name, StringComparer.Ordinal))
             {
+                if (declared.FirstOrDefault(d => string.Equals(d, name, StringComparison.OrdinalIgnoreCase)) is { } cased)
+                {
+                    return $"Unknown argument '{name}'. Argument names are case-sensitive: did you mean '{cased}'? " +
+                        $"The tool '{tool.ProtocolTool.Name}' takes: {string.Join(", ", declared)}.";
+                }
+
                 return declared.Count == 0
                     ? $"Unknown argument '{name}'. The tool '{tool.ProtocolTool.Name}' takes no arguments."
                     : $"Unknown argument '{name}'. The tool '{tool.ProtocolTool.Name}' takes: {string.Join(", ", declared)}.";

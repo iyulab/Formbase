@@ -144,6 +144,21 @@ public sealed class McpDoorTests : IClassFixture<WebApplicationFactory<Program>>
         typo.StructuredContent.Should().BeNull("a refused call returns no records");
     }
 
+    // The SDK binds an argument by its exact name, so `Filter` is not `filter`: it used to pass the refusal and then narrow nothing.
+    [Fact]
+    public async Task An_argument_named_in_another_case_is_never_silently_ignored()
+    {
+        var host = Door();
+        var type = await SeedAsync(host, 1, 2, 3);
+        await using var client = await McpAsync(host, Key);
+
+        var cased = await client.CallToolAsync("query_records", new Dictionary<string, object?> { ["type"] = type, ["Filter"] = TotalIsTwo }, cancellationToken: TestContext.Current.CancellationToken);
+
+        cased.IsError.Should().BeTrue("a call whose narrowing was not applied must be refused, not answered with every record");
+        Text(cased).Should().Contain("Unknown argument 'Filter'").And.Contain("did you mean 'filter'");
+        cased.StructuredContent.Should().BeNull();
+    }
+
     [Fact]
     public async Task Every_tool_refuses_an_argument_it_does_not_declare()
     {

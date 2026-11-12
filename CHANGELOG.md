@@ -34,6 +34,9 @@
 - **A decimal filter value with a comma no longer reads as a number without it.** `filter=price:1,5` on a decimal column was read
   as `15` (the text was parsed with thousands separators), so a value that does not fit the column matched the rows of another
   number instead of matching nothing. Decimal text in a filter is now a plain number: an optional sign, digits and a decimal point.
+- **An MCP tool call whose argument name differs only by case is refused, not answered as if the argument were absent.** The refusal of an
+  undeclared argument compared names ignoring case, but the SDK binds an argument by its exact name, so `Filter` passed the refusal and
+  narrowed nothing — `query_records` answered every row. The comparison is now exact, and the refusal says `did you mean 'filter'`.
 - **A document or record key with the character U+0000 is a `400`, not a `503` to retry.** PostgreSQL's `jsonb` and `text` cannot hold U+0000
   and refuse it for good, but intake wrapped every store failure as `503` `/problems/intake-failed`, which a caller answers by sending the
   same document again. Intake now refuses the character before any store is asked — in a string value, a property name or a record key,
