@@ -332,6 +332,42 @@ public sealed class DocumentSurfaceTests : IClassFixture<WebApplicationFactory<P
 
     private static string UniqueType() => "stream-" + Guid.NewGuid().ToString("N");
 
+    /// <summary>
+    /// A document a durable store cannot hold is the caller's to fix, and the answer says so: a 400 naming where the
+    /// character is — not the 503 «intake-failed» a caller retries for good, which is what a store that refuses it
+    /// (PostgreSQL's <c>jsonb</c>) used to turn it into.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"lot":"L\u00001"}""", null)]
+    [InlineData("""{"l\u0000ot":"L-1"}""", null)]
+    [InlineData("""{"lot":"L-1"}""", "a%00b")]
+    public async Task A_document_or_record_key_with_a_nul_character_is_a_400_and_nothing_is_stored(string body, string? recordKey)
+    {
+        var type = $"nul{Guid.NewGuid():N}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents{(recordKey is null ? "" : $"?recordKey={recordKey}")}")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var problem = await ReadAsync(response);
+        problem.GetProperty("type").GetString().Should().Be("/problems/invalid-document");
+        problem.GetProperty("detail").GetString().Should().Contain("U+0000");
+        var stream = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/documents", TestContext.Current.CancellationToken));
+        stream.GetProperty("documents").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Retiring_a_record_whose_key_has_a_nul_character_is_a_400()
+    {
+        var response = await _client.DeleteAsync($"/formtypes/nul{Guid.NewGuid():N}/records?recordKey=a%00b", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        (await ReadAsync(response)).GetProperty("type").GetString().Should().Be("/problems/invalid-document");
+    }
+
     private Task<HttpResponseMessage> PostAsync(string type, string body, Guid? idempotencyKey = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{type}/documents")

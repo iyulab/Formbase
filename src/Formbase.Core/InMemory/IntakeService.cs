@@ -31,6 +31,7 @@ public sealed class IntakeService : IIntakeService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(body);
+        EnsureStorable(body, recordKey);
         await EnsureNotASectionAsync(type, cancellationToken).ConfigureAwait(false);
         return await AppendAsync(
             type,
@@ -45,6 +46,7 @@ public sealed class IntakeService : IIntakeService
         DocumentId? idempotencyId = null,
         CancellationToken cancellationToken = default)
     {
+        EnsureStorable(null, recordKey);
         await EnsureNotASectionAsync(type, cancellationToken).ConfigureAwait(false);
         return await AppendAsync(
             type,
@@ -66,6 +68,7 @@ public sealed class IntakeService : IIntakeService
         {
             var document = documents[i];
             ArgumentNullException.ThrowIfNull(document, nameof(documents));
+            EnsureStorable(document.Body, document.RecordKey);
             var id = document.IdempotencyId ?? DocumentId.New();
             appends[i] = document.Body is { } body
                 ? RawAppend.Document(id, body, document.RecordKey)
@@ -84,6 +87,24 @@ public sealed class IntakeService : IIntakeService
         }
 
         return stored.Select(document => document.Id).ToArray();
+    }
+
+    /// <summary>
+    /// Refuses what a durable store may not be able to hold, before any store is asked — the same on every store
+    /// (<see cref="UnstorableDocumentException"/>). A batch is checked in full before the first append, so a refused
+    /// batch stores nothing.
+    /// </summary>
+    private static void EnsureStorable(DocumentBody? body, RecordKey? recordKey)
+    {
+        if (body?.FindNulCharacter() is { } at)
+        {
+            throw new UnstorableDocumentException(at);
+        }
+
+        if (recordKey is { Value: var key } && key.Contains('\0', StringComparison.Ordinal))
+        {
+            throw new UnstorableDocumentException("the record key");
+        }
     }
 
     /// <summary>

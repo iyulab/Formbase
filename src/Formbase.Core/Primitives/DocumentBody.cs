@@ -84,6 +84,54 @@ public sealed class DocumentBody
         }
     }
 
+    /// <summary>
+    /// Where the body first carries the character U+0000 — in a string value or a property name — as a JSON
+    /// path, or <see langword="null"/> when it carries none. JSON allows the character (as <c>\u0000</c>), but a
+    /// durable store may not be able to hold it (PostgreSQL's <c>jsonb</c> cannot), so intake refuses it.
+    /// </summary>
+    public string? FindNulCharacter() => FindNul(Root, "$");
+
+    private static string? FindNul(JsonElement element, string path)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                return element.GetString()!.Contains('\0', StringComparison.Ordinal) ? path : null;
+
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    // The path shows the character as the JSON escape, since written out it would be invisible.
+                    if (property.Name.Contains('\0', StringComparison.Ordinal))
+                    {
+                        return $"{path}.{property.Name.Replace("\0", "\\u0000", StringComparison.Ordinal)}";
+                    }
+
+                    if (FindNul(property.Value, $"{path}.{property.Name}") is { } nested)
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+
+            case JsonValueKind.Array:
+                var index = 0;
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (FindNul(item, $"{path}[{index++}]") is { } nested)
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+
+            default:
+                return null;
+        }
+    }
+
     /// <summary>Serializes the body back to its raw JSON text.</summary>
     public string ToJsonString() => Root.GetRawText();
 }

@@ -183,12 +183,15 @@ Content-Type: application/json
 
 The document is stored **verbatim**. Nothing interprets it at intake — not a declaration, not a
 type check — so a form type with no declaration accepts documents exactly as one with a declaration
-does, and they wait in raw until a shape is declared for them. Three things are refused: a body that is
+does, and they wait in raw until a shape is declared for them. Four things are refused: a body that is
 not a JSON object (`400` `/problems/invalid-request`) — a document is a set of fields, so an array, a
 number, a string or `null` is not one, and an array of documents sent to this route is refused instead of
 being stored as one document whose body is the array; an object that names a property twice (`400`
 `/problems/invalid-request`) — JSON leaves its meaning open and stores disagree on it, so it could not be
-given back as it was sent — and a document under a form type that is a [repeated section](#repeated-sections)
+given back as it was sent; a string or property name — or a record key — that carries the character U+0000
+(`400` `/problems/invalid-document`, naming where) — a durable store (PostgreSQL's `jsonb`) cannot hold it
+and refuses it for good, so it is refused the same on every store instead of being answered as an outage to
+retry — and a document under a form type that is a [repeated section](#repeated-sections)
 of another (`409` `/problems/form-type-is-a-section`), whose rows arrive inside the parent's documents.
 
 **`Idempotency-Key` makes a retry safe.** The key becomes the document's identity, so re-sending the
@@ -890,6 +893,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 |---|---|---|
 | 400 | `/problems/invalid-form-type` | The path named something that cannot be a form type |
 | 400 | `/problems/invalid-request` | The request could not be read at all: the body was not JSON (or named a property twice), the idempotency key was not a UUID, or a parameter did not bind |
+| 400 | `/problems/invalid-document` | A document or record key carries the character U+0000, which a durable store cannot hold; nothing was stored — remove it and send again |
 | 400 | `/problems/invalid-query` | A filter or ordering key could not be read, or named a column the declaration does not have |
 | 400 | `/problems/invalid-declaration` | A declaration named no table, a reserved `fb_` table or field, carried no fields, or declared one twice |
 | 400 | `/problems/schema-proposal-invalid` | Schema intelligence is installed and the model responded, but the proposal was not valid JSON, not the requested shape, or named a property never observed in the sampled documents |

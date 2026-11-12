@@ -112,6 +112,14 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
                 "The durable store is not reachable",
                 "The durable store did not answer this request. Retry it later."),
 
+            // 400, before any store was asked: the character is the caller's to remove, and retrying the same document
+            // changes nothing — which is what a 503 would have told them to do.
+            UnstorableDocumentException e => Problem(
+                StatusCodes.Status400BadRequest,
+                "invalid-document",
+                "The document cannot be stored",
+                e.Message),
+
             IntakeException e => Problem(
                 StatusCodes.Status503ServiceUnavailable,
                 "intake-failed",

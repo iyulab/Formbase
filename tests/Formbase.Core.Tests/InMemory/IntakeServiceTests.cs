@@ -23,6 +23,69 @@ public class IntakeServiceTests
         stored!.Type.Should().Be(Qc);
     }
 
+    private static async Task<int> CountStoredAsync(IRawStore store)
+    {
+        var count = 0;
+        await foreach (var _ in store.StreamAsync(Qc, Watermark.Zero, TestContext.Current.CancellationToken))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// A durable store may not be able to hold U+0000 (PostgreSQL's <c>jsonb</c> and <c>text</c> cannot), and
+    /// what it refuses it refuses for good — so a document that carries one is refused before any store is
+    /// asked, the same on every store, rather than reaching one that answers with an error the caller reads
+    /// as «try again».
+    /// </summary>
+    [Theory]
+    [InlineData("""{"lot":"L\u00001"}""")]
+    [InlineData("""{"l\u0000ot":"L-1"}""")]
+    [InlineData("""{"items":[{"note":"a\u0000"}]}""")]
+    public async Task A_body_that_carries_a_nul_character_is_refused_and_nothing_is_stored(string json)
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
+
+        var accept = () => intake.AcceptAsync(Qc, Body(json), cancellationToken: TestContext.Current.CancellationToken);
+
+        (await accept.Should().ThrowAsync<UnstorableDocumentException>()).Which.Message.Should().Contain("U+0000");
+        (await CountStoredAsync(store)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_record_key_that_carries_a_nul_character_is_refused_when_accepting_and_when_retiring()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
+        var key = RecordKey.Create("a\0b");
+
+        var accept = () => intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), recordKey: key, cancellationToken: TestContext.Current.CancellationToken);
+        var retire = () => intake.RetireAsync(Qc, key, cancellationToken: TestContext.Current.CancellationToken);
+
+        await accept.Should().ThrowAsync<UnstorableDocumentException>();
+        await retire.Should().ThrowAsync<UnstorableDocumentException>();
+        (await CountStoredAsync(store)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_batch_with_one_nul_document_stores_none_of_it()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, new InMemoryFieldHintSource());
+
+        var batch = () => intake.AcceptManyAsync(Qc,
+        [
+            IntakeDocument.Accept(Body("""{"lot":"L-1"}""")),
+            IntakeDocument.Accept(Body("""{"lot":"L\u00002"}""")),
+        ], TestContext.Current.CancellationToken);
+
+        await batch.Should().ThrowAsync<UnstorableDocumentException>();
+        (await CountStoredAsync(store)).Should().Be(0);
+    }
+
     [Fact]
     public async Task Accept_without_declaration_succeeds_for_a_first_seen_form_type()
     {

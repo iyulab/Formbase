@@ -164,6 +164,8 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
                 return t._client.SendAsync(request);
             },
 
+            ["/problems/invalid-document"] = t => t.PostDocumentAsync(NewFormType(), """{"note":"a\u0000b"}"""),
+
             ["/problems/invalid-query"] = async t =>
             {
                 var type = await t.SeedProjectedAsync();

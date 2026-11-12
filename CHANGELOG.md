@@ -34,6 +34,10 @@
 - **A decimal filter value with a comma no longer reads as a number without it.** `filter=price:1,5` on a decimal column was read
   as `15` (the text was parsed with thousands separators), so a value that does not fit the column matched the rows of another
   number instead of matching nothing. Decimal text in a filter is now a plain number: an optional sign, digits and a decimal point.
+- **A document or record key with the character U+0000 is a `400`, not a `503` to retry.** PostgreSQL's `jsonb` and `text` cannot hold U+0000
+  and refuse it for good, but intake wrapped every store failure as `503` `/problems/intake-failed`, which a caller answers by sending the
+  same document again. Intake now refuses the character before any store is asked — in a string value, a property name or a record key,
+  on accepting, retiring and in a batch — with `400` `/problems/invalid-document` naming where it is, the same on every store.
 - **A field named in the engine's `fb_` namespace is refused when it is declared, on every store.** A declared field is a column, and the
   engine's own columns (`fb_doc_id`, `fb_record_key`, …) share the namespace: one store refused the duplicate column when the
   projection ran, another let the declared field overwrite the system column without a word. The declaration is now refused with
