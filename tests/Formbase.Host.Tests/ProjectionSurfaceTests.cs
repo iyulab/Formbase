@@ -386,6 +386,48 @@ public sealed class ProjectionSurfaceTests : IClassFixture<WebApplicationFactory
         response.IsSuccessStatusCode.Should().BeTrue(await response.Content.ReadAsStringAsync());
     }
 
+    /// <summary>
+    /// A skip names the document, and a document of a record names the record: the caller who sent <c>recordKey=lot-7</c> asks which of
+    /// their records was dropped, and the document id alone is the engine's, not theirs. The key is in the engine's record of the skip
+    /// (what lets a later correction of the record withdraw it); the surface used to leave it out.
+    /// </summary>
+    [Fact]
+    public async Task A_skip_names_the_record_of_the_document_it_dropped()
+    {
+        var type = NewFormType();
+        await DeclareRequiredAsync(type, "total");
+        var kept = await _client.PostAsync(
+            $"/formtypes/{type}/documents?recordKey=lot-7",
+            new StringContent("""{"total":[1,2]}""", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        kept.StatusCode.Should().Be(HttpStatusCode.Created);
+        await AcceptAsync(type, """{"total":[3,4]}""");
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
+        var skips = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken));
+
+        foreach (var listed in new[] { run.GetProperty("skipped"), skips.GetProperty("skipped") })
+        {
+            listed.EnumerateArray().Select(d => d.GetProperty("recordKey").GetString()).Should().BeEquivalentTo(["lot-7", null]);
+        }
+    }
+
+    [Fact]
+    public async Task A_skipped_field_names_the_record_of_its_document()
+    {
+        var type = NewFormType();
+        await DeclareAsync(type, "total");
+        var sent = await _client.PostAsync(
+            $"/formtypes/{type}/documents?recordKey=lot-7",
+            new StringContent("""{"total":1.5}""", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        sent.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
+        var skips = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/projection/skips", TestContext.Current.CancellationToken));
+
+        run.GetProperty("skippedFields")[0].GetProperty("recordKey").GetString().Should().Be("lot-7");
+        skips.GetProperty("skippedFields")[0].GetProperty("recordKey").GetString().Should().Be("lot-7");
+    }
+
     private async Task AcceptAsync(string type, string body)
     {
         var response = await _client.PostAsync(

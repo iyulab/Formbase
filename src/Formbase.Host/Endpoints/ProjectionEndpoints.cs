@@ -82,7 +82,7 @@ internal static class ProjectionEndpoints
             result.Projected,
             result.Inserted,
             result.ProjectedWatermark.Value,
-            [.. result.Skipped.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason))],
+            [.. result.Skipped.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason, s.Key?.Value))],
             [.. result.SkippedFields.Select(ToResponse)],
             result.AbsentFieldCounts,
             result.UnresolvedReferences,
@@ -123,12 +123,12 @@ internal static class ProjectionEndpoints
             .ConfigureAwait(false);
 
         return Results.Ok(new ProjectionSkipsResponse(
-            [.. skips.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason))],
+            [.. skips.Select(s => new SkippedDocumentResponse(s.DocumentId.Value, s.Reason, s.Key?.Value))],
             skips.Count,
             [.. fieldSkips.Select(ToResponse)],
             fieldSkips.Count));
     }
 
     private static SkippedFieldResponse ToResponse(ProjectionFieldSkip skip) =>
-        new(skip.DocumentId.Value, skip.Field, skip.Reason);
+        new(skip.DocumentId.Value, skip.Field, skip.Reason, skip.Key?.Value);
 }

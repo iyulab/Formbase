@@ -15,6 +15,10 @@
 
 ### Changed
 
+- **A skipped document or field names its record.** The skips of a projection run and `GET …/projection/skips` named the document (a
+  generated id) but not the `recordKey` it was sent under, which the engine had recorded, so a caller who keys their records could not tell
+  which of them was dropped. Each `skipped` and `skippedFields` entry now carries `recordKey` (`null` for a document that is a record
+  of its own) — an additive field.
 - **`GET /formtypes/{type}/records` returns a bounded page and says whether there is more.** A read that named no `limit` returned every
   row the query matched, with nothing bounding the response; it now returns one page of `100` (`limit` is at most `1000`, a larger one
   is refused with `400` `/problems/invalid-query`, as a document read already is), and the response carries `hasMore` — `true` when

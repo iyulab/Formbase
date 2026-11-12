@@ -87,12 +87,14 @@ public enum NotProjectedReasonWire
 
 /// <param name="DocumentId">The document that was not mapped.</param>
 /// <param name="Reason">Why it could not be mapped into the declared shape.</param>
-public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason);
+/// <param name="RecordKey">The record the document stood for — the key it was sent under — or <see langword="null"/> for a document that is a record of its own.</param>
+public sealed record SkippedDocumentResponse(Guid DocumentId, string Reason, string? RecordKey = null);
 
 /// <param name="DocumentId">The document whose field was left empty; its row was projected.</param>
 /// <param name="Field">The projected column left empty.</param>
 /// <param name="Reason">Why the value could not be converted to the column's type.</param>
-public sealed record SkippedFieldResponse(Guid DocumentId, string Field, string Reason);
+/// <param name="RecordKey">The record the document stood for, or <see langword="null"/> for a document that is a record of its own.</param>
+public sealed record SkippedFieldResponse(Guid DocumentId, string Field, string Reason, string? RecordKey = null);
 
 /// <summary>
 /// What the last completed projection dropped. Unlike <see cref="LastRunResponse"/> — which is this

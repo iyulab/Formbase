@@ -609,8 +609,8 @@ POST /formtypes/orders/projection
   "projected": true,
   "inserted": 2,
   "projectedWatermark": 12,
-  "skipped": [{ "documentId": "…", "reason": "…" }],
-  "skippedFields": [{ "documentId": "…", "field": "deadline", "reason": "…" }],
+  "skipped": [{ "documentId": "…", "reason": "…", "recordKey": "lot-7" }],
+  "skippedFields": [{ "documentId": "…", "field": "deadline", "reason": "…", "recordKey": null }],
   "absentFieldCounts": { "total": 1 },
   "unresolvedReferences": ["customerName"],
   "notProjectedReason": null,
@@ -664,7 +664,8 @@ Two fields exist so that silence stays visible:
 
 `skipped` carries documents that could not be mapped into the declared shape — a required field
 missing, null, or holding a value its column type cannot take. A mapping failure skips one document
-and never touches raw.
+and never touches raw. Each entry names the document and — when it was sent under a `recordKey` — the record it stood for
+(`recordKey`, `null` for a document that is a record of its own), so the caller can say which of their records was dropped.
 
 `skippedFields` carries the smaller loss: an **optional** field whose value its column type cannot
 take (`"next week"` in a `timestamp`, an array in a `text`). The row lands with that column empty, and
@@ -723,11 +724,11 @@ GET /formtypes/orders/projection/skips
 ```json
 {
   "skipped": [
-    { "documentId": "0f3c1e2a-1c4d-4e6a-9a11-2b7c9d0e4f55", "reason": "required field 'deadline' is absent from the document" }
+    { "documentId": "0f3c1e2a-1c4d-4e6a-9a11-2b7c9d0e4f55", "reason": "required field 'deadline' is absent from the document", "recordKey": "lot-7" }
   ],
   "count": 1,
   "skippedFields": [
-    { "documentId": "7a1d4b90-3e2f-4c88-b5d1-6f0e2a9c1b37", "field": "receivedAt", "reason": "field 'receivedAt' is not convertible to Timestamp" }
+    { "documentId": "7a1d4b90-3e2f-4c88-b5d1-6f0e2a9c1b37", "field": "receivedAt", "reason": "field 'receivedAt' is not convertible to Timestamp", "recordKey": null }
   ],
   "fieldCount": 1
 }
