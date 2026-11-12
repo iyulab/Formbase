@@ -1615,7 +1615,8 @@
         "required": [
           "rows",
           "stale",
-          "skippedDocuments"
+          "skippedDocuments",
+          "hasMore"
         ],
         "type": "object",
         "properties": {
@@ -1635,6 +1636,9 @@
               "string"
             ],
             "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
           }
         }
       },

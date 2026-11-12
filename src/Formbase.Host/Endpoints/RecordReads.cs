@@ -11,6 +11,12 @@ namespace Formbase.Host.Endpoints;
 /// </summary>
 internal static class RecordReads
 {
+    /// <summary>The rows of a page when the caller names no limit.</summary>
+    internal const int DefaultLimit = 100;
+
+    /// <summary>The most rows a page may hold — the bound a document read has.</summary>
+    internal const int MaxLimit = 1000;
+
     /// <summary>
     /// The query a caller asked for, or <see langword="null"/> and why it cannot be read — a filter or ordering that could
     /// not be read must refuse, not widen the result.
@@ -27,6 +33,12 @@ internal static class RecordReads
         if (limit is < 0 || offset is < 0)
         {
             problem = "limit and offset cannot be negative.";
+            return null;
+        }
+
+        if (limit > MaxLimit)
+        {
+            problem = $"limit cannot exceed {MaxLimit}. Read further pages with offset; a response says whether there are more.";
             return null;
         }
 
@@ -67,7 +79,7 @@ internal static class RecordReads
 
         return new QuerySpec(
             filters.Count > 0 ? filters : null,
-            limit,
+            limit ?? DefaultLimit,
             offset,
             order.Count > 0 ? order : null,
             referenceSources ?? false);
@@ -76,7 +88,11 @@ internal static class RecordReads
     /// <summary>The records the query matches, as the record endpoint answers them.</summary>
     internal static async Task<RecordQueryResponse> ReadAsync(FormbaseEngine engine, string type, QuerySpec spec, CancellationToken cancellationToken)
     {
-        var result = await engine.QueryAsync(FormTypeRef.Create(type), spec, cancellationToken).ConfigureAwait(false);
-        return new RecordQueryResponse([.. result.Rows.Select(RecordRowResponse.From)], result.Stale, result.SkippedDocuments);
+        // One row more than the page asks for says whether the page was cut, without counting what the query matches.
+        var page = spec.Limit;
+        var result = await engine.QueryAsync(FormTypeRef.Create(type), page is { } window ? spec with { Limit = window + 1 } : spec, cancellationToken).ConfigureAwait(false);
+        var hasMore = page is { } size && result.Rows.Count > size;
+        var rows = hasMore ? result.Rows.Take(page!.Value) : result.Rows;
+        return new RecordQueryResponse([.. rows.Select(RecordRowResponse.From)], result.Stale, result.SkippedDocuments, hasMore);
     }
 }

@@ -19,10 +19,15 @@ namespace Formbase.Host.Contracts;
 /// How many accepted documents the form type's projection could not project — they are in none of the
 /// rows, so the answer is not over every document. Zero when every document stands. `GET /formtypes/{type}/projection/skips` names them and why.
 /// </param>
+/// <param name="HasMore">
+/// True when the query matches rows beyond this page — the page was cut by its <c>limit</c>, so the rows are not the whole answer.
+/// Read the next page with <c>offset</c> advanced by the page's size.
+/// </param>
 public sealed record RecordQueryResponse(
     IReadOnlyList<RecordRowResponse> Rows,
     bool Stale,
-    int SkippedDocuments);
+    int SkippedDocuments,
+    bool HasMore);
 
 /// <summary>
 /// One projected record.

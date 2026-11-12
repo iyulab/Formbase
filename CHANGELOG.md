@@ -15,6 +15,11 @@
 
 ### Changed
 
+- **`GET /formtypes/{type}/records` returns a bounded page and says whether there is more.** A read that named no `limit` returned every
+  row the query matched, with nothing bounding the response; it now returns one page of `100` (`limit` is at most `1000`, a larger one
+  is refused with `400` `/problems/invalid-query`, as a document read already is), and the response carries `hasMore` — `true` when
+  rows follow the page. A caller that relied on no limit meaning every row pages with `offset` until `hasMore` is `false`. The
+  `query_records` MCP tool answers the same field.
 - **A row the projection store refuses is a `409`, not a `503`.** When MorphDB answered `400` to a row of a projection run (a null for a
   required column, a value of another type), the run answered `503` `/problems/projection-unavailable` — an outage that retrying
   never cures, with the document the row came from lost on the way. It is now `409` `/problems/projection-refused`, the type a

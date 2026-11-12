@@ -199,6 +199,70 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         }
     }
 
+    /// <summary>
+    /// A read that names no limit returns one bounded page and says there is more. «No limit means every row» is the engine's
+    /// meaning, not the wire's: a page cut short without saying so is read as the whole answer, and one that is never cut
+    /// takes the host with a large table.
+    /// </summary>
+    [Fact]
+    public async Task A_read_without_a_limit_returns_one_hundred_rows_and_says_there_are_more()
+    {
+        var type = await SeedManyAsync(101);
+
+        var page = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records", TestContext.Current.CancellationToken));
+
+        page.GetProperty("rows").GetArrayLength().Should().Be(100);
+        page.GetProperty("hasMore").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_page_that_holds_every_row_says_there_are_no_more()
+    {
+        var type = await SeedManyAsync(101);
+
+        var all = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?limit=1000", TestContext.Current.CancellationToken));
+        var exact = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?limit=101", TestContext.Current.CancellationToken));
+
+        all.GetProperty("rows").GetArrayLength().Should().Be(101);
+        all.GetProperty("hasMore").GetBoolean().Should().BeFalse();
+        exact.GetProperty("hasMore").GetBoolean().Should().BeFalse("the page ends exactly where the rows do");
+    }
+
+    [Fact]
+    public async Task The_next_page_continues_where_the_last_one_ended()
+    {
+        var type = await SeedManyAsync(101);
+
+        var next = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?limit=100&offset=100", TestContext.Current.CancellationToken));
+
+        next.GetProperty("rows").GetArrayLength().Should().Be(1);
+        next.GetProperty("hasMore").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_limit_above_what_a_page_may_hold_is_refused()
+    {
+        var type = await SeedManyAsync(1);
+
+        var response = await _client.GetAsync($"/formtypes/{type}/records?limit=1001", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadAsync(response)).GetProperty("type").GetString().Should().Be("/problems/invalid-query");
+    }
+
+    private async Task<string> SeedManyAsync(int count)
+    {
+        var type = NewFormType();
+        Declare(type, ("total", ColumnType.Integer));
+        for (var i = 0; i < count; i++)
+        {
+            await AcceptAsync(type, $$"""{"total":{{i}}}""");
+        }
+
+        (await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        return type;
+    }
+
     private async Task<string> SeedProjectedAsync(params (string Field, int Value)[] documents)
     {
         var type = NewFormType();

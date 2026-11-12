@@ -758,9 +758,13 @@ GET /formtypes/orders/records?filter=total:42&orderBy=-total&limit=20&offset=0
     }
   ],
   "stale": false,
-  "skippedDocuments": 0
+  "skippedDocuments": 0,
+  "hasMore": false
 }
 ```
+
+`hasMore` is `true` when the query matches rows beyond this page, so the rows are not the whole answer — read the next page
+with `offset` advanced by the page's size. A page that ends exactly where the rows do answers `false`.
 
 `skippedDocuments` is how many accepted documents the form type's projection could not project
 (`GET /formtypes/{type}/projection/skips` names them and why). Those documents are in none of the rows, so a
@@ -805,7 +809,9 @@ The projection's bookkeeping columns are not declared columns, so they cannot be
 by either — rows never carry them as fields, and a caller ordering by a name they can never read back
 would be depending on an internal.
 - **`limit` / `offset`** — paging is deterministic whether or not the caller orders, because the
-  projection's watermark is appended as a final tie-breaker.
+  projection's watermark is appended as a final tie-breaker. `limit` defaults to `100` and is at most `1000`; a larger
+  one is refused with `400` `/problems/invalid-query`, because a page of any size is bounded and `hasMore` says whether
+  another follows. A read that names no limit therefore returns one page, not every row.
 - **`referenceSources=true`** — each row also carries **`references`**: for every reference field,
   where its value was read from, in the same read as the value.
 
