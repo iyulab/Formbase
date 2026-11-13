@@ -288,9 +288,11 @@ public enum DeclaredColumnType
 /// <summary>
 /// When in time a field's value is read from.
 /// <para>
-/// <c>reference</c> is declared but not resolved by the engine today: a projection run names such a
-/// column among its unresolved references rather than filling it with the document's own fixed-then
-/// copy, which would be a different answer wearing the same column.
+/// <c>reference</c> reads the target record's value as it is now: the store computes it when the row is
+/// read, provided the declaration says how to find the target (a lookup and a via field). A reference
+/// declared without that pair cannot be computed — it reads empty and a projection run names it among its
+/// unresolved references, rather than filling the column with the document's own fixed-then copy, which
+/// would be a different answer wearing the same column.
 /// </para>
 /// </summary>
 public enum DeclaredBinding
