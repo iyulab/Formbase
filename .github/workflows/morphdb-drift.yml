@@ -15,9 +15,6 @@ on:
 permissions:
   contents: read
 
-env:
-  DOTNET_VERSION: 10.0.x
-
 jobs:
   drift:
     name: Live contract against morphdb:latest
@@ -31,7 +28,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
