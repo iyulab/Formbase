@@ -193,6 +193,17 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
 
             ["/problems/no-declaration"] = t => t._client.GetAsync($"/formtypes/{NewFormType()}/declaration"),
 
+            ["/problems/no-such-declaration"] = t => t._client.GetAsync($"/formtypes/{NewFormType()}/declaration?seq=1"),
+
+            ["/problems/declaration-history-unsupported"] = async t =>
+            {
+                // A declaration source written before the history existed: it reads declarations and keeps no past ones.
+                using var factory = t.WithStore<IFieldHintSource>(new HintSourceWithoutHistory());
+                using var client = factory.CreateClient();
+
+                return await client.GetAsync($"/formtypes/{NewFormType()}/declaration/history");
+            },
+
             ["/problems/unknown-namespace"] = t =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, $"/formtypes/{NewFormType()}/documents")
@@ -442,6 +453,18 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
             }));
 
     /// <summary>A raw store that is simply not there — the outage intake has to answer for.</summary>
+    /// <summary>A declaration source that reads declarations and implements no history port.</summary>
+    private sealed class HintSourceWithoutHistory : IFieldHintSource
+    {
+        private readonly InMemoryFieldHintSource _inner = new();
+
+        public Task<FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+            _inner.GetHintsAsync(type, cancellationToken);
+
+        public Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default) =>
+            _inner.GetSectionSourceAsync(section, cancellationToken);
+    }
+
     private sealed class UnreachableRawStore : IRawStore
     {
         private static InvalidOperationException Unreachable() =>

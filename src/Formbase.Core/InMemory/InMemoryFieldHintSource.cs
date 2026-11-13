@@ -6,10 +6,11 @@ using Formbase.Core.Schema;
 namespace Formbase.Core.InMemory;
 
 /// <summary>In-process <see cref="IFieldHintSource"/> with explicit declaration — for tests and single-process use.</summary>
-public sealed class InMemoryFieldHintSource : IFieldHintSource
+public sealed class InMemoryFieldHintSource : IFieldHintSource, IFieldHintHistory
 {
     private readonly ConcurrentDictionary<FormTypeRef, FormTypeHints> _hints = new();
     private readonly Lock _declaring = new();
+    private readonly Dictionary<FormTypeRef, List<DeclarationRevision>> _history = [];
 
     /// <summary>
     /// Declares (or replaces) the field hints for a form type. A blank or reserved table name
@@ -41,6 +42,12 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
             DeclaredTargets.EnsureResolvable(hints, type => _hints.TryGetValue(type, out var declared) ? declared.Fields : null);
             DeclaredSections.EnsureWellFormed(hints, _hints.Values);
             _hints[hints.Type] = hints;
+            if (!_history.TryGetValue(hints.Type, out var revisions))
+            {
+                _history[hints.Type] = revisions = [];
+            }
+
+            revisions.Add(new DeclarationRevision(revisions.Count + 1, hints, DateTimeOffset.UtcNow));
         }
     }
 
@@ -56,4 +63,22 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource
 
     public Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default)
         => Task.FromResult(SectionSource.Find(section, _hints.Values));
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<DeclarationRevision>> ListRevisionsAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        lock (_declaring)
+        {
+            return Task.FromResult<IReadOnlyList<DeclarationRevision>>(_history.TryGetValue(type, out var revisions) ? [.. revisions] : []);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default)
+    {
+        lock (_declaring)
+        {
+            return Task.FromResult(_history.TryGetValue(type, out var revisions) && sequence >= 1 && sequence <= revisions.Count ? revisions[sequence - 1] : null);
+        }
+    }
 }

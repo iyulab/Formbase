@@ -627,6 +627,18 @@
             }
           },
           {
+            "name": "seq",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
             "name": "Formbase-Namespace",
             "in": "header",
             "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
@@ -648,6 +660,16 @@
           },
           "404": {
             "description": "Not Found",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not Implemented",
             "content": {
               "application/problem\u002Bjson": {
                 "schema": {
@@ -788,6 +810,56 @@
         }
       }
     },
+    "/formtypes/{type}/declaration/history": {
+      "get": {
+        "tags": [
+          "DeclarationEndpoints"
+        ],
+        "summary": "Lists the declarations a form type has had",
+        "description": "Every declaration written for the form type, oldest first. A declaration\u0027s sequence is the store\u0027s own count and only grows; its declarationVersion is the label the caller gave it, which can repeat. Read one back as it was with GET \u2026/declaration?seq=N. Deleting a declaration does not delete its history.",
+        "operationId": "GetDeclarationHistory",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Formbase-Namespace",
+            "in": "header",
+            "description": "Which namespace the request is addressed to. Omit it to address the host\u0027s own; naming one this host does not serve is refused rather than answered from the one it does.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclarationHistoryResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not Implemented",
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/settings": {
       "get": {
         "tags": [
@@ -842,6 +914,24 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "DeclarationHistoryResponse": {
+        "required": [
+          "formType",
+          "revisions"
+        ],
+        "type": "object",
+        "properties": {
+          "formType": {
+            "type": "string"
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredRevisionResponse"
+            }
           }
         }
       },
@@ -1274,6 +1364,36 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "DeclaredRevisionResponse": {
+        "required": [
+          "sequence",
+          "declarationVersion",
+          "savedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "declarationVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "savedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

@@ -34,6 +34,15 @@ public sealed record DeclarationResponse(
     IReadOnlyList<DeclaredIndex>? Indexes = null,
     DeclaredSectionOfResponse? SectionOf = null);
 
+/// <param name="Sequence">The declaration's place in the form type's history — what names it unambiguously.</param>
+/// <param name="DeclarationVersion">The label the caller gave it, which the same caller can give twice.</param>
+/// <param name="SavedAt">When the declaration was written.</param>
+public sealed record DeclaredRevisionResponse(int Sequence, int DeclarationVersion, DateTimeOffset SavedAt);
+
+/// <param name="FormType">The form type the declarations belong to.</param>
+/// <param name="Revisions">Every declaration written for it, oldest first.</param>
+public sealed record DeclarationHistoryResponse(string FormType, IReadOnlyList<DeclaredRevisionResponse> Revisions);
+
 /// <summary>
 /// The parent a repeated section's rows are cut from: the form type whose documents hold them, the child
 /// relation that names the section, the array field holding the rows, and the parent's field each row

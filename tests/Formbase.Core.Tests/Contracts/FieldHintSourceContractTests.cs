@@ -653,4 +653,89 @@ public abstract class FieldHintSourceContractTests
         (refused.ExpectedVersion, refused.ActualVersion).Should().Be((1, null));
         (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
     }
+
+    // --- history: every declaration written stays, named by the store's own sequence ---
+
+    [Fact]
+    public async Task Every_declaration_written_is_a_revision_in_order_with_the_label_the_caller_gave_it()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        await DeclareAsync(source, QcAtVersion(2, "qc_table_2"), DeclarationExpectation.InForce(1));
+
+        var revisions = await ((IFieldHintHistory)source).ListRevisionsAsync(Qc, TestContext.Current.CancellationToken);
+
+        revisions.Select(r => (r.Sequence, r.Declaration.DeclarationVersion, r.Declaration.TableName))
+            .Should().Equal((1, 1, "qc_table"), (2, 2, "qc_table_2"));
+        revisions.Should().OnlyContain(r => r.SavedAt > DateTimeOffset.UtcNow.AddMinutes(-5) && r.SavedAt <= DateTimeOffset.UtcNow.AddMinutes(1));
+    }
+
+    /// <summary>The label is the caller's to choose, so the same one can be written twice — the sequence is what tells them apart.</summary>
+    [Fact]
+    public async Task A_declaration_written_under_a_label_already_used_is_a_new_revision()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        await DeclareAsync(source, QcAtVersion(1, "qc_table_again"), DeclarationExpectation.InForce(1));
+
+        var revisions = await ((IFieldHintHistory)source).ListRevisionsAsync(Qc, TestContext.Current.CancellationToken);
+
+        revisions.Select(r => (r.Sequence, r.Declaration.DeclarationVersion, r.Declaration.TableName))
+            .Should().Equal((1, 1, "qc_table"), (2, 1, "qc_table_again"));
+    }
+
+    [Fact]
+    public async Task A_revision_reads_back_as_it_was_while_the_source_reads_the_newest()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        await DeclareAsync(source, QcAtVersion(2, "qc_table_2"), DeclarationExpectation.InForce(1));
+        var history = (IFieldHintHistory)source;
+
+        var first = await history.GetRevisionAsync(Qc, 1, TestContext.Current.CancellationToken);
+        var second = await history.GetRevisionAsync(Qc, 2, TestContext.Current.CancellationToken);
+
+        first!.Declaration.TableName.Should().Be("qc_table");
+        first.Declaration.Fields.Should().BeEquivalentTo(QcAtVersion(1).Fields, options => options.WithStrictOrdering());
+        second!.Declaration.TableName.Should().Be("qc_table_2");
+        (await source.GetHintsAsync(Qc, TestContext.Current.CancellationToken))!.TableName.Should().Be("qc_table_2");
+    }
+
+    [Fact]
+    public async Task A_sequence_the_form_type_never_had_has_no_revision()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        var history = (IFieldHintHistory)source;
+
+        (await history.GetRevisionAsync(Qc, 2, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await history.GetRevisionAsync(Qc, 0, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await history.ListRevisionsAsync(Work, TestContext.Current.CancellationToken)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_declaration_the_source_refuses_leaves_no_revision()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+
+        var act = () => DeclareAsync(source, QcAtVersion(99, "qc_table_99"), DeclarationExpectation.InForce(7));
+
+        await act.Should().ThrowAsync<DeclarationVersionConflictException>();
+        (await ((IFieldHintHistory)source).ListRevisionsAsync(Qc, TestContext.Current.CancellationToken)).Should().ContainSingle();
+    }
+
+    /// <summary>Another form type's declarations have a sequence of their own.</summary>
+    [Fact]
+    public async Task Each_form_type_counts_its_own_sequence()
+    {
+        var source = CreateSource();
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        await DeclareAsync(source, new FormTypeHints(Work, "work_table", [new FieldHint("order_no", ColumnType.Text)]), DeclarationExpectation.Absent);
+        await DeclareAsync(source, QcAtVersion(2, "qc_table_2"), DeclarationExpectation.InForce(1));
+        var history = (IFieldHintHistory)source;
+
+        (await history.ListRevisionsAsync(Work, TestContext.Current.CancellationToken)).Select(r => r.Sequence).Should().Equal(1);
+        (await history.ListRevisionsAsync(Qc, TestContext.Current.CancellationToken)).Select(r => r.Sequence).Should().Equal(1, 2);
+    }
 }

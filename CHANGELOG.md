@@ -13,6 +13,15 @@
   or it is the `keyField` of a `reference` relation) without saying whether it is read now or was fixed then, and `stored`
   otherwise. `FormTypeHints.BindingStateOf` is the same derivation for a caller of the library.
 
+- **The declarations a form type has had are kept and can be read.** Each declaration written is appended to a history, oldest
+  first, and named by a **sequence** the store counts (from 1, one per write) — the caller's `declarationVersion` is a label the
+  caller chose and can write twice, so it cannot name one. `GET /formtypes/{type}/declaration/history` lists them and
+  `GET /formtypes/{type}/declaration?seq=N` reads one back as it was; a sequence the form type never had is `404`
+  `/problems/no-such-declaration`. In the library, `IFieldHintHistory` (`ListRevisionsAsync` · `GetRevisionAsync`, a separate
+  port so an existing `IFieldHintSource` keeps compiling) is implemented by the in-memory, SQLite and PostgreSQL sources; the
+  stores create a history table beside the declarations on first use, and a declaration written before this version has no
+  history. Deleting a declaration does not delete its history.
+
 ### Changed
 
 - **`binding` reads back `null` on a field whose declaration left it out**, where it read `stored`. A caller that read `binding` as

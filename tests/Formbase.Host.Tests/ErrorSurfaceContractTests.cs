@@ -42,6 +42,7 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
         ("GET", "/formtypes/{type}/documents"),
         ("GET", "/formtypes/{type}/rows"),
         ("GET", "/formtypes/{type}/declaration"),
+        ("GET", "/formtypes/{type}/declaration/history"),
         ("PUT", "/formtypes/{type}/declaration"),
         ("DELETE", "/formtypes/{type}/declaration"),
         ("POST", "/formtypes/{type}/projection"),

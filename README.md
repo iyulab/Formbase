@@ -307,13 +307,14 @@ var rows = (await engine.QueryAsync(inspection, QuerySpec.All)).Rows;
 
 ## Architecture
 
-Nine ports define the engine; everything else composes them.
+Ten ports define the engine; everything else composes them.
 
 | Port | Responsibility |
 |------|----------------|
 | `IRawStore` | Append-only source of truth. Owned by Formbase. A correction is a new append naming its record; a retirement is an append too. |
 | `IIntakeService` | Accept documents (raw-first, no declaration required), optionally as a version of a keyed record, and retire records. |
 | `IFieldHintSource` | Supply the declared structure for a form type — the input to schema proposal. |
+| `IFieldHintHistory` | Keep every declaration a form type has had, named by a sequence the store counts — so a declaration can be read back as it was. The built-in sources implement it beside `IFieldHintSource`. |
 | `ISchemaProposer` | Propose a table schema for a form type — the seam where schema intelligence plugs in. |
 | `IProjector` | Rebuild the projected table from raw — emptied and brought to the declaration, then refilled (on MorphDB the same table, so what is bound to it stays). |
 | `IProjectionState` | Record what the last completed projection did — the watermark it reached, and the `ProjectionSkip`s and `ProjectionFieldSkip`s it produced. |

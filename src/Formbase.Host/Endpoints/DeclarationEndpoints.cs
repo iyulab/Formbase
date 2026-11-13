@@ -38,7 +38,19 @@ internal static class DeclarationEndpoints
                 "build. A form type with none is not an error state: documents are accepted without " +
                 "a declaration, and the raw store keeps them until one arrives.")
             .Produces<DeclarationResponse>()
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status501NotImplemented);
+
+        routes.MapGet("/formtypes/{type}/declaration/history", GetHistoryAsync)
+            .WithName("GetDeclarationHistory")
+            .WithSummary("Lists the declarations a form type has had")
+            .WithDescription(
+                "Every declaration written for the form type, oldest first. A declaration's sequence is the " +
+                "store's own count and only grows; its declarationVersion is the label the caller gave it, " +
+                "which can repeat. Read one back as it was with GET …/declaration?seq=N. Deleting a " +
+                "declaration does not delete its history.")
+            .Produces<DeclarationHistoryResponse>()
+            .ProducesProblem(StatusCodes.Status501NotImplemented);
 
         routes.MapPut("/formtypes/{type}/declaration", DeclareAsync)
             .WithName("Declare")
@@ -70,12 +82,54 @@ internal static class DeclarationEndpoints
         return routes;
     }
 
-    private static async Task<IResult> GetAsync(
+    private static async Task<IResult> GetHistoryAsync(
         string type,
         IFieldHintSource hints,
         CancellationToken cancellationToken)
     {
         var formType = FormTypeRef.Create(type);
+        if (hints is not IFieldHintHistory history)
+        {
+            return HistoryUnsupported();
+        }
+
+        var revisions = await history.ListRevisionsAsync(formType, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new DeclarationHistoryResponse(
+            formType.Value,
+            [.. revisions.Select(r => new DeclaredRevisionResponse(r.Sequence, r.Declaration.DeclarationVersion, r.SavedAt))]));
+    }
+
+    private static IResult HistoryUnsupported() =>
+        Results.Problem(
+            detail: "This host's declaration source does not keep the declarations a form type has had.",
+            statusCode: StatusCodes.Status501NotImplemented,
+            title: "Declaration history is not kept",
+            type: "/problems/declaration-history-unsupported");
+
+    private static async Task<IResult> GetAsync(
+        string type,
+        IFieldHintSource hints,
+        CancellationToken cancellationToken,
+        int? seq = null)
+    {
+        var formType = FormTypeRef.Create(type);
+        if (seq is { } wanted)
+        {
+            if (hints is not IFieldHintHistory history)
+            {
+                return HistoryUnsupported();
+            }
+
+            var revision = await history.GetRevisionAsync(formType, wanted, cancellationToken).ConfigureAwait(false);
+            return revision is null
+                ? Results.Problem(
+                    detail: $"Form type '{formType}' has no declaration with sequence {wanted}. List the ones it has with GET …/declaration/history.",
+                    statusCode: StatusCodes.Status404NotFound,
+                    title: "No such declaration",
+                    type: "/problems/no-such-declaration")
+                : Results.Ok(Describe(revision.Declaration, section: null));
+        }
+
         var declaration = await hints.GetHintsAsync(formType, cancellationToken).ConfigureAwait(false);
 
         return declaration is null

@@ -15,7 +15,7 @@ namespace Formbase.Sqlite;
 /// <see cref="ColumnType"/> is stored by name, not number, so reordering the enum can never reinterpret
 /// a declaration already on disk.
 /// </remarks>
-public sealed class SqliteFieldHintSource : IFieldHintSource
+public sealed class SqliteFieldHintSource : IFieldHintSource, IFieldHintHistory
 {
     private const string Component = "field-hints";
 
@@ -29,6 +29,19 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
             declaration_version INTEGER NOT NULL DEFAULT 1,
             business_name       TEXT NULL,
             indexes             TEXT NULL
+        );
+        -- Every declaration written, append-only: the history a document's declaration sequence points into.
+        CREATE TABLE IF NOT EXISTS fb_field_hint_history (
+            form_type           TEXT NOT NULL,
+            sequence            INTEGER NOT NULL,
+            table_name          TEXT NOT NULL,
+            fields              TEXT NOT NULL,
+            relations           TEXT NULL,
+            declaration_version INTEGER NOT NULL,
+            business_name       TEXT NULL,
+            indexes             TEXT NULL,
+            saved_at            TEXT NOT NULL,
+            PRIMARY KEY (form_type, sequence)
         );
         """;
 
@@ -99,10 +112,30 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         command.Parameters.AddWithValue("$business", (object?)hints.BusinessName ?? DBNull.Value);
         command.Parameters.AddWithValue("$indexes", hints.Indexes is null ? DBNull.Value : DeclarationJson.SerializeIndexes(hints.Indexes));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        // Written in the same transaction as the declaration, under the same write lock, so the sequence is the next
+        // one for the form type and no other writer can take it.
+        await using var history = connection.CreateCommand();
+        history.Transaction = transaction;
+        history.CommandText =
+            """
+            INSERT INTO fb_field_hint_history (form_type, sequence, table_name, fields, relations, declaration_version, business_name, indexes, saved_at)
+            VALUES ($type, (SELECT COALESCE(MAX(sequence), 0) + 1 FROM fb_field_hint_history WHERE form_type = $type),
+                    $table, $fields, $relations, $version, $business, $indexes, $at)
+            """;
+        history.Parameters.AddWithValue("$type", hints.Type.Value);
+        history.Parameters.AddWithValue("$table", hints.TableName);
+        history.Parameters.AddWithValue("$fields", DeclarationJson.SerializeFields(hints.Fields));
+        history.Parameters.AddWithValue("$relations", hints.Relations is null ? DBNull.Value : DeclarationJson.SerializeRelations(hints.Relations));
+        history.Parameters.AddWithValue("$version", hints.DeclarationVersion);
+        history.Parameters.AddWithValue("$business", (object?)hints.BusinessName ?? DBNull.Value);
+        history.Parameters.AddWithValue("$indexes", hints.Indexes is null ? DBNull.Value : DeclarationJson.SerializeIndexes(hints.Indexes));
+        history.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        await history.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Removes a form type's declaration, answering whether one was there.</summary>
+    /// <summary>Removes a form type's declaration, answering whether one was there. Its history stays.</summary>
     public async Task<bool> DeleteAsync(FormTypeRef type, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -142,6 +175,47 @@ public sealed class SqliteFieldHintSource : IFieldHintSource
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         var declared = await ReadAllAsync(connection, transaction: null, cancellationToken).ConfigureAwait(false);
         return SectionSource.Find(section, declared);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeclarationRevision>> ListRevisionsAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+        await ReadRevisionsAsync(type, sequence: null, cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default) =>
+        (await ReadRevisionsAsync(type, sequence, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+
+    private async Task<List<DeclarationRevision>> ReadRevisionsAsync(FormTypeRef type, int? sequence, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT sequence, table_name, fields, relations, declaration_version, business_name, indexes, saved_at
+            FROM fb_field_hint_history WHERE form_type = $type AND ($sequence IS NULL OR sequence = $sequence)
+            ORDER BY sequence
+            """;
+        command.Parameters.AddWithValue("$type", type.Value);
+        command.Parameters.AddWithValue("$sequence", sequence is { } wanted ? wanted : DBNull.Value);
+
+        var revisions = new List<DeclarationRevision>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            revisions.Add(new DeclarationRevision(
+                reader.GetInt32(0),
+                new FormTypeHints(
+                    type,
+                    reader.GetString(1),
+                    DeclarationJson.DeserializeFields(reader.GetString(2)),
+                    reader.IsDBNull(3) ? null : DeclarationJson.DeserializeRelations(reader.GetString(3)),
+                    reader.GetInt32(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : DeclarationJson.DeserializeIndexes(reader.GetString(6))),
+                DateTimeOffset.Parse(reader.GetString(7), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)));
+        }
+
+        return revisions;
     }
 
     /// <summary>Every declaration held. Declarations are few — one per form type — so they are read whole.</summary>

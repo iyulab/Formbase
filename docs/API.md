@@ -21,6 +21,7 @@ GET    /formtypes/{type}/documents     # Read a form type's stream, page by page
 GET    /formtypes/{type}/rows          # Read a repeated section's rows, through its parent's stream
 GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
+GET    /formtypes/{type}/declaration/history   # List the declarations the form type has had
 PUT    /formtypes/{type}/declaration   # Put a declaration in force
 DELETE /formtypes/{type}/declaration   # Remove it, and the projection it built
 POST   /formtypes/{type}/projection    # Build the projected table, or bring it forward
@@ -382,6 +383,29 @@ GET /formtypes/orders/declaration
 
 This is the shape the next projection run will build. A form type with no declaration answers `404`
 `/problems/no-declaration` — a state to read, not a failure to recover from.
+
+#### Reading an earlier declaration
+
+Every declaration written for a form type is kept, oldest first, and deleting the declaration does not delete them.
+
+```http
+GET /formtypes/orders/declaration/history
+```
+
+```json
+{ "formType": "orders",
+  "revisions": [
+    { "sequence": 1, "declarationVersion": 1, "savedAt": "2026-11-13T04:02:11+00:00" },
+    { "sequence": 2, "declarationVersion": 1, "savedAt": "2026-11-13T05:40:09+00:00" } ] }
+```
+
+A declaration is named by its **`sequence`** — the store's own count of the declarations written for the form type, which only
+grows, one per write. Its `declarationVersion` is the label the caller chose, and the same caller can write the same one twice
+(the example does), so it does not tell two declarations apart. Read one back as it was with
+`GET /formtypes/orders/declaration?seq=1`: the same shape as above, without `sectionOf`. A sequence the form type never had
+answers `404` `/problems/no-such-declaration`; a form type that was never declared has an empty list. A host whose declaration
+source does not keep the history answers `501` `/problems/declaration-history-unsupported` to both reads — the built-in
+in-memory, SQLite and PostgreSQL sources keep it.
 
 - **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`, `date`.
   An `integer` takes a JSON number whose value is whole and fits 64 bits, however it is written —
@@ -910,6 +934,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 401 | `/problems/access-key-required` | The host requires an access key and the request presented none, or not one of its keys |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
+| 404 | `/problems/no-such-declaration` | The form type never had a declaration with that sequence |
 | 404 | `/problems/unknown-namespace` | The request named a namespace this host does not serve |
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
@@ -920,6 +945,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 404 | `/problems/not-a-section` | Rows were read of a form type that is not a repeated section of another |
 | 409 | `/problems/form-type-is-a-section` | A document or retirement was sent under a form type that is a repeated section of another; send the row inside the parent document's section array |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
+| 501 | `/problems/declaration-history-unsupported` | The host's declaration source does not keep the declarations a form type has had |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-store-missing` | The MorphDB project the host projects into was deleted after it started; retrying does not help — give the host a project again and restart (documents are still accepted) |

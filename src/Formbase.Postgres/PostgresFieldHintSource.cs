@@ -22,7 +22,7 @@ namespace Formbase.Postgres;
 /// was this declaration last made), not a value the engine reads back. Do not mistake it for a live
 /// feature, and do not delete it as dead code.</para>
 /// </remarks>
-public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
+public sealed class PostgresFieldHintSource : IFieldHintSource, IFieldHintHistory, IDisposable
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly PostgresSchemaBootstrap _bootstrap;
@@ -56,6 +56,19 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
                 ADD COLUMN IF NOT EXISTS declaration_version integer NOT NULL DEFAULT 1,
                 ADD COLUMN IF NOT EXISTS business_name text NULL,
                 ADD COLUMN IF NOT EXISTS indexes jsonb NULL;
+            -- Every declaration written, append-only: the history a document's declaration sequence points into.
+            CREATE TABLE IF NOT EXISTS "{_bootstrap.Schema}".field_hint_history (
+                form_type           text NOT NULL,
+                sequence            integer NOT NULL,
+                table_name          text NOT NULL,
+                fields              jsonb NOT NULL,
+                relations           jsonb NULL,
+                declaration_version integer NOT NULL,
+                business_name       text NULL,
+                indexes             jsonb NULL,
+                saved_at            timestamptz NOT NULL,
+                PRIMARY KEY (form_type, sequence)
+            );
             """;
     }
 
@@ -157,7 +170,77 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IDisposable
         command.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        // In the same transaction, under the table lock taken above: the sequence is the next one for the form
+        // type and no other declaration can take it.
+        await using var history = new NpgsqlCommand(
+            $"""
+            INSERT INTO "{_bootstrap.Schema}".field_hint_history (form_type, sequence, table_name, fields, relations, declaration_version, business_name, indexes, saved_at)
+            VALUES (@type, (SELECT COALESCE(MAX(sequence), 0) + 1 FROM "{_bootstrap.Schema}".field_hint_history WHERE form_type = @type),
+                    @table, @fields, @relations, @version, @business, @indexes, @at)
+            """,
+            connection,
+            transaction);
+        history.Parameters.AddWithValue("type", hints.Type.Value);
+        history.Parameters.AddWithValue("table", hints.TableName);
+        history.Parameters.Add(new NpgsqlParameter("fields", NpgsqlDbType.Jsonb) { Value = DeclarationJson.SerializeFields(hints.Fields) });
+        history.Parameters.Add(new NpgsqlParameter("relations", NpgsqlDbType.Jsonb)
+        {
+            Value = hints.Relations is null ? DBNull.Value : DeclarationJson.SerializeRelations(hints.Relations),
+        });
+        history.Parameters.AddWithValue("version", hints.DeclarationVersion);
+        history.Parameters.Add(new NpgsqlParameter("business", NpgsqlDbType.Text) { Value = (object?)hints.BusinessName ?? DBNull.Value });
+        history.Parameters.Add(new NpgsqlParameter("indexes", NpgsqlDbType.Jsonb)
+        {
+            Value = hints.Indexes is null ? DBNull.Value : DeclarationJson.SerializeIndexes(hints.Indexes),
+        });
+        history.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz) { Value = _clock.GetUtcNow() });
+        await history.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeclarationRevision>> ListRevisionsAsync(FormTypeRef type, CancellationToken cancellationToken = default) =>
+        await ReadRevisionsAsync(type, sequence: null, cancellationToken).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default) =>
+        (await ReadRevisionsAsync(type, sequence, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+
+    private async Task<List<DeclarationRevision>> ReadRevisionsAsync(FormTypeRef type, int? sequence, CancellationToken cancellationToken)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = new NpgsqlCommand(
+            $"""
+            SELECT sequence, table_name, fields, relations, declaration_version, business_name, indexes, saved_at
+            FROM "{_bootstrap.Schema}".field_hint_history
+            WHERE form_type = @type AND (@sequence::integer IS NULL OR sequence = @sequence)
+            ORDER BY sequence
+            """,
+            connection);
+        command.Parameters.AddWithValue("type", type.Value);
+        command.Parameters.Add(new NpgsqlParameter("sequence", NpgsqlDbType.Integer) { Value = sequence is { } wanted ? wanted : DBNull.Value });
+
+        var revisions = new List<DeclarationRevision>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            revisions.Add(new DeclarationRevision(
+                reader.GetInt32(0),
+                new FormTypeHints(
+                    type,
+                    reader.GetString(1),
+                    DeclarationJson.DeserializeFields(reader.GetString(2)),
+                    reader.IsDBNull(3) ? null : DeclarationJson.DeserializeRelations(reader.GetString(3)),
+                    reader.GetInt32(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : DeclarationJson.DeserializeIndexes(reader.GetString(6))),
+                reader.GetFieldValue<DateTimeOffset>(7)));
+        }
+
+        return revisions;
     }
 
     public async Task<FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default)

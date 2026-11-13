@@ -134,6 +134,51 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
         fields["plain"].GetProperty("bindingState").GetString().Should().Be("stored");
     }
 
+    /// <summary>
+    /// Formology 0.1 rule 17: a form is read as it was. The history names a declaration by the store's own sequence, because
+    /// the caller's label can be written twice, and reading by sequence gives back the declaration that was in force then.
+    /// </summary>
+    [Fact]
+    public async Task The_history_lists_every_declaration_and_one_reads_back_as_it_was()
+    {
+        var type = NewFormType();
+        var source = _factory.Services.GetRequiredService<InMemoryFieldHintSource>();
+        source.Declare(new FormTypeHints(FormTypeRef.Create(type), type, [new FieldHint("total", ColumnType.Integer)], DeclarationVersion: 1));
+        source.Declare(new FormTypeHints(FormTypeRef.Create(type), type, [new FieldHint("total", ColumnType.Integer), new FieldHint("note", ColumnType.Text)], DeclarationVersion: 1));
+
+        var history = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration/history", TestContext.Current.CancellationToken));
+        var revisions = history.GetProperty("revisions").EnumerateArray().ToList();
+
+        history.GetProperty("formType").GetString().Should().Be(type);
+        revisions.Select(r => r.GetProperty("sequence").GetInt32()).Should().Equal(1, 2);
+        revisions.Select(r => r.GetProperty("declarationVersion").GetInt32()).Should().Equal(1, 1);
+
+        var first = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration?seq=1", TestContext.Current.CancellationToken));
+        var current = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken));
+        first.GetProperty("fields").GetArrayLength().Should().Be(1, "the first declaration had one field");
+        current.GetProperty("fields").GetArrayLength().Should().Be(2, "the declaration in force is the newest");
+    }
+
+    [Fact]
+    public async Task A_sequence_the_form_type_never_had_is_a_404_that_points_at_the_history()
+    {
+        var type = NewFormType();
+        Declare(type, new FormTypeHints(FormTypeRef.Create(type), type, [new FieldHint("total", ColumnType.Integer)]));
+
+        var response = await _client.GetAsync($"/formtypes/{type}/declaration?seq=9", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ReadAsync(response)).GetProperty("type").GetString().Should().Be("/problems/no-such-declaration");
+    }
+
+    [Fact]
+    public async Task A_form_type_that_was_never_declared_has_an_empty_history()
+    {
+        var history = await ReadAsync(await _client.GetAsync($"/formtypes/{NewFormType()}/declaration/history", TestContext.Current.CancellationToken));
+
+        history.GetProperty("revisions").GetArrayLength().Should().Be(0);
+    }
+
     [Fact]
     public async Task Declared_relations_read_back_with_their_kind()
     {
