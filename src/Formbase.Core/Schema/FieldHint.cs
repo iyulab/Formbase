@@ -15,18 +15,24 @@ namespace Formbase.Core.Schema;
 /// the column holds a value computed at projection time from the one the source key reads
 /// (<see cref="FieldDerivation"/>) — the field's type must be what the derivation computes, and its binding
 /// stored. Defaults reproduce the pre-vocabulary behavior: a stored field whose name is its own extraction key.
+/// <para>
+/// <paramref name="Binding"/> is <see langword="null"/> when the declaration does not say. The field is then
+/// materialized as a stored value, exactly as a declared <see cref="FieldBinding.Stored"/> one — but the declaration
+/// keeps the difference between a value that was chosen to be the document's own and one nobody has decided
+/// (<see cref="BindingState"/>; Formology 0.1, rules 6 and 7).
+/// </para>
 /// </summary>
 public sealed record FieldHint(
     string Name,
     ColumnType Type,
     bool Nullable = true,
     string? SourceKey = null,
-    FieldBinding Binding = FieldBinding.Stored,
+    FieldBinding? Binding = null,
     EntityRef? Target = null,
     string? BusinessName = null,
     FieldDerivation? Derivation = null)
 {
-    public FieldDerivation? Derivation { get; init; } = FieldDerivation.Checked(Derivation, Name, Type, Binding);
+    public FieldDerivation? Derivation { get; init; } = FieldDerivation.Checked(Derivation, Name, Type, Binding ?? FieldBinding.Stored);
 
     /// <summary>
     /// Where in a document the field is read from, when it differs from <see cref="Name"/> — a top-level

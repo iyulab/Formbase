@@ -22,6 +22,27 @@ public sealed record FormTypeHints(
     string? BusinessName = null,
     IReadOnlyList<IndexHint>? Indexes = null)
 {
+    /// <summary>
+    /// What this declaration says about <paramref name="field"/>'s time binding. A declared binding is what it says. A field
+    /// that does not declare one is <see cref="BindingState.Undecided"/> when it takes its value from another form type —
+    /// it has a <see cref="FieldHint.Target"/>, or it is the key field of a <see cref="RelationKind.Reference"/> relation —
+    /// and <see cref="BindingState.Stored"/> otherwise.
+    /// </summary>
+    public BindingState BindingStateOf(FieldHint field)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+        return field.Binding switch
+        {
+            FieldBinding.Stored => BindingState.Stored,
+            FieldBinding.Snapshot => BindingState.Snapshot,
+            FieldBinding.Reference => BindingState.Reference,
+            _ when field.Target is not null
+                || (Relations?.Any(r => r.Kind == RelationKind.Reference && string.Equals(r.KeyField, field.Name, StringComparison.Ordinal)) ?? false)
+                => BindingState.Undecided,
+            _ => BindingState.Stored,
+        };
+    }
+
     /// <summary>The name a person reads the form by, when one is declared.</summary>
     /// <exception cref="ArgumentException">The name is given but blank.</exception>
     public string? BusinessName { get; init => field = Checked(value); } = Checked(BusinessName);

@@ -363,13 +363,13 @@ GET /formtypes/orders/declaration
   "declarationVersion": 1,
   "fields": [
     { "name": "total", "type": "integer", "nullable": false, "sourceKey": null,
-      "binding": "stored", "target": null, "businessName": "Order total" },
+      "binding": "stored", "bindingState": "stored", "target": null, "businessName": "Order total" },
     { "name": "customerName", "type": "text", "nullable": true, "sourceKey": null,
-      "binding": "reference", "target": { "formType": "customers", "valueField": "name",
+      "binding": "reference", "bindingState": "reference", "target": { "formType": "customers", "valueField": "name",
                                           "lookupKey": "id", "viaField": "customerId" },
       "businessName": null },
     { "name": "customerId", "type": "text", "nullable": true, "sourceKey": null,
-      "binding": "stored", "target": null, "businessName": null }
+      "binding": null, "bindingState": "stored", "target": null, "businessName": null }
   ],
   "relations": [
     { "name": "lines", "kind": "child", "target": "orderlines", "keyField": "orderId" }
@@ -425,7 +425,13 @@ This is the shape the next projection run will build. A form type with no declar
   Blank is refused with `400`. The declaration has one too, top-level: the name a person reads the form
   by, on the same terms.
 - **`binding`** — `stored` (the document's own value), `snapshot` (copied and fixed at write time),
-  or `reference` (reads the target's current value). A `reference` whose target says which record it
+  or `reference` (reads the target's current value); omit it when the declaration does not decide, and
+  it reads back as `null`. An undecided field is materialized as a stored value, exactly as a declared
+  `stored` one — only the declaration keeps the difference. **`bindingState`** is what the declaration
+  amounts to, one of `stored`, `snapshot`, `reference` or `undecided`: the declared binding when there
+  is one; `undecided` for a field that takes its value from another form type (it has a `target`, or it
+  is the `keyField` of a `reference` relation) and does not say whether that value is read now or was
+  fixed then; otherwise `stored`. A `reference` whose target says which record it
   belongs to (`lookupKey` or `lookupRecord`, with `viaField`) is **computed when it is read**: the
   target record's `valueField` as it is now — the latest accepted when several match, `null` when none
   does — and it filters, orders and groups like any other field. A result is `stale` while a target it

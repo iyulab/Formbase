@@ -65,7 +65,8 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
         fields[0].GetProperty("name").GetString().Should().Be("total");
         fields[0].GetProperty("type").GetString().Should().Be("integer");
         fields[0].GetProperty("nullable").GetBoolean().Should().BeFalse();
-        fields[0].GetProperty("binding").GetString().Should().Be("stored");
+        fields[0].GetProperty("binding").ValueKind.Should().Be(JsonValueKind.Null, "the declaration did not say, and reads back that way");
+        fields[0].GetProperty("bindingState").GetString().Should().Be("stored", "nothing points the field at another form type");
         fields[0].GetProperty("businessName").GetString().Should().Be("합계");
 
         fields[1].GetProperty("sourceKey").GetString().Should().Be("opened_at",
@@ -101,6 +102,36 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
         field.GetProperty("target").GetProperty("valueField").GetString().Should().Be("name");
         field.GetProperty("target").GetProperty("lookupRecord").GetBoolean().Should().BeTrue("the customer is found by its record identity");
         field.GetProperty("target").GetProperty("viaField").GetString().Should().Be("customerRef");
+    }
+
+    /// <summary>
+    /// Formology 0.1 rule 6: a field that takes its value from another form type is undecided until the declaration decides
+    /// — and a declared <c>stored</c> is a decision, not the same thing as silence (rule 7).
+    /// </summary>
+    [Fact]
+    public async Task A_field_that_takes_its_value_from_another_form_reads_back_undecided_until_the_declaration_decides()
+    {
+        var type = NewFormType();
+        Declare(type, new FormTypeHints(
+            FormTypeRef.Create(type),
+            type,
+            [
+                new FieldHint("pointed", ColumnType.Text, Target: new EntityRef(FormTypeRef.Create("customers"), "name")),
+                new FieldHint("decided_own", ColumnType.Text, Binding: FieldBinding.Stored, Target: new EntityRef(FormTypeRef.Create("customers"), "name")),
+                new FieldHint("customer_id", ColumnType.Text),
+                new FieldHint("plain", ColumnType.Text),
+            ],
+            Relations: [new RelationHint("customer", RelationKind.Reference, FormTypeRef.Create("customers"), "customer_id")]));
+
+        var fields = (await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration", TestContext.Current.CancellationToken)))
+            .GetProperty("fields").EnumerateArray().ToDictionary(f => f.GetProperty("name").GetString()!);
+
+        fields["pointed"].GetProperty("bindingState").GetString().Should().Be("undecided", "it has a target and says nothing about when");
+        fields["pointed"].GetProperty("binding").ValueKind.Should().Be(JsonValueKind.Null);
+        fields["decided_own"].GetProperty("bindingState").GetString().Should().Be("stored", "the declaration chose the document's own value");
+        fields["decided_own"].GetProperty("binding").GetString().Should().Be("stored");
+        fields["customer_id"].GetProperty("bindingState").GetString().Should().Be("undecided", "it is the key field of a reference relation");
+        fields["plain"].GetProperty("bindingState").GetString().Should().Be("stored");
     }
 
     [Fact]
@@ -149,8 +180,11 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
 
         Values(schemas, "DeclaredColumnType").Should().BeEquivalentTo(
             ["text", "integer", "decimal", "boolean", "timestamp", "uuid", "jsonb", "date"]);
+        // The binding may be left out of a declaration, so the document's enum names the absence too.
         Values(schemas, "DeclaredBinding").Should().BeEquivalentTo(
-            ["stored", "snapshot", "reference"]);
+            ["stored", "snapshot", "reference", null]);
+        Values(schemas, "DeclaredBindingState").Should().BeEquivalentTo(
+            ["stored", "snapshot", "reference", "undecided"]);
         Values(schemas, "DeclaredRelationKind").Should().BeEquivalentTo(
             ["child", "reference"]);
     }

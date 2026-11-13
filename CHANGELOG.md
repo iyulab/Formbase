@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A declaration can leave a field's binding out, and it reads back as what it is.** `FieldHint.Binding` is now nullable and the wire
+  `binding` of a declared field may be omitted: a field that does not say when its value is read from is materialized as a stored
+  value, exactly as a declared `stored` one, so no behavior changes. What changes is what the declaration keeps and reads back. A
+  declared `stored` is a decision; silence is not. `GET /formtypes/{type}/declaration` answers `binding: null` for a field that did
+  not say, and a new `bindingState` — `stored`, `snapshot`, `reference` or `undecided` — for what the declaration amounts to:
+  the declared binding when there is one, `undecided` for a field that takes its value from another form type (it has a `target`,
+  or it is the `keyField` of a `reference` relation) without saying whether it is read now or was fixed then, and `stored`
+  otherwise. `FormTypeHints.BindingStateOf` is the same derivation for a caller of the library.
+
+### Changed
+
+- **`binding` reads back `null` on a field whose declaration left it out**, where it read `stored`. A caller that read `binding` as
+  always present reads `bindingState` instead (it is always present). A declaration stored by an earlier version reads back with
+  every binding as declared (`stored` where it was left to the default), so an existing declaration never turns `undecided`.
+
 ## 0.36.0
 
 A minor: a repeated section's rows can be read with a name to cite (`GET /formtypes/{section}/rows`), a record read now returns a

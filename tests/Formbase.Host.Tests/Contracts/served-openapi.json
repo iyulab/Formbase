@@ -989,8 +989,18 @@
         "enum": [
           "stored",
           "snapshot",
-          "reference"
+          "reference",
+          null
         ]
+      },
+      "DeclaredBindingState": {
+        "enum": [
+          "stored",
+          "snapshot",
+          "reference",
+          "undecided"
+        ],
+        "default": "stored"
       },
       "DeclaredColumnType": {
         "enum": [
@@ -1085,7 +1095,14 @@
             ]
           },
           "binding": {
-            "$ref": "#/components/schemas/DeclaredBinding"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredBinding"
+              }
+            ]
           },
           "target": {
             "oneOf": [
@@ -1142,7 +1159,14 @@
             ]
           },
           "binding": {
-            "$ref": "#/components/schemas/DeclaredBinding"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredBinding"
+              }
+            ]
           },
           "target": {
             "oneOf": [
@@ -1169,6 +1193,9 @@
                 "$ref": "#/components/schemas/DeclaredDerivation"
               }
             ]
+          },
+          "bindingState": {
+            "$ref": "#/components/schemas/DeclaredBindingState"
           }
         }
       },

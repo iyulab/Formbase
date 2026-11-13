@@ -64,19 +64,24 @@ public sealed record DeclaredIndex(IReadOnlyList<string> Fields);
 /// (a rename that keeps already-stored documents readable), or a JSON Pointer such as
 /// <c>/commit/collection</c> for a nested one.
 /// </param>
-/// <param name="Binding">When in time the value is read from.</param>
+/// <param name="Binding">When in time the value is read from, or <see langword="null"/> when the declaration does not say.</param>
 /// <param name="Target">What a bound field points at, when it is bound to another form type.</param>
 /// <param name="BusinessName">The name a person reads the field by, when one is declared.</param>
 /// <param name="Derivation">What the field computes from the value its source key reads, when it is a computed field.</param>
+/// <param name="BindingState">
+/// What the declaration amounts to for the field's time binding: the declared binding, or <c>undecided</c> for a field that
+/// takes its value from another form type without saying whether it is read now or was fixed then, or <c>stored</c>.
+/// </param>
 public sealed record DeclaredFieldResponse(
     string Name,
     DeclaredColumnType Type,
     bool Nullable,
     string? SourceKey,
-    DeclaredBinding Binding,
+    DeclaredBinding? Binding,
     DeclaredTargetResponse? Target,
     string? BusinessName = null,
-    DeclaredDerivation? Derivation = null);
+    DeclaredDerivation? Derivation = null,
+    DeclaredBindingState BindingState = DeclaredBindingState.Stored);
 
 /// <param name="FormType">The form type the bound field's value comes from.</param>
 /// <param name="ValueField">
@@ -155,7 +160,10 @@ public sealed record DeclarationRequest(
 /// Where in a document this field is read from, when it differs from the column name — a top-level key, or a
 /// JSON Pointer (RFC 6901) such as <c>/commit/collection</c> for a nested one. A malformed pointer is refused.
 /// </param>
-/// <param name="Binding">When in time the value is read from. Defaults to <c>stored</c>.</param>
+/// <param name="Binding">
+/// When in time the value is read from. Omit it when the declaration does not decide: the field is then stored like a
+/// declared <c>stored</c> one, and a field that takes its value from another form type reads back as <c>undecided</c>.
+/// </param>
 /// <param name="Target">What a bound field points at.</param>
 /// <param name="BusinessName">
 /// The name a person reads the field by («로트 번호» for <c>lot_no</c>) — declaration only, never a
@@ -172,7 +180,7 @@ public sealed record DeclaredFieldRequest(
     DeclaredColumnType Type,
     bool Nullable = true,
     string? SourceKey = null,
-    DeclaredBinding Binding = DeclaredBinding.Stored,
+    DeclaredBinding? Binding = null,
     DeclaredTargetResponse? Target = null,
     string? BusinessName = null,
     DeclaredDerivation? Derivation = null);
@@ -307,6 +315,22 @@ public enum DeclaredBinding
     Reference,
 }
 
+/// <summary>What a declaration amounts to for a field's time binding, as read back.</summary>
+public enum DeclaredBindingState
+{
+    /// <summary>The document's own value.</summary>
+    Stored,
+
+    /// <summary>True then — copied and fixed at write time.</summary>
+    Snapshot,
+
+    /// <summary>True now — reads the target's current value.</summary>
+    Reference,
+
+    /// <summary>Takes its value from another form type, and the declaration does not say whether it is read now or was fixed then.</summary>
+    Undecided,
+}
+
 /// <summary>How a declared relation relates the two form types.</summary>
 public enum DeclaredRelationKind
 {
@@ -346,6 +370,17 @@ internal static class DeclarationWireMapping
         FieldBinding.Stored => DeclaredBinding.Stored,
         FieldBinding.Snapshot => DeclaredBinding.Snapshot,
         FieldBinding.Reference => DeclaredBinding.Reference,
+    };
+
+    /// <summary>The wire binding of a declaration that may not say; <see langword="null"/> when it does not.</summary>
+    public static DeclaredBinding? ToWire(this FieldBinding? binding) => binding is { } declared ? declared.ToWire() : null;
+
+    public static DeclaredBindingState ToWire(this BindingState state) => state switch
+    {
+        BindingState.Stored => DeclaredBindingState.Stored,
+        BindingState.Snapshot => DeclaredBindingState.Snapshot,
+        BindingState.Reference => DeclaredBindingState.Reference,
+        BindingState.Undecided => DeclaredBindingState.Undecided,
     };
 
     public static DeclaredRelationKind ToWire(this RelationKind kind) => kind switch
@@ -411,6 +446,9 @@ internal static class DeclarationWireMapping
         DeclaredBinding.Snapshot => FieldBinding.Snapshot,
         DeclaredBinding.Reference => FieldBinding.Reference,
     };
+
+    /// <summary>The engine binding of a wire declaration that may not say; <see langword="null"/> when it does not.</summary>
+    public static FieldBinding? ToEngine(this DeclaredBinding? binding) => binding is { } declared ? declared.ToEngine() : null;
 
     public static RelationKind ToEngine(this DeclaredRelationKind kind) => kind switch
     {

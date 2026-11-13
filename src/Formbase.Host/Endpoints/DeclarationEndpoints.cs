@@ -312,7 +312,8 @@ internal static class DeclarationEndpoints
                         f.Target.ViaField,
                         f.Target.Lookup is TargetLookup.RecordLookup),
                 f.BusinessName,
-                f.Derivation?.ToWire()))],
+                f.Derivation?.ToWire(),
+                declaration.BindingStateOf(f).ToWire()))],
             [.. (declaration.Relations ?? []).Select(r => new DeclaredRelationResponse(
                 r.Name,
                 r.Kind.ToWire(),

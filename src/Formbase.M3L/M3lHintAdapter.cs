@@ -151,7 +151,7 @@ public static class M3lHintAdapter
 
         // Time binding — FILLED: hard binding fixes the value then (Snapshot), soft reads true now
         // (Reference). The declared target rides along as an EntityRef.
-        FieldBinding binding = FieldBinding.Stored;
+        FieldBinding? binding = null;
         EntityRef? target = null;
         if (field.Binding is not null)
         {
