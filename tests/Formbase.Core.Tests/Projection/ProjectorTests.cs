@@ -106,6 +106,126 @@ public class ProjectorTests
             "an explicit null is an answer; a field the document never had is a different fact");
     }
 
+    // --- a field a document's own declaration did not yet have is not a field the document left out ---
+
+    private static FormTypeHints QcHints(params FieldHint[] fields) => new(Qc, Table, fields);
+
+    private static readonly FieldHint Lot = new("lot", ColumnType.Text, Nullable: false);
+    private static readonly FieldHint Qty = new("qty", ColumnType.Integer, Nullable: true);
+
+    private static Projector ProjectorReadingDeclarations(Harness h) =>
+        new(h.Raw, new HintSchemaProposer(h.Hints), h.Store, h.State, h.Hints);
+
+    [Fact]
+    public async Task A_field_added_after_a_document_is_not_counted_as_absent_from_it()
+    {
+        var h = new Harness();
+        h.Hints.Declare(QcHints(Lot));
+        await h.Accept("""{"lot":"L-1"}""");
+        await h.Accept("""{"lot":"L-2"}""");
+        h.Hints.Declare(QcHints(Lot, Qty));
+        await h.Accept("""{"lot":"L-3"}""");           // declared qty, did not send it
+        await h.Accept("""{"lot":"L-4","qty":4}""");
+
+        var result = await ProjectorReadingDeclarations(h).ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Inserted.Should().Be(4);
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 }, "only the document written under a declaration that had qty left it out");
+        result.NotYetDeclaredFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 2 }, "the first two documents were accepted before qty was declared");
+    }
+
+    /// <summary>Intake is raw-first: a document taken before any declaration had no fields to leave out.</summary>
+    [Fact]
+    public async Task A_document_accepted_before_any_declaration_is_not_absent_any_field()
+    {
+        var h = new Harness();
+        await h.Accept("""{"lot":"L-1"}""");
+        h.Hints.Declare(QcHints(Lot, Qty));
+        await h.Accept("""{"lot":"L-2"}""");
+
+        var result = await ProjectorReadingDeclarations(h).ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 });
+        result.NotYetDeclaredFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 });
+    }
+
+    /// <summary>The same label written twice is two declarations; the sequence is what a document names.</summary>
+    [Fact]
+    public async Task A_document_is_held_to_the_declaration_it_names_even_when_a_label_is_reused()
+    {
+        var h = new Harness();
+        h.Hints.Declare(QcHints(Lot, Qty) with { DeclarationVersion = 1 });
+        await h.Accept("""{"lot":"L-1"}""");
+        h.Hints.Declare(QcHints(Lot, Qty, new FieldHint("note", ColumnType.Text)) with { DeclarationVersion = 1 });
+        await h.Accept("""{"lot":"L-2","qty":2}""");
+
+        var result = await ProjectorReadingDeclarations(h).ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1, ["note"] = 1 });
+        result.NotYetDeclaredFieldCounts.Should().Equal(new Dictionary<string, int> { ["note"] = 1 });
+    }
+
+    /// <summary>No history to read, or a document that names no declaration: the absence is counted as it always was.</summary>
+    [Fact]
+    public async Task Without_a_declaration_history_every_absence_is_an_absence()
+    {
+        var h = new Harness();
+        h.Hints.Declare(QcHints(Lot));
+        await h.Accept("""{"lot":"L-1"}""");
+        h.Hints.Declare(QcHints(Lot, Qty));
+        await h.Accept("""{"lot":"L-2"}""");
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 2 });
+        result.NotYetDeclaredFieldCounts.Should().BeEmpty();
+    }
+
+    /// <summary>A <c>0</c> is stamped by intake, but a projector with no history to read tells nothing and counts the absence.</summary>
+    [Fact]
+    public async Task A_projector_with_no_declaration_source_counts_every_absence_even_for_documents_stamped_zero()
+    {
+        var h = new Harness();
+        await h.Accept("""{"lot":"L-1"}""");
+        h.Hints.Declare(QcHints(Lot, Qty));
+
+        var result = await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 });
+        result.NotYetDeclaredFieldCounts.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_document_that_names_no_declaration_keeps_its_absences()
+    {
+        var h = new Harness();
+        h.Hints.Declare(QcHints(Lot, Qty));
+        await h.Raw.AppendAsync(Qc, DocumentId.New(), DocumentBody.Parse("""{"lot":"L-1"}"""), cancellationToken: TestContext.Current.CancellationToken);
+
+        var result = await ProjectorReadingDeclarations(h).ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 });
+        result.NotYetDeclaredFieldCounts.Should().BeEmpty();
+    }
+
+    /// <summary>A run that brings the table forward classifies the documents it reads the same way a rebuild would.</summary>
+    [Fact]
+    public async Task A_run_bringing_the_table_forward_classifies_the_new_documents()
+    {
+        var h = new Harness();
+        h.Hints.Declare(QcHints(Lot, Qty));
+        await h.Accept("""{"lot":"L-1","qty":1}""");
+        var projector = ProjectorReadingDeclarations(h);
+        await projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+        await h.Accept("""{"lot":"L-2"}""");
+
+        var result = await projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        result.Mode.Should().Be(ProjectionMode.Incremental);
+        result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["qty"] = 1 });
+        result.NotYetDeclaredFieldCounts.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("2026-01-15", "2026-01-15T00:00:00+00:00")]
     [InlineData("2026-01-15T09:30:00", "2026-01-15T09:30:00+00:00")]

@@ -91,7 +91,8 @@ internal static class ProjectionEndpoints
                 : NotProjectedReasonWire.NoDeclaration,
             !result.Projected ? null
                 : result.Mode == ProjectionMode.Incremental ? ProjectionModeWire.Incremental
-                : ProjectionModeWire.Rebuild));
+                : ProjectionModeWire.Rebuild,
+            result.NotYetDeclaredFieldCounts));
     }
 
     private static async Task<IResult> GetStatusAsync(

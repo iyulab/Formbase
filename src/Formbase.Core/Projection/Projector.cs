@@ -48,6 +48,7 @@ public sealed class Projector : IProjector
     private readonly ISchemaProposer _proposer;
     private readonly IProjectionStore _projectionStore;
     private readonly IProjectionState _projectionState;
+    private readonly IFieldHintHistory? _history;
 
     // One run per form type at a time in this process: two incremental runs from the same stamp would
     // both apply their documents. Across processes the state's compare-and-set catches the second.
@@ -57,12 +58,16 @@ public sealed class Projector : IProjector
         IRawStore rawStore,
         ISchemaProposer proposer,
         IProjectionStore projectionStore,
-        IProjectionState projectionState)
+        IProjectionState projectionState,
+        IFieldHintSource? declarations = null)
     {
         _rawStore = rawStore;
         _proposer = proposer;
         _projectionStore = projectionStore;
         _projectionState = projectionState;
+        // The declarations a document was accepted under, when they keep a history: a field a document lacks is
+        // told apart from one the document's own declaration did not yet have (ProjectionResult.NotYetDeclaredFieldCounts).
+        _history = declarations as IFieldHintHistory;
     }
 
     public async Task<ProjectionResult> ProjectAsync(FormTypeRef type, CancellationToken cancellationToken = default)
@@ -119,7 +124,7 @@ public sealed class Projector : IProjector
             await _projectionStore.ResetTableAsync(PhysicalSchema(schema), cancellationToken).ConfigureAwait(false);
 
             var documents = await ReadAsync(stream, Watermark.Zero, rawHead, cancellationToken).ConfigureAwait(false);
-            var mapped = Map(documents, schema);
+            var mapped = Map(documents, schema, await DeclaredColumnsAsync(type, schema, documents, cancellationToken).ConfigureAwait(false));
             var inserted = await _projectionStore.BulkInsertAsync(schema.TableName, mapped.Rows, cancellationToken).ConfigureAwait(false);
 
             // Recorded only if no other host recorded this form type since this run began: the run gate
@@ -166,7 +171,7 @@ public sealed class Projector : IProjector
         try
         {
             var documents = await ReadAsync(stream, stamp.Watermark, rawHead, cancellationToken).ConfigureAwait(false);
-            var mapped = Map(documents, schema);
+            var mapped = Map(documents, schema, await DeclaredColumnsAsync(type, schema, documents, cancellationToken).ConfigureAwait(false));
 
             // Every key among the new documents is won by one of them, so whatever the key's earlier
             // documents left goes; every new document's own id is removed too, so applying the same
@@ -261,7 +266,58 @@ public sealed class Projector : IProjector
         List<IReadOnlyDictionary<string, object?>> Rows,
         List<ProjectionSkip> Skips,
         List<ProjectionFieldSkip> FieldSkips,
-        Dictionary<string, int> AbsentCounts);
+        Dictionary<string, int> AbsentCounts,
+        Dictionary<string, int> NotYetDeclaredCounts);
+
+    /// <summary>
+    /// The columns each declaration of a form type had, by the declaration's sequence — what tells a field a document
+    /// did not send from one its declaration did not yet ask for. <see cref="None"/> knows nothing, so every absence is
+    /// counted as an absence, as it was before documents named their declaration.
+    /// </summary>
+    private sealed class DeclaredColumns
+    {
+        public static readonly DeclaredColumns None = new(null);
+
+        private readonly Dictionary<int, HashSet<string>>? _bySequence;
+
+        /// <summary>The declarations by sequence, or <see langword="null"/> when the run has no way to tell what any of them had.</summary>
+        public DeclaredColumns(Dictionary<int, HashSet<string>>? bySequence) => _bySequence = bySequence;
+
+        /// <summary>
+        /// Whether <paramref name="column"/> was declared under <paramref name="sequence"/>: false when no declaration was in
+        /// force (<c>0</c>), and null when it is not known — the document names none, or the history has no such revision.
+        /// </summary>
+        public bool? WasDeclared(int? sequence, string column) => _bySequence is null ? null : sequence switch
+        {
+            null => null,
+            0 => false,
+            { } seq => _bySequence.TryGetValue(seq, out var columns) ? columns.Contains(column) : null,
+        };
+    }
+
+    /// <summary>
+    /// Reads the declaration history once for the run, when it is needed: the history is kept and the table is not a
+    /// repeated section's (a section row's document names its parent's declaration, whose columns are not the section's) —
+    /// otherwise nothing can be told (<see cref="DeclaredColumns.None"/>). The history is read only when some document names a
+    /// declaration; a <c>0</c> needs none, since nothing was declared.
+    /// </summary>
+    private async Task<DeclaredColumns> DeclaredColumnsAsync(FormTypeRef type, TableSchema schema, IReadOnlyList<StoredDocument> documents, CancellationToken cancellationToken)
+    {
+        if (_history is null || schema.Section is not null)
+        {
+            return DeclaredColumns.None;
+        }
+
+        if (!documents.Any(d => d.DeclarationSeq is > 0))
+        {
+            return new DeclaredColumns([]);
+        }
+
+        var revisions = await _history.ListRevisionsAsync(type, cancellationToken).ConfigureAwait(false);
+        return new DeclaredColumns(revisions.ToDictionary(
+            revision => revision.Sequence,
+            revision => revision.Declaration.Fields.Select(field => field.Name).ToHashSet(StringComparer.Ordinal)));
+    }
 
     /// <summary>
     /// Folds before mapping: a record's superseded documents neither become rows nor count as skips —
@@ -272,14 +328,14 @@ public sealed class Projector : IProjector
     /// (<see cref="SectionRows"/>): a parent whose section cannot be read is one skip, and a row that
     /// cannot be mapped is a skip of the parent document naming the row.
     /// </remarks>
-    private static Mapped Map(IReadOnlyList<StoredDocument> documents, TableSchema schema)
+    private static Mapped Map(IReadOnlyList<StoredDocument> documents, TableSchema schema, DeclaredColumns declared)
     {
-        var mapped = new Mapped([], [], [], new Dictionary<string, int>(StringComparer.Ordinal));
+        var mapped = new Mapped([], [], [], new Dictionary<string, int>(StringComparer.Ordinal), new Dictionary<string, int>(StringComparer.Ordinal));
         foreach (var document in RecordFold.Latest(documents))
         {
             if (schema.Section is not { } section)
             {
-                MapOne(mapped, schema, document, document.Body!.Root, ProjectionSystemColumns.RecordOf(document.Id, document.Key), row: null, reasonPrefix: null);
+                MapOne(mapped, schema, document, document.Body!.Root, ProjectionSystemColumns.RecordOf(document.Id, document.Key), row: null, reasonPrefix: null, declared);
                 continue;
             }
 
@@ -299,14 +355,14 @@ public sealed class Projector : IProjector
 
             foreach (var row in expansion.Rows)
             {
-                MapOne(mapped, schema, document, row.Body, row.Record, row.Position, $"row {row.Position} of section '{section.SectionField}': ");
+                MapOne(mapped, schema, document, row.Body, row.Record, row.Position, $"row {row.Position} of section '{section.SectionField}': ", declared);
             }
         }
 
         return mapped;
     }
 
-    private static void MapOne(Mapped mapped, TableSchema schema, StoredDocument document, System.Text.Json.JsonElement root, string record, int? row, string? reasonPrefix)
+    private static void MapOne(Mapped mapped, TableSchema schema, StoredDocument document, System.Text.Json.JsonElement root, string record, int? row, string? reasonPrefix, DeclaredColumns declared)
     {
         if (DocumentMapper.TryMap(document, root, record, row, schema.Columns, out var mappedRow, out var absentFields, out var emptied, out var reason))
         {
@@ -314,7 +370,9 @@ public sealed class Projector : IProjector
             mapped.FieldSkips.AddRange(emptied);
             foreach (var field in absentFields)
             {
-                mapped.AbsentCounts[field] = mapped.AbsentCounts.GetValueOrDefault(field) + 1;
+                // A field the document's own declaration did not yet have was not sent because it could not be: not an absence.
+                var counts = declared.WasDeclared(document.DeclarationSeq, field) == false ? mapped.NotYetDeclaredCounts : mapped.AbsentCounts;
+                counts[field] = counts.GetValueOrDefault(field) + 1;
             }
         }
         else
@@ -333,6 +391,8 @@ public sealed class Projector : IProjector
             .Where(c => c.Binding == FieldBinding.Reference && c.Reference is null)
             .Select(c => c.Name)
             .ToArray();
-        return ProjectionResult.Completed(inserted, mapped.Skips, mapped.FieldSkips, mapped.AbsentCounts, unresolvedReferences, rawHead) with { Mode = mode };
+        return ProjectionResult.Completed(inserted, mapped.Skips, mapped.FieldSkips, mapped.AbsentCounts, unresolvedReferences, rawHead)
+            with
+        { Mode = mode, NotYetDeclaredFieldCounts = mapped.NotYetDeclaredCounts };
     }
 }

@@ -656,7 +656,8 @@ POST /formtypes/orders/projection
   "absentFieldCounts": { "total": 1 },
   "unresolvedReferences": ["customerName"],
   "notProjectedReason": null,
-  "mode": "rebuild"
+  "mode": "rebuild",
+  "notYetDeclaredFieldCounts": { "deadline": 3 }
 }
 ```
 
@@ -672,14 +673,14 @@ next run rather than landing under a watermark that does not cover them.
 | `incremental` | Nothing but documents changed since the last run. Only documents appended since its watermark are read: records they correct or retire lose their old row, and their own rows and skips are added | Only the documents this run read |
 
 The table and [`GET …/projection/skips`](#what-a-projection-skipped) are what a rebuild would have produced either
-way; only `inserted`, `skipped`, `skippedFields` and `absentFieldCounts` change meaning, describing
+way; only `inserted`, `skipped`, `skippedFields`, `absentFieldCounts` and `notYetDeclaredFieldCounts` change meaning, describing
 the documents the run read. A run that fails partway through marks the projection `unverified`, and
 the next run rebuilds it. `mode` is `null` when `projected` is `false`.
 
 `projected: false` means no declaration proposed a schema **and** schema intelligence (see
 [What this instance is](#what-this-instance-is)) had nothing to observe either. That is not an
 error — documents are accepted without one — and nothing about the recorded state changes.
-The four diagnostic fields are empty on such a run, because no run happened for them to describe;
+The diagnostic fields are empty on such a run, because no run happened for them to describe;
 **`notProjectedReason`** is what says so, and what would change the answer:
 
 | `notProjectedReason` | Meaning | What to do |
@@ -695,11 +696,21 @@ unshaped proposal answers `400` `/problems/schema-proposal-invalid`, and a model
 reached at all (connection, timeout, auth, rate limit) answers `503`
 `/problems/schema-proposer-unavailable` — see [Errors](#errors).
 
-Two fields exist so that silence stays visible:
+Three fields exist so that silence stays visible:
 
 - **`absentFieldCounts`** — per declared column, how many projected rows came from documents that did
-  not carry the field at all. An explicit `null` in a document is an answer and is not counted here.
-  The projected NULL conflates the two; this is what makes the conflation visible.
+  not carry the field at all, **though the declaration they were accepted under asked for it**. An explicit
+  `null` in a document is an answer and is not counted here. The projected NULL conflates the two; this is
+  what makes the conflation visible.
+- **`notYetDeclaredFieldCounts`** — per declared column, how many projected rows came from documents
+  accepted under a declaration that did not yet have the column. A document cannot leave out a field nobody had
+  asked for, so these rows are counted here and not in `absentFieldCounts` — which is what a field added to a
+  form type after its first documents arrived would otherwise fill with false absences. Each document is
+  held to the declaration it names (`declarationSeq` on [its read](#reading-a-document)): `0`, no
+  declaration in force, holds it to nothing, and `null` — a document stored before the store kept this, or a
+  host whose declaration source keeps no history — holds it to nothing *known*, so its absences stay in
+  `absentFieldCounts` as they always were. A repeated section's table never counts here: its documents name the
+  parent's declaration, not the section's.
 - **`unresolvedReferences`** — declared columns left empty because their binding could not be
   resolved: a `reference` declared without a lookup. Named rather than silently blank: an empty column with no explanation reads as absent
   data.

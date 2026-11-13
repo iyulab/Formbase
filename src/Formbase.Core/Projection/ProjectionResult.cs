@@ -22,7 +22,9 @@ namespace Formbase.Core.Projection;
 /// For each declared column, how many projected rows came from documents that did not carry the field
 /// at all. An explicit <c>null</c> in the document is an answer and is not counted here — a field the
 /// document never had is a different fact (the projected NULL conflates both; these counts make the
-/// conflation visible per projection). Covers only rows that landed; skipped documents report their
+/// conflation visible per projection). A document that names its declaration (<see cref="StoredDocument.DeclarationSeq"/>)
+/// is held to that declaration: a column it did not yet have is counted in <see cref="NotYetDeclaredFieldCounts"/>
+/// instead, since a document cannot be absent a field nobody had asked for. Covers only rows that landed; skipped documents report their
 /// own reasons via <see cref="Skipped"/>. A repeated section's table also counts, under its section field,
 /// the parent documents that did not carry the section at all — an empty section is an answer (nothing
 /// chosen) and is not counted.
@@ -57,6 +59,16 @@ public sealed record ProjectionResult(
     private static readonly IReadOnlyDictionary<string, int> NoAbsences =
         new Dictionary<string, int>();
 
+    /// <summary>
+    /// For each declared column, how many projected rows came from documents accepted under a declaration that did
+    /// not yet have the column — the field was added after the document, so the document did not leave it out. Counted
+    /// apart from <see cref="AbsentFieldCounts"/>, where these rows were counted before documents named their
+    /// declaration. A document that names no declaration (accepted before the store kept one, or over a source with no
+    /// history) is never counted here: its absences are in <see cref="AbsentFieldCounts"/> as they always were. A repeated section's
+    /// table never counts here either — its documents name the parent's declaration, not the section's.
+    /// </summary>
+    public IReadOnlyDictionary<string, int> NotYetDeclaredFieldCounts { get; init; } = NoAbsences;
+
     /// <summary>No schema was proposed (e.g. no field hints yet); nothing was projected.</summary>
     public static ProjectionResult NoSchema() =>
         new(Projected: false, Inserted: 0, Array.Empty<ProjectionSkip>(), [], NoAbsences, [], Watermark.Zero);
@@ -77,6 +89,9 @@ public sealed record ProjectionResult(
     /// row this run inserted. <paramref name="declaredFields"/> must list every declared field to
     /// score, including ones with no entry in <see cref="AbsentFieldCounts"/> — a field absent from
     /// that dictionary was never absent from a row, not unscored, and still belongs in the total.
+    /// A row from a document accepted before a field was declared does not count that field in the denominator
+    /// (<see cref="NotYetDeclaredFieldCounts"/>) — the document had no chance to carry it. With none such, this is
+    /// exactly the formula above.
     /// A field with no entry in <paramref name="fieldWeights"/> gets weight 1; passing no weights at
     /// all reduces this exactly to the plain (unweighted) coverage ratio. Field-importance weights are
     /// a caller concern (e.g. derived from ablation) — this type only aggregates what it already has.
@@ -91,14 +106,14 @@ public sealed record ProjectionResult(
         }
 
         var weightedAbsent = 0.0;
-        var totalWeight = 0.0;
+        var weightedRows = 0.0;
         foreach (var field in declaredFields)
         {
             var weight = fieldWeights?.GetValueOrDefault(field, 1.0) ?? 1.0;
-            totalWeight += weight;
+            weightedRows += weight * (Inserted - NotYetDeclaredFieldCounts.GetValueOrDefault(field, 0));
             weightedAbsent += weight * AbsentFieldCounts.GetValueOrDefault(field, 0);
         }
 
-        return totalWeight == 0 ? double.NaN : 1.0 - (weightedAbsent / (Inserted * totalWeight));
+        return weightedRows == 0 ? double.NaN : 1.0 - (weightedAbsent / weightedRows);
     }
 }

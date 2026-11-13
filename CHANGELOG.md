@@ -36,8 +36,24 @@
   compiling and its documents read back `null`. The stamp names the declaration intake read; a declaration written between that read
   and the append is not seen.
 
+- **A field added to a form type later is no longer counted as absent from the documents that came before it.** A projection run holds
+  each document to the declaration it names (`declarationSeq`): a column that declaration did not yet have is counted in the new
+  `notYetDeclaredFieldCounts` (`POST /formtypes/{type}/projection`; `ProjectionResult.NotYetDeclaredFieldCounts`) instead of in
+  `absentFieldCounts`, which now counts only a field the document's own declaration asked for and the document did not send. A
+  document accepted with no declaration in force (`declarationSeq: 0`) is held to nothing, so every column declared afterwards is
+  not yet declared for it. A document that names no declaration (`null` — stored before this version, or over a declaration
+  source with no history) keeps its absences in `absentFieldCounts`, as before. A repeated section's table is unchanged: its
+  documents name the parent's declaration, not the section's. `WeightedFormCoverageIndex` leaves such a row out of that field's
+  denominator, and is unchanged when there are none. The projector reads the declaration history once per run, and only when a
+  document names a declaration; `Projector` takes the declaration source as an optional last constructor argument (registered
+  hosts get it).
+
 ### Changed
 
+- **`absentFieldCounts` no longer includes the fields a document's declaration did not yet have.** Before, a field declared after
+  documents had arrived counted as absent from every one of them; those are now in `notYetDeclaredFieldCounts`, so a caller that
+  read `absentFieldCounts` as «rows that left the field out» reads it as that more exactly, and one that wants the earlier
+  total adds the two.
 - **`binding` reads back `null` on a field whose declaration left it out**, where it read `stored`. A caller that read `binding` as
   always present reads `bindingState` instead (it is always present). A declaration stored by an earlier version reads back with
   every binding as declared (`stored` where it was left to the default), so an existing declaration never turns `undecided`.

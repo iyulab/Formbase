@@ -1597,7 +1597,8 @@
           "absentFieldCounts",
           "unresolvedReferences",
           "notProjectedReason",
-          "mode"
+          "mode",
+          "notYetDeclaredFieldCounts"
         ],
         "type": "object",
         "properties": {
@@ -1668,6 +1669,17 @@
                 "$ref": "#/components/schemas/ProjectionModeWire"
               }
             ]
+          },
+          "notYetDeclaredFieldCounts": {
+            "type": "object",
+            "additionalProperties": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
           }
         }
       },

@@ -20,7 +20,9 @@ namespace Formbase.Host.Contracts;
 /// <param name="AbsentFieldCounts">
 /// Per declared column, how many projected rows came from documents that did not carry the field at
 /// all. An explicit null in a document is an answer and is not counted here — the projected NULL
-/// conflates the two, and these counts are what makes the conflation visible.
+/// conflates the two, and these counts are what makes the conflation visible. A document is held to the declaration
+/// it was accepted under (<c>declarationSeq</c> on its read): a column that declaration did not yet have is not an
+/// absence — it is in <paramref name="NotYetDeclaredFieldCounts"/>.
 /// </param>
 /// <param name="UnresolvedReferences">
 /// Declared reference columns that cannot be computed because their target names no way to find its
@@ -39,6 +41,12 @@ namespace Formbase.Host.Contracts;
 /// incremental run, <see cref="Inserted"/> and the diagnostic lists cover only the documents appended
 /// since the last projection — the table and <c>GET …/projection/skips</c> still cover everything.
 /// </param>
+/// <param name="NotYetDeclaredFieldCounts">
+/// Per declared column, how many projected rows came from documents accepted under a declaration that did not yet have
+/// the column, so the document did not leave it out. Empty when every document names a declaration that had the
+/// columns, or names none (a document stored before the store kept this reads <c>declarationSeq: null</c>, and its
+/// absences stay in <c>absentFieldCounts</c>); always empty for a repeated section's table.
+/// </param>
 public sealed record ProjectionRunResponse(
     bool Projected,
     int Inserted,
@@ -48,7 +56,8 @@ public sealed record ProjectionRunResponse(
     IReadOnlyDictionary<string, int> AbsentFieldCounts,
     IReadOnlyList<string> UnresolvedReferences,
     NotProjectedReasonWire? NotProjectedReason,
-    ProjectionModeWire? Mode);
+    ProjectionModeWire? Mode,
+    IReadOnlyDictionary<string, int> NotYetDeclaredFieldCounts);
 
 /// <summary>How a projection run built its table.</summary>
 public enum ProjectionModeWire

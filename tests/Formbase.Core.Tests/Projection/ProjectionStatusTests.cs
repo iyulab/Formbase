@@ -170,6 +170,23 @@ public class ProjectionResultTests
         result.WeightedFormCoverageIndex(declaredFields: ["lot", "qty"]).Should().BeApproximately(0.875, 1e-9);
     }
 
+    /// <summary>
+    /// A row from a document accepted before a field was declared never had the chance to carry it, so it leaves the
+    /// field out of the denominator rather than counting as present.
+    /// </summary>
+    [Fact]
+    public void A_row_whose_document_predates_a_field_does_not_count_that_field()
+    {
+        // 4 rows, 2 fields. "qty": 1 absent from a document that had it declared, 2 from documents that did not yet.
+        var result = ProjectionResult.Completed(
+            inserted: 4, skipped: [], skippedFields: [], absentFieldCounts: new Dictionary<string, int> { ["qty"] = 1 }, unresolvedReferences: [], watermark: new Watermark(4))
+            with
+        { NotYetDeclaredFieldCounts = new Dictionary<string, int> { ["qty"] = 2 } };
+
+        // lot: 4 rows, none absent · qty: (4 - 2) rows, 1 absent  =>  1 - 1 / (4 + 2) = 5/6
+        result.WeightedFormCoverageIndex(declaredFields: ["lot", "qty"]).Should().BeApproximately(5.0 / 6.0, 1e-9);
+    }
+
     [Fact]
     public void A_field_absent_from_the_dictionary_counts_as_fully_present()
     {

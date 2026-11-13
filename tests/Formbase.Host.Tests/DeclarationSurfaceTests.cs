@@ -256,6 +256,26 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
         history.GetProperty("revisions").GetArrayLength().Should().Be(2);
     }
 
+    /// <summary>
+    /// A field added to a form type after its first documents arrived was not left out of them — the projection says
+    /// so, rather than counting every earlier document as missing it.
+    /// </summary>
+    [Fact]
+    public async Task A_projection_does_not_count_a_field_added_later_as_absent_from_earlier_documents()
+    {
+        var type = NewFormType();
+        Declare(type, new FormTypeHints(FormTypeRef.Create(type), $"{type}_table", [new FieldHint("total", ColumnType.Integer)], DeclarationVersion: 1));
+        await AcceptAsync(type);
+        Declare(type, new FormTypeHints(FormTypeRef.Create(type), $"{type}_table", [new FieldHint("total", ColumnType.Integer), new FieldHint("note", ColumnType.Text)], DeclarationVersion: 2));
+        await AcceptAsync(type);
+
+        var run = await ReadAsync(await _client.PostAsync($"/formtypes/{type}/projection", null, TestContext.Current.CancellationToken));
+
+        run.GetProperty("inserted").GetInt32().Should().Be(2);
+        run.GetProperty("absentFieldCounts").GetProperty("note").GetInt32().Should().Be(1, "the second document was written under a declaration that had note");
+        run.GetProperty("notYetDeclaredFieldCounts").GetProperty("note").GetInt32().Should().Be(1, "the first was written before note existed");
+    }
+
     private async Task<Guid> AcceptAsync(string type)
     {
         var response = await _client.PostAsync(
