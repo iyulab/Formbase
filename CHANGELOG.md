@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.36.0
+
+A minor: a repeated section's rows can be read with a name to cite (`GET /formtypes/{section}/rows`), a record read now returns a
+bounded page of 100 and says whether more follow (`hasMore` — a caller that relied on no `limit` meaning every row pages with
+`offset`), and a row the projection store refuses is a `409`, not an outage. Two hosts rebuilding the same form type at once no longer
+leave doubled rows recorded as a fresh projection, and several malformed inputs are refused at intake instead of failing later. Pairs
+with MorphDB `0.36.x`.
 
 ### Added
 
