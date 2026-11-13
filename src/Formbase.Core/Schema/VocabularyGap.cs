@@ -3,7 +3,7 @@ namespace Formbase.Core.Schema;
 /// <summary>
 /// Which axis of the declaration vocabulary a dropped construct demands. An input adapter that
 /// translates a richer declaration language into <see cref="FormTypeHints"/> reports every construct
-/// it cannot carry as one of these kinds: relations (Formology rule 4), time binding (rule 5),
+/// it cannot carry as one of these kinds: relations (Formology rule 4), time binding (rule 6),
 /// derived fields, declared value constraints, and constructs the adapter deliberately leaves
 /// unresolved.
 /// </summary>
@@ -12,7 +12,7 @@ public enum VocabularyGapKind
     /// <summary>A foreign-key style reference to another entity (Formology rule 4 — true now).</summary>
     Relation,
 
-    /// <summary>Hard/soft binding mode on a reference (Formology rule 5 — fixed then vs true now).</summary>
+    /// <summary>Hard/soft binding mode on a reference (Formology 0.1, rule 6 — fixed then vs true now).</summary>
     TimeBinding,
 
     /// <summary>

@@ -1,7 +1,7 @@
 namespace Formbase.Core.Schema;
 
 /// <summary>
-/// The time-binding axis of a declared field (Formology rules 4·5): whether the value is this
+/// The time-binding axis of a declared field (Formology 0.1, rule 6; rules 4 and 5 are its two bound kinds): whether the value is this
 /// document's own, a copy fixed at write time, or a reference meant to read true now. Raw-first
 /// projection materializes <see cref="Snapshot"/> physically (raw keeps the value written then). A
 /// <see cref="Reference"/> is not copied into the row at all: every <c>IProjectionStore</c> computes it
