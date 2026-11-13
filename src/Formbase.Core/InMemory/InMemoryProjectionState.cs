@@ -41,6 +41,33 @@ public sealed class InMemoryProjectionState : IProjectionState
         return Task.CompletedTask;
     }
 
+    public Task<bool> SetProjectedIfUnchangedAsync(
+        FormTypeRef type,
+        ProjectionStamp? expected,
+        ProjectionStamp stamp,
+        IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stamp);
+        ArgumentNullException.ThrowIfNull(skips);
+        ArgumentNullException.ThrowIfNull(fieldSkips);
+
+        lock (_deltaGate)
+        {
+            _stamps.TryGetValue(type, out var current);
+            if (current != expected)
+            {
+                return Task.FromResult(false);
+            }
+
+            _stamps[type] = stamp;
+            _skips[type] = [.. skips];
+            _fieldSkips[type] = [.. fieldSkips];
+            return Task.FromResult(true);
+        }
+    }
+
     public Task<bool> ApplyProjectedDeltaAsync(
         FormTypeRef type,
         Watermark expectedWatermark,

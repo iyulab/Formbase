@@ -4,6 +4,10 @@
 
 ### Added
 
+- **`IProjectionState.SetProjectedIfUnchangedAsync`** — `SetProjectedAsync` that holds only while the recorded stamp is still the one the
+  caller read (or none, when there was none), returning `false` otherwise. A full rebuild records with it. It is a default interface
+  member (read, then write), so an existing `IProjectionState` implementation keeps compiling; a state that several hosts share should
+  override it with one atomic compare-and-set, as the built-in ones do.
 - **A repeated section's rows can be read, named for citation.** `GET /formtypes/{section}/rows` reads the parent's stream the way
   `GET /formtypes/{type}/documents` does (oldest first, `after` a watermark of the parent's, `limit` up to 1000) and answers each
   parent document with the rows it holds, cut the way the section's projection cuts them. Each row's `name` is what a claim grounded in it
@@ -32,6 +36,14 @@
 
 ### Fixed
 
+- **Two hosts rebuilding the same form type at once no longer leave doubled rows recorded as a fresh projection.** A rebuild resets the
+  table, refills it from raw and then records its state; the run gate is per process, so a second host over the same databases that
+  rebuilt in between filled the same table too, and whichever recorded last wrote a «fresh» stamp over rows that were two runs' —
+  every document twice, with both runs reporting success. A rebuild now records its state only if the stamp is still the one it read
+  before it began (a compare-and-set); the run that lost clears the state, fails with an `InvalidOperationException` that says why,
+  and the next projection rebuilds from raw. The built-in states (in-memory, SQLite, Postgres) do it atomically. Until the loser
+  clears, a reader of a table two runs wrote to can see the extra rows — the window closes in the loser's own failure path, so it is
+  not left behind; a host that dies inside it leaves the table for the next rebuild to fix.
 - **A durable store that stops answering after the host started is a `503`, not a `500`.** The driver's transient errors (a lost connection,
   a timeout) reached the caller unhandled, which reads as a bug in the host to a caller that should retry. They answer `503`
   `/problems/store-unavailable`; a query the database refuses stays a `500`, and the response does not repeat the driver's message.

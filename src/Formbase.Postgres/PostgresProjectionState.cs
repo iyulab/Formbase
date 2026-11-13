@@ -153,6 +153,75 @@ public sealed class PostgresProjectionState : IProjectionState, IDisposable
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> SetProjectedIfUnchangedAsync(
+        FormTypeRef type,
+        ProjectionStamp? expected,
+        ProjectionStamp stamp,
+        IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stamp);
+        ArgumentNullException.ThrowIfNull(skips);
+        ArgumentNullException.ThrowIfNull(fieldSkips);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        // The compare-and-set. An update takes the row lock, so a second writer from the same starting
+        // stamp waits here and then finds the stamp moved; with nothing recorded when the run began, the
+        // insert yields to a row another run already wrote (the primary key serializes the two).
+        await using (var write = new NpgsqlCommand(
+            expected is null
+                ? $"""
+                  INSERT INTO "{_bootstrap.Schema}".projection_state (form_type, watermark, table_name, schema_fingerprint, verified, skips_keyed, updated_at)
+                  VALUES (@type, @watermark, @table, @fingerprint, @verified, @keyed, @at)
+                  ON CONFLICT (form_type) DO NOTHING
+                  """
+                : $"""
+                  UPDATE "{_bootstrap.Schema}".projection_state
+                      SET watermark = @watermark, table_name = @table, schema_fingerprint = @fingerprint,
+                          verified = @verified, skips_keyed = @keyed, updated_at = @at
+                      WHERE form_type = @type AND watermark = @expectedWatermark AND table_name = @expectedTable
+                          AND schema_fingerprint = @expectedFingerprint AND verified = @expectedVerified AND skips_keyed = @expectedKeyed
+                  """,
+            connection))
+        {
+            BindStamp(write, type, stamp);
+            if (expected is not null)
+            {
+                write.Parameters.AddWithValue("expectedWatermark", expected.Watermark.Value);
+                write.Parameters.AddWithValue("expectedTable", expected.TableName);
+                write.Parameters.AddWithValue("expectedFingerprint", expected.SchemaFingerprint);
+                write.Parameters.AddWithValue("expectedVerified", expected.Verified);
+                write.Parameters.AddWithValue("expectedKeyed", expected.SkipsKeyed);
+            }
+
+            if (await write.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+        }
+
+        await using (var delete = new NpgsqlCommand(
+            $"""
+            DELETE FROM "{_bootstrap.Schema}".projection_skips WHERE form_type = @type;
+            DELETE FROM "{_bootstrap.Schema}".projection_field_skips WHERE form_type = @type;
+            """,
+            connection))
+        {
+            delete.Parameters.AddWithValue("type", type.Value);
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await WriteSkipsAsync(connection, type, skips, firstOrdinal: 0, cancellationToken).ConfigureAwait(false);
+        await WriteFieldSkipsAsync(connection, type, fieldSkips, firstOrdinal: 0, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     public async Task<bool> ApplyProjectedDeltaAsync(
         FormTypeRef type,
         Watermark expectedWatermark,

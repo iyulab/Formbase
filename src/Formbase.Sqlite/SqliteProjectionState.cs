@@ -111,6 +111,78 @@ public sealed class SqliteProjectionState : IProjectionState
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<bool> SetProjectedIfUnchangedAsync(
+        FormTypeRef type,
+        ProjectionStamp? expected,
+        ProjectionStamp stamp,
+        IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stamp);
+        ArgumentNullException.ThrowIfNull(skips);
+        ArgumentNullException.ThrowIfNull(fieldSkips);
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        // Immediate, like the delta's compare-and-set: the check and the write are one step.
+        await using var transaction = connection.BeginTransaction(deferred: false);
+
+        await using (var write = connection.CreateCommand())
+        {
+            write.Transaction = transaction;
+            if (expected is null)
+            {
+                // Nothing recorded when the run began: it may record only if nothing is recorded now.
+                write.CommandText =
+                    """
+                    INSERT INTO fb_projection_state (form_type, watermark, table_name, schema_fingerprint, verified, skips_keyed)
+                    VALUES ($type, $watermark, $table, $fingerprint, $verified, $keyed)
+                    ON CONFLICT (form_type) DO NOTHING
+                    """;
+                BindStamp(write, type, stamp);
+            }
+            else
+            {
+                write.CommandText =
+                    """
+                    UPDATE fb_projection_state
+                        SET watermark = $watermark, table_name = $table, schema_fingerprint = $fingerprint,
+                            verified = $verified, skips_keyed = $keyed
+                        WHERE form_type = $type AND watermark = $expectedWatermark AND table_name = $expectedTable
+                            AND schema_fingerprint = $expectedFingerprint AND verified = $expectedVerified AND skips_keyed = $expectedKeyed
+                    """;
+                BindStamp(write, type, stamp);
+                write.Parameters.AddWithValue("$expectedWatermark", expected.Watermark.Value);
+                write.Parameters.AddWithValue("$expectedTable", expected.TableName);
+                write.Parameters.AddWithValue("$expectedFingerprint", expected.SchemaFingerprint);
+                write.Parameters.AddWithValue("$expectedVerified", expected.Verified ? 1 : 0);
+                write.Parameters.AddWithValue("$expectedKeyed", expected.SkipsKeyed ? 1 : 0);
+            }
+
+            if (await write.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+        }
+
+        await using (var clear = connection.CreateCommand())
+        {
+            clear.Transaction = transaction;
+            clear.CommandText =
+                """
+                DELETE FROM fb_projection_skips WHERE form_type = $type;
+                DELETE FROM fb_projection_field_skips WHERE form_type = $type;
+                """;
+            clear.Parameters.AddWithValue("$type", type.Value);
+            await clear.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await InsertSkipsAsync(connection, transaction, type, skips, fieldSkips, firstOrdinal: 0, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     public async Task<bool> ApplyProjectedDeltaAsync(
         FormTypeRef type,
         Watermark expectedWatermark,

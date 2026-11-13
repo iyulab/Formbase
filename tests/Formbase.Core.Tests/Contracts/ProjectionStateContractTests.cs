@@ -141,6 +141,115 @@ public abstract class ProjectionStateContractTests
         (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeTrue("a fresh projection clears the unverified mark");
     }
 
+    // The compare-and-set a full rebuild records with: it holds only while the stamp is still the one
+    // the run read before it began, so a run that another host overtook cannot label the rows both
+    // inserted as its own.
+
+    [Fact]
+    public async Task Recording_if_unchanged_records_when_nothing_was_expected_and_nothing_is_recorded()
+    {
+        var state = CreateState();
+        var skip = Skip("unreadable");
+
+        var recorded = await state.SetProjectedIfUnchangedAsync(Qc, null, Stamp(7), [skip], [], TestContext.Current.CancellationToken);
+
+        recorded.Should().BeTrue();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(7));
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(skip);
+    }
+
+    [Fact]
+    public async Task Recording_if_unchanged_replaces_the_stamp_and_both_skip_lists_when_the_expected_stamp_is_still_recorded()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [Skip("old")], [FieldSkip("qty", "old")], TestContext.Current.CancellationToken);
+        var skip = Skip("new");
+
+        var recorded = await state.SetProjectedIfUnchangedAsync(Qc, Stamp(7), Stamp(9, fingerprint: "fp-2"), [skip], [], TestContext.Current.CancellationToken);
+
+        recorded.Should().BeTrue();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(9, fingerprint: "fp-2"));
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(skip);
+        (await state.GetFieldSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Recording_if_unchanged_refuses_and_changes_nothing_when_another_run_recorded_since()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+        var theirs = Skip("theirs");
+        await state.SetProjectedAsync(Qc, Stamp(8), [theirs], [], TestContext.Current.CancellationToken);
+
+        var recorded = await state.SetProjectedIfUnchangedAsync(Qc, Stamp(7), Stamp(9), [Skip("mine")], [], TestContext.Current.CancellationToken);
+
+        recorded.Should().BeFalse();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(8));
+        (await state.GetSkipsAsync(Qc, TestContext.Current.CancellationToken)).Should().Equal(theirs);
+    }
+
+    [Fact]
+    public async Task Recording_if_unchanged_refuses_when_nothing_was_expected_but_a_stamp_is_recorded()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(8), [], [], TestContext.Current.CancellationToken);
+
+        var recorded = await state.SetProjectedIfUnchangedAsync(Qc, null, Stamp(9), [], [], TestContext.Current.CancellationToken);
+
+        recorded.Should().BeFalse();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(Stamp(8));
+    }
+
+    [Fact]
+    public async Task Recording_if_unchanged_refuses_when_a_stamp_was_expected_but_it_was_cleared()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+        await state.ClearAsync(Qc, TestContext.Current.CancellationToken);
+
+        var recorded = await state.SetProjectedIfUnchangedAsync(Qc, Stamp(7), Stamp(9), [], [], TestContext.Current.CancellationToken);
+
+        recorded.Should().BeFalse();
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Recording_if_unchanged_refuses_when_only_the_verified_mark_moved()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+        await state.MarkUnverifiedAsync(Qc, TestContext.Current.CancellationToken);
+
+        var recorded = await state.SetProjectedIfUnchangedAsync(Qc, Stamp(7), Stamp(9), [], [], TestContext.Current.CancellationToken);
+
+        recorded.Should().BeFalse("the stamp is no longer the one the run read: a failed run left it in doubt");
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Verified.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Of_many_runs_recording_from_the_same_starting_stamp_exactly_one_wins()
+    {
+        var state = CreateState();
+        await state.SetProjectedAsync(Qc, Stamp(7), [], [], TestContext.Current.CancellationToken);
+
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 8).Select(i =>
+            Task.Run(() => state.SetProjectedIfUnchangedAsync(Qc, Stamp(7), Stamp(100 + i), [], [], TestContext.Current.CancellationToken), TestContext.Current.CancellationToken)));
+
+        outcomes.Count(won => won).Should().Be(1);
+        (await state.GetAsync(Qc, TestContext.Current.CancellationToken))!.Watermark.Value.Should().BeInRange(100, 107);
+    }
+
+    [Fact]
+    public async Task Of_many_first_projections_of_a_form_type_exactly_one_records()
+    {
+        var state = CreateState();
+
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 8).Select(i =>
+            Task.Run(() => state.SetProjectedIfUnchangedAsync(Qc, null, Stamp(100 + i), [], [], TestContext.Current.CancellationToken), TestContext.Current.CancellationToken)));
+
+        outcomes.Count(won => won).Should().Be(1);
+    }
+
     private static ProjectionSkip Skip(string reason) => new(DocumentId.New(), reason);
 
     private static ProjectionFieldSkip FieldSkip(string field, string reason) => new(DocumentId.New(), field, reason);

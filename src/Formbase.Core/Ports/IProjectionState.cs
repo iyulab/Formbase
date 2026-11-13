@@ -40,6 +40,36 @@ public interface IProjectionState
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// <see cref="SetProjectedAsync"/> that holds only when the recorded stamp is still
+    /// <paramref name="expected"/> — the stamp the caller read before it began, or null when there was
+    /// none — and records nothing otherwise. What a full rebuild uses: it resets the table, refills it
+    /// and only then records, and another host that rebuilt the same form type in between has already
+    /// recorded its own stamp, so a blind write would label rows two runs inserted as one run's. Returns
+    /// false and changes nothing when the recorded stamp is not <paramref name="expected"/>.
+    /// </summary>
+    /// <remarks>
+    /// The default reads and then writes, which is correct for one writer and not atomic for several; a
+    /// store several hosts share overrides it with a single atomic compare-and-set (every built-in
+    /// durable state does). Equality is the whole stamp, <see cref="ProjectionStamp.Verified"/> included.
+    /// </remarks>
+    async Task<bool> SetProjectedIfUnchangedAsync(
+        FormTypeRef type,
+        ProjectionStamp? expected,
+        ProjectionStamp stamp,
+        IReadOnlyList<ProjectionSkip> skips,
+        IReadOnlyList<ProjectionFieldSkip> fieldSkips,
+        CancellationToken cancellationToken = default)
+    {
+        if (await GetAsync(type, cancellationToken).ConfigureAwait(false) != expected)
+        {
+            return false;
+        }
+
+        await SetProjectedAsync(type, stamp, skips, fieldSkips, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
     /// Records that a projection brought the table forward from the stamp at
     /// <paramref name="expectedWatermark"/> to <paramref name="stamp"/> without rebuilding it: the stamp
     /// is replaced, every recorded skip and field skip whose <see cref="ProjectionSkip.Key"/> is one of

@@ -96,7 +96,7 @@ public sealed class Projector : IProjector
             return await BringForwardAsync(type, stream, schema, stamp, rawHead, cancellationToken).ConfigureAwait(false);
         }
 
-        return await RebuildAsync(type, stream, schema, rawHead, cancellationToken).ConfigureAwait(false);
+        return await RebuildAsync(type, stream, schema, stamp, rawHead, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -112,7 +112,7 @@ public sealed class Projector : IProjector
         && stamp.Watermark <= rawHead
         && await _projectionStore.TableExistsAsync(schema.TableName, cancellationToken).ConfigureAwait(false);
 
-    private async Task<ProjectionResult> RebuildAsync(FormTypeRef type, FormTypeRef stream, TableSchema schema, Watermark rawHead, CancellationToken cancellationToken)
+    private async Task<ProjectionResult> RebuildAsync(FormTypeRef type, FormTypeRef stream, TableSchema schema, ProjectionStamp? startedFrom, Watermark rawHead, CancellationToken cancellationToken)
     {
         try
         {
@@ -122,7 +122,18 @@ public sealed class Projector : IProjector
             var mapped = Map(documents, schema);
             var inserted = await _projectionStore.BulkInsertAsync(schema.TableName, mapped.Rows, cancellationToken).ConfigureAwait(false);
 
-            await _projectionState.SetProjectedAsync(type, StampFor(schema, rawHead), mapped.Skips, mapped.FieldSkips, cancellationToken).ConfigureAwait(false);
+            // Recorded only if no other host recorded this form type since this run began: the run gate
+            // is per process, so a second host over the same stores may have reset and refilled the same
+            // table in between, and the rows now in it are not one run's. The loser gets the failure
+            // path below — the state is cleared and the next projection rebuilds from raw.
+            var recorded = await _projectionState.SetProjectedIfUnchangedAsync(
+                type, startedFrom, StampFor(schema, rawHead), mapped.Skips, mapped.FieldSkips, cancellationToken).ConfigureAwait(false);
+            if (!recorded)
+            {
+                throw new InvalidOperationException(
+                    $"Another projection of '{type.Value}' recorded its state while this run rebuilt the table; the rows in it may belong to both runs, so the recorded state was cleared and the next projection rebuilds from raw.");
+            }
+
             return Completed(schema, mapped, inserted, rawHead, ProjectionMode.Rebuild);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
