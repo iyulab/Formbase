@@ -194,9 +194,12 @@ public sealed class ConcurrentRebuildTests : IDisposable
         world.Steps.Hold("A", "reset");
         world.Steps.Hold("B", "reset");
 
+        // B starts only once A's reset is done and held: the stores' reset is drop-then-create, which is
+        // not atomic against a second reset of the same table, and this ordering is about what the two
+        // runs leave behind, not about racing two resets.
         var runA = Task.Run(a.RunAsync, TestContext.Current.CancellationToken);
-        var runB = Task.Run(b.RunAsync, TestContext.Current.CancellationToken);
         await world.Steps.Reached("A", "reset");
+        var runB = Task.Run(b.RunAsync, TestContext.Current.CancellationToken);
         await world.Steps.Reached("B", "reset");
         world.Steps.Release("A", "reset");
         await runA;
