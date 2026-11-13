@@ -273,7 +273,7 @@ public sealed class McpDoorTests : IClassFixture<WebApplicationFactory<Program>>
         using var rest = Authorized(host);
 
         var read = await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = type }, cancellationToken: ct);
-        var viaRest = System.Text.Json.JsonDocument.Parse(await rest.GetStringAsync($"/formtypes/{type}/documents", ct)).RootElement;
+        var viaRest = System.Text.Json.JsonElement.Parse(await rest.GetStringAsync($"/formtypes/{type}/documents", ct));
 
         read.IsError.Should().NotBe(true, Text(read));
         var result = read.StructuredContent!.Value.GetProperty("result");

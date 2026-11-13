@@ -145,6 +145,6 @@ public sealed class RecordIdentitySurfaceTests : IClassFixture<WebApplicationFac
     {
         var payload = await response.Content.ReadAsStringAsync();
         payload.Should().NotBeEmpty("every reply must carry something the caller can read");
-        return JsonDocument.Parse(payload).RootElement.Clone();
+        return JsonElement.Parse(payload);
     }
 }

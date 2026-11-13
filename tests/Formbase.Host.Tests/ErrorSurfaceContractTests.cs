@@ -99,7 +99,7 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
 
         ((int)response.StatusCode).Should().Be(400, payload);
 
-        var problem = JsonDocument.Parse(payload).RootElement;
+        var problem = JsonElement.Parse(payload);
         problem.GetProperty("type").GetString().Should().Be("/problems/invalid-form-type",
             "the caller has to be told which part of their request to change");
     }

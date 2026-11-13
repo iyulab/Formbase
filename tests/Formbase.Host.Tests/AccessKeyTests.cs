@@ -51,7 +51,7 @@ public sealed class AccessKeyTests : IClassFixture<WebApplicationFactory<Program
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "the host's description names where its data is kept, so it is held like the data");
         response.Headers.WwwAuthenticate.ToString().Should().Be("Bearer");
-        var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
+        var problem = JsonElement.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         problem.GetProperty("type").GetString().Should().Be("/problems/access-key-required");
     }
 

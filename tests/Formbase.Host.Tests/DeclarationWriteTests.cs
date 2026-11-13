@@ -566,6 +566,6 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
     {
         var payload = await response.Content.ReadAsStringAsync();
         payload.Should().NotBeEmpty();
-        return JsonDocument.Parse(payload).RootElement.Clone();
+        return JsonElement.Parse(payload);
     }
 }

@@ -38,7 +38,7 @@ public sealed class DocumentedRoutesAnswerTests : IClassFixture<WebApplicationFa
         }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
         var accepted = await _client.PostAsJsonAsync($"/formtypes/{type}/documents?recordKey=r1", new { n = 1 }, ct);
         accepted.StatusCode.Should().Be(HttpStatusCode.Created);
-        var documentId = JsonDocument.Parse(await accepted.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("documentId").GetString()!;
+        var documentId = JsonElement.Parse(await accepted.Content.ReadAsStringAsync(ct)).GetProperty("documentId").GetString()!;
         (await _client.PostAsync($"/formtypes/{type}/projection", null, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var reads = DocsSurfaceParityTests.DocumentedRouteLines()

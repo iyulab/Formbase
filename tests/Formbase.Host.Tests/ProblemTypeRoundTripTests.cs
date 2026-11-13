@@ -80,7 +80,7 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(status, payload);
-        JsonDocument.Parse(payload).RootElement.GetProperty("type").GetString()
+        JsonElement.Parse(payload).GetProperty("type").GetString()
             .Should().Be(type, payload);
     }
 
@@ -100,7 +100,7 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(409, payload);
-        var problem = JsonDocument.Parse(payload).RootElement;
+        var problem = JsonElement.Parse(payload);
         problem.GetProperty("type").GetString().Should().Be("/problems/projection-refused");
         problem.GetProperty("detail").GetString().Should().Contain("0b7c1e2a-0000-4000-8000-000000000001").And.Contain("order-9").And.Contain("null is not allowed");
     }
@@ -120,7 +120,7 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         ((int)response.StatusCode).Should().Be(400, payload);
-        JsonDocument.Parse(payload).RootElement.GetProperty("type").GetString()
+        JsonElement.Parse(payload).GetProperty("type").GetString()
             .Should().Be("/problems/invalid-request", payload);
     }
 

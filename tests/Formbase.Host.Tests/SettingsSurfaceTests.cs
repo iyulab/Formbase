@@ -145,6 +145,6 @@ public sealed class SettingsSurfaceTests : IClassFixture<WebApplicationFactory<P
     {
         var payload = await response.Content.ReadAsStringAsync();
         ((int)response.StatusCode).Should().BeLessThan(400, payload);
-        return JsonDocument.Parse(payload).RootElement.Clone();
+        return JsonElement.Parse(payload);
     }
 }

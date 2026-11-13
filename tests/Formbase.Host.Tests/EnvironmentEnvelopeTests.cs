@@ -98,7 +98,7 @@ public sealed class EnvironmentEnvelopeTests : IClassFixture<WebApplicationFacto
         var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         payload.Should().NotBeEmpty();
-        JsonDocument.Parse(payload).RootElement.TryGetProperty("title", out _).Should().BeTrue(payload);
+        JsonElement.Parse(payload).TryGetProperty("title", out _).Should().BeTrue(payload);
     }
 
     private static string ImageEnvironmentName()
@@ -143,5 +143,5 @@ public sealed class EnvironmentEnvelopeTests : IClassFixture<WebApplicationFacto
     private static string NewFormType() => $"ev{Guid.NewGuid():N}"[..16];
 
     private static string? Type(string payload) =>
-        JsonDocument.Parse(payload).RootElement.GetProperty("type").GetString();
+        JsonElement.Parse(payload).GetProperty("type").GetString();
 }

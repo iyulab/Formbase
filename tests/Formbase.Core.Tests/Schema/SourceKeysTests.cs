@@ -16,7 +16,7 @@ public sealed class SourceKeysTests
 {
     private static readonly FormTypeRef Event = FormTypeRef.Create("event");
 
-    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
+    private static JsonElement Json(string json) => JsonElement.Parse(json);
 
     private static string? Read(string json, string key) =>
         SourceKeys.TryResolve(Json(json), key, out var value) ? value.GetRawText() : null;
