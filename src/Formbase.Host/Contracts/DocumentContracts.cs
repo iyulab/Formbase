@@ -27,6 +27,12 @@ public sealed record AcceptedDocumentResponse(Guid DocumentId, string FormType, 
 /// than implied by a null body, because a document whose content is the JSON value <c>null</c> has a null
 /// body too.
 /// </param>
+/// <param name="DeclarationSeq">
+/// The declaration the document was accepted under, by its place in the form type's declaration history
+/// (<c>GET /formtypes/{type}/declaration/history</c> lists the places; <c>?seq=N</c> reads one): <c>0</c> when no
+/// declaration was in force, null when it is not known — the document was stored before the store kept this,
+/// or it is a retirement. Stamped once at intake, so a declaration written later does not change it.
+/// </param>
 public sealed record StoredDocumentResponse(
     Guid DocumentId,
     string FormType,
@@ -34,7 +40,8 @@ public sealed record StoredDocumentResponse(
     DateTimeOffset AppendedAt,
     JsonElement? Body,
     string? RecordKey,
-    bool Retired);
+    bool Retired,
+    int? DeclarationSeq = null);
 
 /// <summary>
 /// A page of a form type's raw stream. Each document has the shape a single read returns, so a

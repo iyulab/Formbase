@@ -19,10 +19,20 @@ public interface IRawStore
     Task<StoredDocument> AppendAsync(FormTypeRef type, DocumentId id, DocumentBody body, RecordKey? key = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Appends one <paramref name="append"/> — a document or a retirement — under <paramref name="type"/>, with
+    /// everything it carries, including the declaration it is accepted under
+    /// (<see cref="RawAppend.DeclarationSeq"/>, which the stored document gives back as
+    /// <see cref="StoredDocument.DeclarationSeq"/>). Idempotent by id exactly as
+    /// <see cref="AppendAsync(FormTypeRef, DocumentId, DocumentBody, RecordKey?, CancellationToken)"/> is: a known id returns the
+    /// document held, with the stamp it first had.
+    /// </summary>
+    Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Appends a retirement of the record <paramref name="key"/> under <paramref name="id"/>: a document
     /// with no body that takes the record out of the projection while its earlier documents stay in the
     /// raw history. Nothing checks that the key was ever used — a retirement is an append like any other.
-    /// Idempotent by id, as <see cref="AppendAsync"/> is.
+    /// Idempotent by id, as <see cref="AppendAsync(FormTypeRef, DocumentId, DocumentBody, RecordKey?, CancellationToken)"/> is.
     /// </summary>
     Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default);
 
@@ -32,7 +42,7 @@ public interface IRawStore
     /// new appends take consecutive watermarks in the order given, with no other append between them.
     /// Returns one stored document per element of <paramref name="appends"/>, in the same order.
     /// <para>
-    /// An id is still the idempotency key, but a batch is stricter than <see cref="AppendAsync"/>: an id
+    /// An id is still the idempotency key, but a batch is stricter than <see cref="AppendAsync(FormTypeRef, DocumentId, DocumentBody, RecordKey?, CancellationToken)"/>: an id
     /// already held by the same request (<see cref="RawAppend.Repeats"/>) returns the document held, taking
     /// no new watermark — so a retried batch stores nothing twice — while an id held by, or repeated
     /// within the batch with, another request refuses the whole batch with

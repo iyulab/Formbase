@@ -57,5 +57,6 @@ internal static class DocumentReads
             stored.AppendedAt,
             stored.Body?.Root,
             stored.Key?.Value,
-            stored.IsRetirement);
+            stored.IsRetirement,
+            stored.DeclarationSeq);
 }

@@ -74,6 +74,15 @@ public sealed class InMemoryFieldHintSource : IFieldHintSource, IFieldHintHistor
     }
 
     /// <inheritdoc />
+    public Task<int?> GetCurrentSequenceAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        lock (_declaring)
+        {
+            return Task.FromResult<int?>(_hints.ContainsKey(type) && _history.TryGetValue(type, out var revisions) ? revisions.Count : null);
+        }
+    }
+
+    /// <inheritdoc />
     public Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default)
     {
         lock (_declaring)

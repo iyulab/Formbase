@@ -22,6 +22,20 @@
   stores create a history table beside the declarations on first use, and a declaration written before this version has no
   history. Deleting a declaration does not delete its history.
 
+- **A document remembers the declaration it was accepted under.** Intake stamps each document with the sequence of the declaration in
+  force (`StoredDocument.DeclarationSeq`; on the wire `declarationSeq` of `GET /documents/{id}` and of each document in
+  `GET /formtypes/{type}/documents`): the sequence `GET …/declaration/history` lists, `0` when none was in force (a
+  document accepted before the first declaration, or after it was deleted), and `null` when it is not known — a document stored by an earlier
+  version, a retirement, or a host whose declaration source keeps no history. It is stamped once and never changes; a retried
+  append that finds a newer declaration still returns the document it first stored, with its first stamp. The raw stores gain a nullable
+  `declaration_seq` column (SQLite and PostgreSQL add it in place on first use, and every document already stored reads back
+  `null`). In the library, `IRawStore` gains `AppendAsync(type, RawAppend, ct)` — the append a store must now implement, which
+  carries `RawAppend.DeclarationSeq` (the id-and-body `AppendAsync` and `RetireAsync` stay and stamp nothing) — and
+  `IFieldHintHistory` gains `GetCurrentSequenceAsync` (the sequence in force, `null` after the declaration is deleted though its
+  history stays). A custom `IRawStore` implements the one new method; a custom `IFieldHintSource` without the history port keeps
+  compiling and its documents read back `null`. The stamp names the declaration intake read; a declaration written between that read
+  and the append is not seen.
+
 ### Changed
 
 - **`binding` reads back `null` on a field whose declaration left it out**, where it read `stored`. A caller that read `binding` as

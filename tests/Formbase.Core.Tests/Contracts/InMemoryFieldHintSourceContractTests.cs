@@ -1,5 +1,6 @@
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
 
 namespace Formbase.Core.Tests.Contracts;
@@ -18,6 +19,12 @@ public sealed class InMemoryFieldHintSourceContractTests : FieldHintSourceContra
     protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected)
     {
         ((InMemoryFieldHintSource)source).Declare(hints, expected);
+        return Task.CompletedTask;
+    }
+
+    protected override Task RemoveAsync(IFieldHintSource source, FormTypeRef type)
+    {
+        ((InMemoryFieldHintSource)source).Remove(type);
         return Task.CompletedTask;
     }
 }

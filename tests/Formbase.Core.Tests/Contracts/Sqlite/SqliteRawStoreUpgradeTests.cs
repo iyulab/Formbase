@@ -66,6 +66,77 @@ public sealed class SqliteRawStoreUpgradeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_document_from_before_the_upgrade_has_no_known_declaration_and_a_new_one_keeps_its_stamp()
+    {
+        using var database = new SqliteDatabase($"Data Source={_path}");
+        var store = new SqliteRawStore(database);
+        var ct = TestContext.Current.CancellationToken;
+
+        var stamped = await store.AppendAsync(Qc, RawAppend.Document(DocumentId.New(), DocumentBody.Parse("""{"n":2}"""), declarationSeq: 4), ct);
+
+        (await store.GetAsync(DocumentId.From(OldId), ct))!.DeclarationSeq.Should().BeNull();
+        (await store.GetAsync(stamped.Id, ct))!.DeclarationSeq.Should().Be(4);
+    }
+
+    /// <summary>The shape the last published version wrote — keys and retirements, no declaration sequence.</summary>
+    [Fact]
+    public async Task A_file_from_the_last_published_version_gains_the_declaration_column_and_keeps_what_it_held()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"formbase-upgrade-{Guid.NewGuid():N}.db");
+        var held = Guid.NewGuid();
+        try
+        {
+            await using (var connection = new SqliteConnection($"Data Source={path}"))
+            {
+                await connection.OpenAsync(TestContext.Current.CancellationToken);
+                await using var command = connection.CreateCommand();
+                command.CommandText =
+                    $$"""
+                    CREATE TABLE fb_raw_documents (
+                        watermark   INTEGER PRIMARY KEY AUTOINCREMENT,
+                        id          TEXT    NOT NULL UNIQUE,
+                        form_type   TEXT    NOT NULL,
+                        body        TEXT    NOT NULL,
+                        appended_at TEXT    NOT NULL,
+                        record_key  TEXT    NULL,
+                        retired     INTEGER NOT NULL DEFAULT 0
+                    );
+                    INSERT INTO fb_raw_documents (id, form_type, body, appended_at, record_key, retired)
+                    VALUES ('{{held:D}}', 'qc', '{"n":1}', '2026-01-01T00:00:00.0000000Z', 'k', 0);
+                    """;
+                await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+
+            using var database = new SqliteDatabase($"Data Source={path}");
+            var store = new SqliteRawStore(database);
+            var ct = TestContext.Current.CancellationToken;
+
+            var old = await store.GetAsync(DocumentId.From(held), ct);
+            var next = await store.AppendAsync(Qc, RawAppend.Document(DocumentId.New(), DocumentBody.Parse("""{"n":2}"""), RecordKey.Create("k"), declarationSeq: 0), ct);
+
+            old!.Key.Should().Be(RecordKey.Create("k"));
+            old.DeclarationSeq.Should().BeNull();
+            (await store.GetAsync(next.Id, ct))!.DeclarationSeq.Should().Be(0);
+            next.Watermark.Should().Be(new Watermark(2));
+        }
+        finally
+        {
+            TemporarySqliteFile.ClearPool($"Data Source={path}");
+            foreach (var file in new[] { path, path + "-wal", path + "-shm" })
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch (IOException)
+                {
+                    // Another test's pool may still hold it; the temp directory is the OS's to clean.
+                }
+            }
+        }
+    }
+
+    [Fact]
     public async Task A_second_process_opening_the_upgraded_file_finds_nothing_left_to_do()
     {
         using (var first = new SqliteDatabase($"Data Source={_path}"))

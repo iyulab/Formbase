@@ -182,6 +182,21 @@ public sealed class SqliteFieldHintSource : IFieldHintSource, IFieldHintHistory
         await ReadRevisionsAsync(type, sequence: null, cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<int?> GetCurrentSequenceAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        // One statement, so a declaration deleted between two reads cannot leave a sequence with nothing in force.
+        command.CommandText =
+            """
+            SELECT MAX(sequence) FROM fb_field_hint_history
+            WHERE form_type = $type AND EXISTS (SELECT 1 FROM fb_field_hints WHERE form_type = $type)
+            """;
+        command.Parameters.AddWithValue("$type", type.Value);
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is long current ? (int)current : null;
+    }
+
+    /// <inheritdoc />
     public async Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default) =>
         (await ReadRevisionsAsync(type, sequence, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 

@@ -510,6 +510,8 @@ public class ProjectorTests
             => inner.AppendAsync(type, id, body, key, cancellationToken: cancellationToken);
         public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
             => inner.RetireAsync(type, id, key, cancellationToken);
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default)
+            => inner.AppendAsync(type, append, cancellationToken);
         public Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)
             => inner.AppendManyAsync(type, appends, cancellationToken);
         public Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)

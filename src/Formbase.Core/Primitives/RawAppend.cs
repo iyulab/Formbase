@@ -17,25 +17,39 @@ public sealed class RawAppend
     /// <summary>The record the append belongs to. Always present on a retirement.</summary>
     public RecordKey? Key { get; }
 
-    private RawAppend(DocumentId id, DocumentBody? body, RecordKey? key)
+    /// <summary>
+    /// The declaration the document is accepted under (see <see cref="StoredDocument.DeclarationSeq"/>), or
+    /// <see langword="null"/> when the caller does not say. It is a stamp, not part of the request: a retry
+    /// of the same append that finds a declaration written in between is still the same append, and gets the
+    /// document it first stored — with the stamp it first had.
+    /// </summary>
+    public int? DeclarationSeq { get; }
+
+    private RawAppend(DocumentId id, DocumentBody? body, RecordKey? key, int? declarationSeq)
     {
         Id = id;
         Body = body;
         Key = key;
+        DeclarationSeq = declarationSeq;
     }
 
     /// <summary>Whether this append retires the record named by <see cref="Key"/> rather than carrying content.</summary>
     public bool IsRetirement => Body is null;
 
-    /// <summary>A document, as <see cref="Ports.IRawStore.AppendAsync"/> appends it.</summary>
-    public static RawAppend Document(DocumentId id, DocumentBody body, RecordKey? key = null)
+    /// <summary>A document, as <see cref="Ports.IRawStore.AppendAsync(FormTypeRef, DocumentId, DocumentBody, RecordKey?, CancellationToken)"/> appends it.</summary>
+    /// <param name="id">The id the document is stored under.</param>
+    /// <param name="body">The content.</param>
+    /// <param name="key">The record the document belongs to, if it corrects one.</param>
+    /// <param name="declarationSeq">The declaration it is accepted under (<see cref="StoredDocument.DeclarationSeq"/>), when the caller knows.</param>
+    public static RawAppend Document(DocumentId id, DocumentBody body, RecordKey? key = null, int? declarationSeq = null)
     {
         ArgumentNullException.ThrowIfNull(body);
-        return new RawAppend(id, body, key);
+        ArgumentOutOfRangeException.ThrowIfNegative(declarationSeq ?? 0, nameof(declarationSeq));
+        return new RawAppend(id, body, key, declarationSeq);
     }
 
     /// <summary>A retirement of the record <paramref name="key"/>, as <see cref="Ports.IRawStore.RetireAsync"/> appends it.</summary>
-    public static RawAppend Retirement(DocumentId id, RecordKey key) => new(id, body: null, key);
+    public static RawAppend Retirement(DocumentId id, RecordKey key) => new(id, body: null, key, declarationSeq: null);
 
     /// <summary>
     /// Whether <paramref name="held"/> is what this append, under <paramref name="type"/>, stores — the

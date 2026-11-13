@@ -22,7 +22,8 @@ namespace Formbase.Sqlite;
 /// and process using the file, and the check for an existing id cannot race the insert. A batch
 /// (<see cref="AppendManyAsync"/>) runs in one such transaction, so it commits — and syncs to disk — once.</para>
 /// <para><b>A file from an earlier version is upgraded in place</b> on first use: the record-key and
-/// retirement columns are added, and every document already in it reads back as a record of its own.</para>
+/// retirement and declaration-sequence columns are added, and every document already in it reads back as a
+/// record of its own, accepted under a declaration that is not known (<see cref="StoredDocument.DeclarationSeq"/> is null).</para>
 /// </remarks>
 public sealed class SqliteRawStore : IRawStore
 {
@@ -39,7 +40,8 @@ public sealed class SqliteRawStore : IRawStore
             body        TEXT    NOT NULL,
             appended_at TEXT    NOT NULL,
             record_key  TEXT    NULL,
-            retired     INTEGER NOT NULL DEFAULT 0
+            retired     INTEGER NOT NULL DEFAULT 0,
+            declaration_seq INTEGER NULL
         );
         CREATE INDEX IF NOT EXISTS ix_fb_raw_documents_type_watermark ON fb_raw_documents (form_type, watermark);
         """;
@@ -49,7 +51,7 @@ public sealed class SqliteRawStore : IRawStore
     // of a retirement holds this placeholder, which is never read back as content.
     private const string RetiredBodyPlaceholder = "null";
 
-    private const string SelectColumns = "SELECT id, form_type, body, watermark, appended_at, record_key, retired FROM fb_raw_documents";
+    private const string SelectColumns = "SELECT id, form_type, body, watermark, appended_at, record_key, retired, declaration_seq FROM fb_raw_documents";
 
     private readonly SqliteDatabase _database;
     private readonly TimeProvider _clock;
@@ -69,6 +71,12 @@ public sealed class SqliteRawStore : IRawStore
 
     public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
         => AppendCoreAsync(type, RawAppend.Retirement(id, key), cancellationToken);
+
+    public Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(append);
+        return AppendCoreAsync(type, append, cancellationToken);
+    }
 
     private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken)
     {
@@ -139,11 +147,11 @@ public sealed class SqliteRawStore : IRawStore
         insert.Transaction = transaction;
         insert.CommandText =
             """
-            INSERT INTO fb_raw_documents (id, form_type, body, appended_at, record_key, retired)
-            VALUES ($id, $type, $body, $at, $key, $retired)
+            INSERT INTO fb_raw_documents (id, form_type, body, appended_at, record_key, retired, declaration_seq)
+            VALUES ($id, $type, $body, $at, $key, $retired, $declseq)
             RETURNING watermark
             """;
-        foreach (var name in new[] { "$id", "$type", "$body", "$at", "$key", "$retired" })
+        foreach (var name in new[] { "$id", "$type", "$body", "$at", "$key", "$retired", "$declseq" })
         {
             insert.Parameters.Add(new SqliteParameter { ParameterName = name });
         }
@@ -160,9 +168,10 @@ public sealed class SqliteRawStore : IRawStore
         insert.Parameters["$at"].Value = Format(appendedAt);
         insert.Parameters["$key"].Value = (object?)append.Key?.Value ?? DBNull.Value;
         insert.Parameters["$retired"].Value = append.IsRetirement ? 1 : 0;
+        insert.Parameters["$declseq"].Value = (object?)append.DeclarationSeq ?? DBNull.Value;
 
         var watermark = (long)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
-        return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), ReadInstant(Format(appendedAt)), append.Key);
+        return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), ReadInstant(Format(appendedAt)), append.Key, append.DeclarationSeq);
     }
 
     public async Task<StoredDocument?> GetAsync(DocumentId id, CancellationToken cancellationToken = default)
@@ -220,11 +229,12 @@ public sealed class SqliteRawStore : IRawStore
         reader.GetInt64(6) != 0 ? null : DocumentBody.Parse(reader.GetString(2)),
         new Watermark(reader.GetInt64(3)),
         ReadInstant(reader.GetString(4)),
-        reader.IsDBNull(5) ? null : RecordKey.Create(reader.GetString(5)));
+        reader.IsDBNull(5) ? null : RecordKey.Create(reader.GetString(5)),
+        reader.IsDBNull(7) ? null : reader.GetInt32(7));
 
     /// <summary>
     /// Brings a raw table created before record keys existed up to the current shape. Every row it held
-    /// becomes an unkeyed, non-retired document — exactly what it was.
+    /// becomes an unkeyed, non-retired document with no declaration sequence — exactly what it was.
     /// </summary>
     private static async Task UpgradeAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
     {
@@ -244,6 +254,7 @@ public sealed class SqliteRawStore : IRawStore
         {
             ("record_key", "TEXT NULL"),
             ("retired", "INTEGER NOT NULL DEFAULT 0"),
+            ("declaration_seq", "INTEGER NULL"),
         })
         {
             if (columns.Contains(column))

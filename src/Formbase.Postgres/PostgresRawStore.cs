@@ -28,7 +28,8 @@ namespace Formbase.Postgres;
 /// <para><b>A schema from an earlier version is upgraded in place</b> under the same lock: the record-key
 /// column is added and the body column accepts NULL, which is how a retirement is stored. A JSON
 /// <c>null</c> document is <c>'null'::jsonb</c>, never SQL NULL, so the two cannot be confused. Documents
-/// already stored read back as records of their own.</para>
+/// already stored read back as records of their own, accepted under a declaration that is not known
+/// (<see cref="StoredDocument.DeclarationSeq"/> is null).</para>
 /// </remarks>
 public sealed class PostgresRawStore : IRawStore, IDisposable
 {
@@ -61,7 +62,8 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
                 body jsonb NULL,
                 watermark bigint NOT NULL UNIQUE,
                 appended_at timestamptz NOT NULL,
-                record_key text NULL
+                record_key text NULL,
+                declaration_seq integer NULL
             );
             DO $upgrade$
             BEGIN
@@ -80,6 +82,12 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
                 THEN
                     ALTER TABLE "{_bootstrap.Schema}".raw_documents ALTER COLUMN body DROP NOT NULL;
                 END IF;
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = '{_bootstrap.Schema}' AND table_name = 'raw_documents' AND column_name = 'declaration_seq')
+                THEN
+                    ALTER TABLE "{_bootstrap.Schema}".raw_documents ADD COLUMN declaration_seq integer NULL;
+                END IF;
             END
             $upgrade$;
             CREATE INDEX IF NOT EXISTS ix_raw_documents_type_watermark
@@ -95,6 +103,12 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
 
     public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
         => AppendCoreAsync(type, RawAppend.Retirement(id, key), cancellationToken);
+
+    public Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(append);
+        return AppendCoreAsync(type, append, cancellationToken);
+    }
 
     private async Task<StoredDocument> AppendCoreAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken)
     {
@@ -137,7 +151,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         var stored = new Dictionary<DocumentId, StoredDocument>(distinct.Count);
         await using (var select = new NpgsqlCommand(
             $"""
-            SELECT id, form_type, body, watermark, appended_at, record_key
+            SELECT id, form_type, body, watermark, appended_at, record_key, declaration_seq
             FROM "{_bootstrap.Schema}".raw_documents WHERE id = ANY(@ids)
             """, connection, transaction))
         {
@@ -197,8 +211,8 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
     {
         var insert = new NpgsqlCommand(
             $"""
-            INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key)
-            VALUES (@id, @type, @body, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), @at, @key)
+            INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key, declaration_seq)
+            VALUES (@id, @type, @body, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), @at, @key, @declseq)
             RETURNING watermark
             """, connection, transaction);
         insert.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid));
@@ -206,6 +220,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         insert.Parameters.Add(new NpgsqlParameter("body", NpgsqlDbType.Jsonb));
         insert.Parameters.Add(new NpgsqlParameter("at", NpgsqlDbType.TimestampTz));
         insert.Parameters.Add(new NpgsqlParameter("key", NpgsqlDbType.Text));
+        insert.Parameters.Add(new NpgsqlParameter("declseq", NpgsqlDbType.Integer));
         return insert;
     }
 
@@ -217,9 +232,10 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         insert.Parameters["body"].Value = (object?)append.Body?.ToJsonString() ?? DBNull.Value;
         insert.Parameters["at"].Value = appendedAt;
         insert.Parameters["key"].Value = (object?)append.Key?.Value ?? DBNull.Value;
+        insert.Parameters["declseq"].Value = (object?)append.DeclarationSeq ?? DBNull.Value;
 
         var watermark = (long)(await insert.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!;
-        return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), appendedAt, append.Key);
+        return new StoredDocument(append.Id, type, append.Body, new Watermark(watermark), appendedAt, append.Key, append.DeclarationSeq);
     }
 
     /// <summary>
@@ -238,8 +254,8 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         {
             batch.BatchCommands.Add(new NpgsqlBatchCommand(
                 $"""
-                INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key)
-                VALUES ($1, $2, $3, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), $4, $5)
+                INSERT INTO "{_bootstrap.Schema}".raw_documents (id, form_type, body, watermark, appended_at, record_key, declaration_seq)
+                VALUES ($1, $2, $3, nextval('"{_bootstrap.Schema}".raw_watermark_seq'), $4, $5, $6)
                 RETURNING watermark
                 """)
             {
@@ -250,6 +266,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
                     new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Jsonb, Value = (object?)append.Body?.ToJsonString() ?? DBNull.Value },
                     new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.TimestampTz, Value = appendedAt },
                     new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = (object?)append.Key?.Value ?? DBNull.Value },
+                    new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Integer, Value = (object?)append.DeclarationSeq ?? DBNull.Value },
                 },
             });
         }
@@ -265,7 +282,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
 
             await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
             var append = appends[i];
-            inserted[i] = new StoredDocument(append.Id, type, append.Body, new Watermark(reader.GetInt64(0)), appendedAt, append.Key);
+            inserted[i] = new StoredDocument(append.Id, type, append.Body, new Watermark(reader.GetInt64(0)), appendedAt, append.Key, append.DeclarationSeq);
         }
 
         return inserted;
@@ -286,7 +303,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = new NpgsqlCommand(
             $"""
-            SELECT id, form_type, body, watermark, appended_at, record_key
+            SELECT id, form_type, body, watermark, appended_at, record_key, declaration_seq
             FROM "{_bootstrap.Schema}".raw_documents
             WHERE form_type = @type AND watermark > @after
             ORDER BY watermark
@@ -319,7 +336,7 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
     {
         await using var command = new NpgsqlCommand(
             $"""
-            SELECT id, form_type, body, watermark, appended_at, record_key
+            SELECT id, form_type, body, watermark, appended_at, record_key, declaration_seq
             FROM "{_bootstrap.Schema}".raw_documents WHERE id = @id
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id.Value);
@@ -334,7 +351,8 @@ public sealed class PostgresRawStore : IRawStore, IDisposable
         reader.IsDBNull(2) ? null : DocumentBody.Parse(reader.GetString(2)),
         new Watermark(reader.GetInt64(3)),
         reader.GetFieldValue<DateTimeOffset>(4),
-        reader.IsDBNull(5) ? null : RecordKey.Create(reader.GetString(5)));
+        reader.IsDBNull(5) ? null : RecordKey.Create(reader.GetString(5)),
+        reader.IsDBNull(6) ? null : reader.GetInt32(6));
 
     private ValueTask EnsureInitializedAsync(CancellationToken cancellationToken)
         => _bootstrap.EnsureAsync(_initDdl, cancellationToken);

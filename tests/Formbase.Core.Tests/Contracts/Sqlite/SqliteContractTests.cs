@@ -1,4 +1,5 @@
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
 using Formbase.Sqlite;
 using Microsoft.Data.Sqlite;
@@ -111,6 +112,9 @@ public sealed class SqliteFieldHintSourceContractTests : FieldHintSourceContract
 
     protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected) =>
         ((SqliteFieldHintSource)source).DeclareAsync(hints, expected, TestContext.Current.CancellationToken);
+
+    protected override Task RemoveAsync(IFieldHintSource source, FormTypeRef type) =>
+        ((SqliteFieldHintSource)source).DeleteAsync(type, TestContext.Current.CancellationToken);
 
     public void Dispose() => _file.Dispose();
 }

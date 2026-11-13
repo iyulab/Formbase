@@ -25,6 +25,14 @@ public interface IFieldHintHistory
     /// <summary>Every declaration written for <paramref name="type"/>, oldest first; empty when none was.</summary>
     Task<IReadOnlyList<DeclarationRevision>> ListRevisionsAsync(FormTypeRef type, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The sequence of the declaration in force for <paramref name="type"/> — the largest one written, since the
+    /// current declaration is always the last — or <see langword="null"/> when none is in force: nothing was
+    /// ever declared, or the declaration was deleted (its history stays, so the largest sequence in
+    /// <see cref="ListRevisionsAsync"/> alone would still name it). What intake stamps on a document.
+    /// </summary>
+    Task<int?> GetCurrentSequenceAsync(FormTypeRef type, CancellationToken cancellationToken = default);
+
     /// <summary>The declaration with <paramref name="sequence"/> in the history of <paramref name="type"/>, or null when there is none.</summary>
     Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default);
 }

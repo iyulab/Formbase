@@ -2,6 +2,7 @@ using Formbase.Core.Errors;
 using Formbase.Core.InMemory;
 using Formbase.Core.Ports;
 using Formbase.Core.Primitives;
+using Formbase.Core.Schema;
 
 namespace Formbase.Core.Tests.InMemory;
 
@@ -21,6 +22,101 @@ public class IntakeServiceTests
         var stored = await store.GetAsync(id, TestContext.Current.CancellationToken);
         stored.Should().NotBeNull();
         stored!.Type.Should().Be(Qc);
+    }
+
+    // --- the declaration a document is accepted under ---
+
+    private static FormTypeHints QcHints(int version = 1, string table = "qc_table") =>
+        new(Qc, table, [new FieldHint("lot", Formbase.Core.Schema.ColumnType.Text)], DeclarationVersion: version);
+
+    [Fact]
+    public async Task A_document_is_stamped_with_the_declaration_in_force()
+    {
+        var store = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(QcHints());
+        var intake = new IntakeService(store, hints);
+        var ct = TestContext.Current.CancellationToken;
+
+        var first = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), cancellationToken: ct);
+        hints.Declare(QcHints(2, "qc_table_2"));
+        var second = await intake.AcceptAsync(Qc, Body("""{"lot":"L-2"}"""), cancellationToken: ct);
+
+        (await store.GetAsync(first, ct))!.DeclarationSeq.Should().Be(1);
+        (await store.GetAsync(second, ct))!.DeclarationSeq.Should().Be(2, "the stamp is the store's sequence, which names a declaration even when its label is reused");
+    }
+
+    /// <summary>Intake is raw-first: a document before any declaration is accepted, and says no declaration was in force.</summary>
+    [Fact]
+    public async Task A_document_accepted_with_no_declaration_in_force_is_stamped_zero()
+    {
+        var store = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        var intake = new IntakeService(store, hints);
+        var ct = TestContext.Current.CancellationToken;
+        var before = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), cancellationToken: ct);
+        hints.Declare(QcHints());
+        hints.Remove(Qc);
+
+        var after = await intake.AcceptAsync(Qc, Body("""{"lot":"L-2"}"""), cancellationToken: ct);
+
+        (await store.GetAsync(before, ct))!.DeclarationSeq.Should().Be(0);
+        (await store.GetAsync(after, ct))!.DeclarationSeq.Should().Be(0, "a deleted declaration is not in force, though its history stays");
+    }
+
+    [Fact]
+    public async Task A_batch_is_stamped_alike_and_a_retirement_is_not_stamped()
+    {
+        var store = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(QcHints());
+        var intake = new IntakeService(store, hints);
+        var ct = TestContext.Current.CancellationToken;
+
+        var ids = await intake.AcceptManyAsync(Qc, [IntakeDocument.Accept(Body("""{"lot":"L-1"}""")), IntakeDocument.Accept(Body("""{"lot":"L-2"}"""))], ct);
+        var retirement = await intake.RetireAsync(Qc, RecordKey.Create("k"), cancellationToken: ct);
+
+        (await Task.WhenAll(ids.Select(id => store.GetAsync(id, ct)))).Select(d => d!.DeclarationSeq).Should().Equal(1, 1);
+        (await store.GetAsync(retirement, ct))!.DeclarationSeq.Should().BeNull();
+    }
+
+    /// <summary>A source that keeps no history cannot name a declaration, so the stamp stays unknown rather than being guessed.</summary>
+    [Fact]
+    public async Task Over_a_source_without_history_the_stamp_is_unknown()
+    {
+        var store = new InMemoryRawStore();
+        var intake = new IntakeService(store, new HistorylessSource());
+        var ct = TestContext.Current.CancellationToken;
+
+        var id = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), cancellationToken: ct);
+
+        (await store.GetAsync(id, ct))!.DeclarationSeq.Should().BeNull();
+    }
+
+    /// <summary>A retry carries the same id; a declaration written in between must not make it a reused key.</summary>
+    [Fact]
+    public async Task A_retry_after_a_redeclaration_returns_the_first_document_unchanged()
+    {
+        var store = new InMemoryRawStore();
+        var hints = new InMemoryFieldHintSource();
+        hints.Declare(QcHints());
+        var intake = new IntakeService(store, hints);
+        var ct = TestContext.Current.CancellationToken;
+        var key = DocumentId.New();
+        await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), key, cancellationToken: ct);
+        hints.Declare(QcHints(2, "qc_table_2"));
+
+        var again = await intake.AcceptAsync(Qc, Body("""{"lot":"L-1"}"""), key, cancellationToken: ct);
+
+        again.Should().Be(key);
+        (await store.GetAsync(key, ct))!.DeclarationSeq.Should().Be(1);
+    }
+
+    private sealed class HistorylessSource : IFieldHintSource
+    {
+        public Task<FormTypeHints?> GetHintsAsync(FormTypeRef type, CancellationToken cancellationToken = default) => Task.FromResult<FormTypeHints?>(null);
+
+        public Task<SectionSource?> GetSectionSourceAsync(FormTypeRef section, CancellationToken cancellationToken = default) => Task.FromResult<SectionSource?>(null);
     }
 
     private static async Task<int> CountStoredAsync(IRawStore store)
@@ -264,6 +360,9 @@ public class IntakeServiceTests
             => throw new InvalidOperationException("backing store down");
 
         public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("backing store down");
+
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("backing store down");
 
         public Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)

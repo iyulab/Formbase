@@ -28,6 +28,12 @@ public sealed class InMemoryRawStore : IRawStore
     public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default)
         => Task.FromResult(Append(type, id, body: null, key));
 
+    public Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(append);
+        return Task.FromResult(Append(type, append.Id, append.Body, append.Key, append.DeclarationSeq));
+    }
+
     public Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default)
     {
         var distinct = RawAppend.Distinct(type, appends);
@@ -47,7 +53,7 @@ public sealed class InMemoryRawStore : IRawStore
             {
                 if (!_byId.ContainsKey(append.Id))
                 {
-                    var stored = new StoredDocument(append.Id, type, append.Body, new Watermark(++_sequence), appendedAt, append.Key);
+                    var stored = new StoredDocument(append.Id, type, append.Body, new Watermark(++_sequence), appendedAt, append.Key, append.DeclarationSeq);
                     _log.Add(stored);
                     _byId[append.Id] = stored;
                 }
@@ -58,7 +64,7 @@ public sealed class InMemoryRawStore : IRawStore
         }
     }
 
-    private StoredDocument Append(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key)
+    private StoredDocument Append(FormTypeRef type, DocumentId id, DocumentBody? body, RecordKey? key, int? declarationSeq = null)
     {
         lock (_gate)
         {
@@ -68,7 +74,7 @@ public sealed class InMemoryRawStore : IRawStore
                 return existing;
             }
 
-            var stored = new StoredDocument(id, type, body, new Watermark(++_sequence), _clock.GetUtcNow(), key);
+            var stored = new StoredDocument(id, type, body, new Watermark(++_sequence), _clock.GetUtcNow(), key, declarationSeq);
             _log.Add(stored);
             _byId[id] = stored;
             return stored;

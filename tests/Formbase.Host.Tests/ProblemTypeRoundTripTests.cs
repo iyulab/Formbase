@@ -476,6 +476,9 @@ public sealed partial class ProblemTypeRoundTripTests : IClassFixture<WebApplica
         public Task<StoredDocument> RetireAsync(FormTypeRef type, DocumentId id, RecordKey key, CancellationToken cancellationToken = default) =>
             throw Unreachable();
 
+        public Task<StoredDocument> AppendAsync(FormTypeRef type, RawAppend append, CancellationToken cancellationToken = default) =>
+            throw Unreachable();
+
         public Task<IReadOnlyList<StoredDocument>> AppendManyAsync(FormTypeRef type, IReadOnlyList<RawAppend> appends, CancellationToken cancellationToken = default) =>
             throw Unreachable();
 

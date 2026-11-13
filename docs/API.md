@@ -286,7 +286,8 @@ GET /documents/0f0e9a2c-3d4b-4c11-9a1e-6b8d5f2a7c33
   "appendedAt": "2026-08-04T09:30:00+00:00",
   "body": { "customer": "ada", "total": 42 },
   "recordKey": null,
-  "retired": false
+  "retired": false,
+  "declarationSeq": 2
 }
 ```
 
@@ -296,6 +297,16 @@ that form type's append-only stream.
 
 A retirement reads back with `"retired": true`, its `recordKey`, and `"body": null`. Read `retired`
 rather than testing the body: a document whose content is the JSON value `null` has a null body too.
+
+**`declarationSeq`** says which declaration the document was accepted under: the `sequence` that
+`GET /formtypes/orders/declaration/history` lists, so `GET /formtypes/orders/declaration?seq=2` reads the form
+as it was when the document came in. It is stamped once, at intake, and a declaration written later does not
+change it. **`0`** means no declaration was in force — intake does not need one, so a document is accepted before
+the first is written, or after it was deleted. **`null`** means it is not known: the document was stored before the
+store kept this, or it is a retirement (which has no content to read against a declaration), or the host's
+declaration source keeps no history. The declaration and the raw store are two stores, so a declaration written in
+the instant between intake reading the declaration and storing the document is not seen: the stamp is the
+declaration intake saw.
 
 ---
 
@@ -315,7 +326,8 @@ GET /formtypes/orders/documents?after=12&limit=100
       "appendedAt": "2026-08-04T09:31:00+00:00",
       "body": { "customer": "ada", "total": 42, "note": "rush" },
       "recordKey": null,
-      "retired": false
+      "retired": false,
+      "declarationSeq": 2
     }
   ],
   "rawHead": 13

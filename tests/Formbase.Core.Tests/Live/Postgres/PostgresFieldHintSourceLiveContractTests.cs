@@ -1,4 +1,5 @@
 using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
 using Formbase.Core.Tests.Contracts;
 using Formbase.Postgres;
@@ -26,4 +27,7 @@ public sealed class PostgresFieldHintSourceLiveContractTests : FieldHintSourceCo
 
     protected override Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected)
         => ((PostgresFieldHintSource)source).DeclareAsync(hints, expected);
+
+    protected override Task RemoveAsync(IFieldHintSource source, FormTypeRef type)
+        => ((PostgresFieldHintSource)source).DeleteAsync(type);
 }

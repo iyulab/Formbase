@@ -234,6 +234,44 @@ public sealed class DeclarationSurfaceTests : IClassFixture<WebApplicationFactor
             ["child", "reference"]);
     }
 
+    /// <summary>
+    /// A document says which declaration it was accepted under — the store's sequence, the one the history
+    /// lists — so the form a document was written against can be read back as it was. No declaration in
+    /// force is <c>0</c>, not a missing value, and what was stamped does not move when a later declaration lands.
+    /// </summary>
+    [Fact]
+    public async Task A_document_reads_back_the_declaration_it_was_accepted_under()
+    {
+        var type = NewFormType();
+        var before = await AcceptAsync(type);
+        Declare(type, new FormTypeHints(FormTypeRef.Create(type), $"{type}_table", [new FieldHint("total", ColumnType.Integer)], DeclarationVersion: 1));
+        var first = await AcceptAsync(type);
+        Declare(type, new FormTypeHints(FormTypeRef.Create(type), $"{type}_table", [new FieldHint("total", ColumnType.Integer)], DeclarationVersion: 1));
+        var second = await AcceptAsync(type);
+
+        (await DeclarationSeqOfAsync(before)).Should().Be(0);
+        (await DeclarationSeqOfAsync(first)).Should().Be(1, "a later declaration does not reach back");
+        (await DeclarationSeqOfAsync(second)).Should().Be(2, "the same label written twice is two declarations, told apart by the sequence");
+        var history = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/declaration/history", TestContext.Current.CancellationToken));
+        history.GetProperty("revisions").GetArrayLength().Should().Be(2);
+    }
+
+    private async Task<Guid> AcceptAsync(string type)
+    {
+        var response = await _client.PostAsync(
+            $"/formtypes/{type}/documents",
+            new StringContent("""{"total":1}""", System.Text.Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        return (await ReadAsync(response)).GetProperty("documentId").GetGuid();
+    }
+
+    private async Task<int?> DeclarationSeqOfAsync(Guid id)
+    {
+        var document = await ReadAsync(await _client.GetAsync($"/documents/{id}", TestContext.Current.CancellationToken));
+        return document.GetProperty("declarationSeq") is { ValueKind: JsonValueKind.Number } seq ? seq.GetInt32() : null;
+    }
+
     private static IEnumerable<string?> Values(JsonElement schemas, string name) =>
         schemas.GetProperty(name).GetProperty("enum").EnumerateArray().Select(v => v.GetString());
 

@@ -204,6 +204,23 @@ public sealed class PostgresFieldHintSource : IFieldHintSource, IFieldHintHistor
         await ReadRevisionsAsync(type, sequence: null, cancellationToken).ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<int?> GetCurrentSequenceAsync(FormTypeRef type, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        // One statement, so a declaration deleted between two reads cannot leave a sequence with nothing in force.
+        await using var command = new NpgsqlCommand(
+            $"""
+            SELECT MAX(sequence) FROM "{_bootstrap.Schema}".field_hint_history
+            WHERE form_type = @type AND EXISTS (SELECT 1 FROM "{_bootstrap.Schema}".field_hints WHERE form_type = @type)
+            """,
+            connection);
+        command.Parameters.AddWithValue("type", type.Value);
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is int current ? current : null;
+    }
+
+    /// <inheritdoc />
     public async Task<DeclarationRevision?> GetRevisionAsync(FormTypeRef type, int sequence, CancellationToken cancellationToken = default) =>
         (await ReadRevisionsAsync(type, sequence, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 

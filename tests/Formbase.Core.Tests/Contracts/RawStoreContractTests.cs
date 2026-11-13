@@ -510,4 +510,87 @@ public abstract class RawStoreContractTests
         results.SelectMany(r => r).Concat(singles).Select(s => s.Watermark).Should().OnlyHaveUniqueItems();
         (await store.HeadAsync(Qc, TestContext.Current.CancellationToken)).Value.Should().Be(batches * size + batches);
     }
+
+    // --- the declaration a document was accepted under: stamped once, read back everywhere, never part of the request ---
+
+    [Fact]
+    public async Task A_document_reads_back_with_the_declaration_it_was_appended_under()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var stamped = RawAppend.Document(DocumentId.New(), Body("""{"n":1}"""), declarationSeq: 3);
+        var none = RawAppend.Document(DocumentId.New(), Body("""{"n":2}"""), declarationSeq: 0);
+        var unknown = RawAppend.Document(DocumentId.New(), Body("""{"n":3}"""));
+
+        var first = await store.AppendAsync(Qc, stamped, ct);
+        var second = await store.AppendAsync(Qc, none, ct);
+        var third = await store.AppendAsync(Qc, unknown, ct);
+
+        new[] { first, second, third }.Select(d => d.DeclarationSeq).Should().Equal(3, 0, null);
+        (await store.GetAsync(stamped.Id, ct))!.DeclarationSeq.Should().Be(3);
+        (await store.GetAsync(none.Id, ct))!.DeclarationSeq.Should().Be(0, "no declaration in force is a fact, not an unknown");
+        (await store.GetAsync(unknown.Id, ct))!.DeclarationSeq.Should().BeNull();
+        var streamed = new List<StoredDocument>();
+        await foreach (var document in store.StreamAsync(Qc, Watermark.Zero, ct))
+        {
+            streamed.Add(document);
+        }
+
+        streamed.Select(d => d.DeclarationSeq).Should().Equal(3, 0, null);
+    }
+
+    [Fact]
+    public async Task A_batch_stamps_each_of_its_documents()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var stamped = RawAppend.Document(DocumentId.New(), Body("""{"n":1}"""), declarationSeq: 2);
+        var unknown = RawAppend.Document(DocumentId.New(), Body("""{"n":2}"""));
+
+        var stored = await store.AppendManyAsync(Qc, [stamped, unknown], ct);
+
+        stored.Select(d => d.DeclarationSeq).Should().Equal(2, null);
+        (await store.GetAsync(stamped.Id, ct))!.DeclarationSeq.Should().Be(2);
+    }
+
+    /// <summary>A retirement carries no content to read against a declaration, so it is never stamped.</summary>
+    [Fact]
+    public async Task A_retirement_has_no_declaration()
+    {
+        var store = CreateStore();
+
+        var retired = await store.AppendAsync(Qc, RawAppend.Retirement(DocumentId.New(), RecordKey.Create("k")), TestContext.Current.CancellationToken);
+
+        retired.DeclarationSeq.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The stamp is not part of the request: a retry that finds the declaration revised in between is the same
+    /// append, not a reused key, and gets the document it first stored with the stamp it first had.
+    /// </summary>
+    [Fact]
+    public async Task A_retry_under_a_newer_declaration_returns_the_document_with_its_first_stamp()
+    {
+        var store = CreateStore();
+        var ct = TestContext.Current.CancellationToken;
+        var id = DocumentId.New();
+        await store.AppendAsync(Qc, RawAppend.Document(id, Body("""{"n":1}"""), declarationSeq: 1), ct);
+
+        var single = await store.AppendAsync(Qc, RawAppend.Document(id, Body("""{"n":1}"""), declarationSeq: 2), ct);
+        var batch = await store.AppendManyAsync(Qc, [RawAppend.Document(id, Body("""{"n":1}"""), declarationSeq: 5)], ct);
+
+        single.DeclarationSeq.Should().Be(1);
+        batch.Single().DeclarationSeq.Should().Be(1);
+        (await store.HeadAsync(Qc, ct)).Should().Be(new Watermark(1), "a retry takes no new watermark");
+    }
+
+    [Fact]
+    public async Task A_document_appended_by_the_id_and_body_overload_has_no_declaration()
+    {
+        var store = CreateStore();
+
+        var stored = await store.AppendAsync(Qc, DocumentId.New(), Body("""{"n":1}"""), cancellationToken: TestContext.Current.CancellationToken);
+
+        stored.DeclarationSeq.Should().BeNull();
+    }
 }

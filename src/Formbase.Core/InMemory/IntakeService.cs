@@ -11,16 +11,25 @@ namespace Formbase.Core.InMemory;
 /// Store-agnostic — works over any <see cref="IRawStore"/>. No declaration is needed to accept a document;
 /// the one question asked of the declarations is whether the form type is a repeated section of another
 /// (<see cref="FormTypeIsASectionException"/>), which accepts no documents of its own.
+/// <para>
+/// A document is stamped with the declaration in force when intake looked
+/// (<see cref="StoredDocument.DeclarationSeq"/>) — <c>0</c> when none was — if the declarations keep a history
+/// (<see cref="IFieldHintHistory"/>); over a source that does not, the stamp is left unknown. The declaration
+/// and the raw store are two stores, so a declaration written between the look and the append is not seen: the
+/// stamp names what intake saw, which is also what a caller that read the declaration just before posting saw.
+/// </para>
 /// </summary>
 public sealed class IntakeService : IIntakeService
 {
     private readonly IRawStore _rawStore;
     private readonly IFieldHintSource _hints;
+    private readonly IFieldHintHistory? _history;
 
     public IntakeService(IRawStore rawStore, IFieldHintSource hints)
     {
         _rawStore = rawStore;
         _hints = hints;
+        _history = hints as IFieldHintHistory;
     }
 
     public async Task<DocumentId> AcceptAsync(
@@ -33,10 +42,12 @@ public sealed class IntakeService : IIntakeService
         ArgumentNullException.ThrowIfNull(body);
         EnsureStorable(body, recordKey);
         await EnsureNotASectionAsync(type, cancellationToken).ConfigureAwait(false);
+        var declarationSeq = await CurrentDeclarationAsync(type, cancellationToken).ConfigureAwait(false);
+        var request = RawAppend.Document(idempotencyId ?? DocumentId.New(), body, recordKey, declarationSeq);
         return await AppendAsync(
             type,
-            RawAppend.Document(idempotencyId ?? DocumentId.New(), body, recordKey),
-            id => _rawStore.AppendAsync(type, id, body, recordKey, cancellationToken),
+            request,
+            () => _rawStore.AppendAsync(type, request, cancellationToken),
             $"Failed to accept document for form type '{type}'.").ConfigureAwait(false);
     }
 
@@ -48,10 +59,11 @@ public sealed class IntakeService : IIntakeService
     {
         EnsureStorable(null, recordKey);
         await EnsureNotASectionAsync(type, cancellationToken).ConfigureAwait(false);
+        var request = RawAppend.Retirement(idempotencyId ?? DocumentId.New(), recordKey);
         return await AppendAsync(
             type,
-            RawAppend.Retirement(idempotencyId ?? DocumentId.New(), recordKey),
-            id => _rawStore.RetireAsync(type, id, recordKey, cancellationToken),
+            request,
+            () => _rawStore.AppendAsync(type, request, cancellationToken),
             $"Failed to retire record '{recordKey}' of form type '{type}'.").ConfigureAwait(false);
     }
 
@@ -62,6 +74,7 @@ public sealed class IntakeService : IIntakeService
     {
         ArgumentNullException.ThrowIfNull(documents);
         await EnsureNotASectionAsync(type, cancellationToken).ConfigureAwait(false);
+        var declarationSeq = await CurrentDeclarationAsync(type, cancellationToken).ConfigureAwait(false);
 
         var appends = new RawAppend[documents.Count];
         for (var i = 0; i < documents.Count; i++)
@@ -71,7 +84,7 @@ public sealed class IntakeService : IIntakeService
             EnsureStorable(document.Body, document.RecordKey);
             var id = document.IdempotencyId ?? DocumentId.New();
             appends[i] = document.Body is { } body
-                ? RawAppend.Document(id, body, document.RecordKey)
+                ? RawAppend.Document(id, body, document.RecordKey, declarationSeq)
                 : RawAppend.Retirement(id, (RecordKey)document.RecordKey!); // a retirement always carries its key
         }
 
@@ -130,16 +143,38 @@ public sealed class IntakeService : IIntakeService
         }
     }
 
+    /// <summary>
+    /// The declaration documents are accepted under now: its sequence, <c>0</c> when none is in force, or
+    /// <see langword="null"/> (unknown) when the declarations keep no history. Read once per intake call, so a
+    /// batch is stamped alike. A history that cannot be read fails the intake as an unreadable declaration does.
+    /// </summary>
+    private async Task<int?> CurrentDeclarationAsync(FormTypeRef type, CancellationToken cancellationToken)
+    {
+        if (_history is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await _history.GetCurrentSequenceAsync(type, cancellationToken).ConfigureAwait(false) ?? 0;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
+        {
+            throw new IntakeException($"Failed to accept a document for form type '{type}': its declaration history could not be read.", ex);
+        }
+    }
+
     private static async Task<DocumentId> AppendAsync(
         FormTypeRef type,
         RawAppend request,
-        Func<DocumentId, Task<StoredDocument>> append,
+        Func<Task<StoredDocument>> append,
         string failure)
     {
         StoredDocument stored;
         try
         {
-            stored = await append(request.Id).ConfigureAwait(false);
+            stored = await append().ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not FormbaseException)
         {

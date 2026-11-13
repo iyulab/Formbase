@@ -15,13 +15,23 @@ namespace Formbase.Core.Primitives;
 /// <param name="Watermark">Position in the append-only stream.</param>
 /// <param name="AppendedAt">When the document entered the raw store.</param>
 /// <param name="Key">The record this document belongs to, or <see langword="null"/> for a record of its own. Always present on a retirement.</param>
+/// <param name="DeclarationSeq">
+/// The declaration the document was accepted under, by its place in the form type's declaration history
+/// (<see cref="Ports.DeclarationRevision.Sequence"/>): <c>0</c> when no declaration was in force —
+/// the intake is raw-first and takes a document before one is written, or after it was deleted — and
+/// <see langword="null"/> when it is not known: the document was stored before the store kept this, was
+/// appended by something that does not state it, or is a retirement, which carries no content to read
+/// against a declaration. It is stamped once and never changes; a declaration written later does not
+/// reach back.
+/// </param>
 public sealed record StoredDocument(
     DocumentId Id,
     FormTypeRef Type,
     DocumentBody? Body,
     Watermark Watermark,
     DateTimeOffset AppendedAt,
-    RecordKey? Key = null)
+    RecordKey? Key = null,
+    int? DeclarationSeq = null)
 {
     /// <summary>Whether this append retires the record named by <see cref="Key"/> rather than carrying content.</summary>
     public bool IsRetirement => Body is null;

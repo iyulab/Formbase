@@ -50,6 +50,60 @@ public sealed class PostgresRawStoreUpgradeTests
     }
 
     [Fact]
+    public async Task A_document_from_before_the_upgrade_has_no_known_declaration_and_a_new_one_keeps_its_stamp()
+    {
+        var (schema, oldId) = await CreateEarlierSchemaAsync();
+        var store = new PostgresRawStore(_fixture.DataSource, schema);
+        var ct = TestContext.Current.CancellationToken;
+
+        var stamped = await store.AppendAsync(Invoice, RawAppend.Document(DocumentId.New(), DocumentBody.Parse("""{"n":2}"""), declarationSeq: 4), ct);
+        var batched = await store.AppendManyAsync(Invoice, [RawAppend.Document(DocumentId.New(), DocumentBody.Parse("""{"n":3}"""), declarationSeq: 0)], ct);
+
+        (await store.GetAsync(DocumentId.From(oldId), ct))!.DeclarationSeq.Should().BeNull();
+        (await store.GetAsync(stamped.Id, ct))!.DeclarationSeq.Should().Be(4);
+        (await store.GetAsync(batched.Single().Id, ct))!.DeclarationSeq.Should().Be(0);
+    }
+
+    /// <summary>The shape the last published version wrote — keys and nullable bodies, no declaration sequence.</summary>
+    [Fact]
+    public async Task A_schema_from_the_last_published_version_gains_the_declaration_column_and_keeps_what_it_held()
+    {
+        var schema = "fb_upgrade_" + Guid.NewGuid().ToString("N");
+        var held = Guid.NewGuid();
+        await using (var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken))
+        {
+            await using var command = new NpgsqlCommand(
+                $$"""
+                CREATE SCHEMA "{{schema}}";
+                CREATE SEQUENCE "{{schema}}".raw_watermark_seq AS bigint START 1 MINVALUE 1;
+                CREATE TABLE "{{schema}}".raw_documents (
+                    id uuid PRIMARY KEY,
+                    form_type text NOT NULL,
+                    body jsonb NULL,
+                    watermark bigint NOT NULL UNIQUE,
+                    appended_at timestamptz NOT NULL,
+                    record_key text NULL
+                );
+                INSERT INTO "{{schema}}".raw_documents (id, form_type, body, watermark, appended_at, record_key)
+                VALUES (@id, 'invoice', '{"n":1}'::jsonb, nextval('"{{schema}}".raw_watermark_seq'), now(), 'k');
+                """,
+                connection);
+            command.Parameters.AddWithValue("id", held);
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var store = new PostgresRawStore(_fixture.DataSource, schema);
+        var ct = TestContext.Current.CancellationToken;
+
+        var old = await store.GetAsync(DocumentId.From(held), ct);
+        var next = await store.AppendAsync(Invoice, RawAppend.Document(DocumentId.New(), DocumentBody.Parse("""{"n":2}"""), RecordKey.Create("k"), declarationSeq: 0), ct);
+
+        old!.Key.Should().Be(RecordKey.Create("k"));
+        old.DeclarationSeq.Should().BeNull();
+        (await store.GetAsync(next.Id, ct))!.DeclarationSeq.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Instances_reaching_an_earlier_schema_together_upgrade_it_once()
     {
         var (schema, _) = await CreateEarlierSchemaAsync();

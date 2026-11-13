@@ -20,6 +20,9 @@ public abstract class FieldHintSourceContractTests
     /// <summary>Declares hints the way this implementation does it, writing only if <paramref name="expected"/> holds.</summary>
     protected abstract Task DeclareAsync(IFieldHintSource source, FormTypeHints hints, DeclarationExpectation expected);
 
+    /// <summary>Deletes a form type's declaration the way this implementation does it (it is not on the port).</summary>
+    protected abstract Task RemoveAsync(IFieldHintSource source, FormTypeRef type);
+
     private static readonly FormTypeRef Qc = FormTypeRef.Create("qc");
     private static readonly FormTypeRef Work = FormTypeRef.Create("work");
 
@@ -737,5 +740,51 @@ public abstract class FieldHintSourceContractTests
 
         (await history.ListRevisionsAsync(Work, TestContext.Current.CancellationToken)).Select(r => r.Sequence).Should().Equal(1);
         (await history.ListRevisionsAsync(Qc, TestContext.Current.CancellationToken)).Select(r => r.Sequence).Should().Equal(1, 2);
+    }
+
+    // --- the declaration in force: what intake stamps on a document ---
+
+    [Fact]
+    public async Task No_declaration_is_in_force_for_a_form_type_never_declared()
+    {
+        var source = CreateSource();
+
+        (await ((IFieldHintHistory)source).GetCurrentSequenceAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task The_declaration_in_force_is_the_last_one_written()
+    {
+        var source = CreateSource();
+        var history = (IFieldHintHistory)source;
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        (await history.GetCurrentSequenceAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(1);
+
+        await DeclareAsync(source, QcAtVersion(1, "qc_table_again"), DeclarationExpectation.InForce(1));
+
+        (await history.GetCurrentSequenceAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(2);
+        (await history.GetCurrentSequenceAsync(Work, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    /// <summary>
+    /// A deleted declaration keeps its history, so the largest sequence in the history is not the one in
+    /// force — none is — and a declaration written after the delete continues the count rather than reusing it.
+    /// </summary>
+    [Fact]
+    public async Task A_deleted_declaration_leaves_none_in_force_and_the_next_one_continues_the_count()
+    {
+        var source = CreateSource();
+        var history = (IFieldHintHistory)source;
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+        await DeclareAsync(source, QcAtVersion(2, "qc_table_2"), DeclarationExpectation.InForce(1));
+
+        await RemoveAsync(source, Qc);
+
+        (await history.GetCurrentSequenceAsync(Qc, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await history.ListRevisionsAsync(Qc, TestContext.Current.CancellationToken)).Should().HaveCount(2);
+
+        await DeclareAsync(source, QcAtVersion(1), DeclarationExpectation.Absent);
+
+        (await history.GetCurrentSequenceAsync(Qc, TestContext.Current.CancellationToken)).Should().Be(3);
     }
 }
