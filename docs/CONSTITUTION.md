@@ -284,10 +284,10 @@ append advisory lock은 성능을 포기하고 정합성을 샀다(`PostgresRawS
 | 어댑터에 정책성 로직 | `MorphDbProjectionStore` — 오프셋을 페이지로 조립 | 개선 대상. 로드맵 등재 |
 | ~~문서-코드 불일치~~ | ~~`README.md` "Six ports"~~ | ✅ 해소 (2026-07-20) |
 | ~~다중값(배열) 값이 Text 컬럼에 JSON 문자열로 채워진다~~ | ~~`DocumentMapper` — `ColumnType.Text` 분기가 배열·객체에 `GetRawText()`를 돌려준다~~ | ✅ **해소** — 배열·객체는 다른 타입과 같이 `ProjectionSkip`(사유가 `Jsonb` 선언을 가리킨다). 스칼라는 그대로. 선택 칸이면 그 칸만 비우고 `ProjectionFieldSkip`(같은 사유) |
-| **부재와 null을 구별하지 못함** | `DocumentMapper.cs` — `!present`와 `JsonValueKind.Null`이 같은 분기. 투영에서 *"칸을 비웠다"*와 *"그 칸이 없었다"*가 같은 `null`이 된다 | 🟡 **부분 해소** — `ProjectionResult.AbsentFieldCounts`가 투영 단위 집계로 드러낸다. **행 단위 구별은 미해소**(C1 잔존) |
+| **부재와 null을 구별하지 못함** | `DocumentMapper.cs` — `!present`와 `JsonValueKind.Null`이 같은 분기. 투영에서 *"칸을 비웠다"*와 *"그 칸이 없었다"*가 같은 `null`이 된다 | 🟡 **부분 해소** — `ProjectionResult.AbsentFieldCounts`(문서의 선언이 요구했는데 안 보낸 칸)와 `NotYetDeclaredFieldCounts`(그 칸이 선언되기 전에 접수된 문서)가 투영 단위 집계로 가르고, 문서는 접수 때의 선언 순번(`declarationSeq`)을 기억한다. **투영된 표의 행 안에서는 여전히 둘 다 `NULL`** — 행 단위 표시는 미해소(C1 잔존) |
 | ~~선언 어휘가 평탄함~~ | ~~`FieldHint`~~ | ✅ **선언 층 해소** (0.6.0 — `RelationHint`(Child·Reference) + `FieldBinding` + `SourceKey` + `DeclarationVersion`). **의미 실행은 아래 두 행으로 이월** |
 | ~~`FieldBinding.Reference`가 그때 값을 돌려준다~~ | ~~`Projector` 경로~~ | ✅ **해소** (`f5e8164`) — 미해결 참조 칼럼은 이제 **비워서** 투영하고 `ProjectionResult.UnresolvedReferences`로 이름을 보고한다(문서의 값을 대신 채우지 않는다 — §1 「미결정을 그럴듯한 기본값으로 메우지 않는다」 정렬) |
-| **유추 제안기가 선언 축을 산출하지 못한다** | `LlmSchemaProposer` — `ColumnDef`의 `SourceKey`·`Binding`·`BindingTarget`과 `TableSchema.Relations`를 채우지 않는다. 등록 시 힌트 제안기를 대체하므로 선언한 시간 결합·관계가 무경고로 소실된다 | **C2.** §6-1(2026-08-03 개정) 미이행. 선언·미선언을 합성하는 제안기로 해소 예정 |
+| ~~유추 제안기가 선언 축을 산출하지 못한다~~ | ~~`LlmSchemaProposer` — 등록 시 힌트 제안기를 대체해 선언한 시간 결합·관계가 소실된다~~ | ✅ **해소** (`d4fc5d3`) — 지능을 켜면 `DeclaredFirstSchemaProposer`가 선언을 그대로 싣고 유추는 선언되지 않은 칸에만 답한다. 유추 제안기 자신은 여전히 `SourceKey`·`Binding`·`Relations`를 채우지 않는다(관찰로는 알 수 없는 사실이므로 의도) |
 
 ---
 
