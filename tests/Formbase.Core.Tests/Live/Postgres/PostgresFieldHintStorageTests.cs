@@ -79,7 +79,7 @@ public sealed class PostgresFieldHintStorageTests
                 CREATE SCHEMA "{{{schema}}}";
                 CREATE TABLE "{{{schema}}}".field_hints (form_type text PRIMARY KEY, table_name text NOT NULL, fields jsonb NOT NULL, declared_at timestamptz NOT NULL);
                 INSERT INTO "{{{schema}}}".field_hints VALUES ('inspection', 'inspections',
-                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":{"Value":"equipment"},"KeyField":"code"}}]', now());
+                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":"equipment","ValueField":"code"}}]', now());
                 """;
             await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
