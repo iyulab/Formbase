@@ -10,7 +10,8 @@ namespace Formbase.Core.Primitives;
 /// <remarks>
 /// Without it the serializer wrote <c>{"Value":"…"}</c> — the getter is public — but could not read it
 /// back: the constructor is private and the property has no setter, so every form type deserialized as
-/// the empty default. That object form is still read, because declarations written that way are on disk.
+/// the empty default. No version since 0.14.1 writes that object form, and it is no longer read: it is
+/// refused with the way to rewrite it, so a store that still holds one is told so instead of misreading it.
 /// </remarks>
 internal sealed class FormTypeRefJsonConverter : JsonConverter<FormTypeRef>
 {
@@ -19,7 +20,9 @@ internal sealed class FormTypeRefJsonConverter : JsonConverter<FormTypeRef>
         string? value = reader.TokenType switch
         {
             JsonTokenType.String => reader.GetString(),
-            JsonTokenType.StartObject => ReadLegacyObject(ref reader),
+            JsonTokenType.StartObject => throw new JsonException(
+                "A form type is a string, not an object. The object form ({\"Value\":\"…\"}) was written only by versions before 0.14.1 "
+                + "and is no longer read: put the declaration again with a release that still reads it (0.36.x), which stores the string form, then upgrade."),
             _ => throw new JsonException($"A form type is a string, not {reader.TokenType}."),
         };
 
@@ -35,33 +38,4 @@ internal sealed class FormTypeRefJsonConverter : JsonConverter<FormTypeRef>
 
     public override void Write(Utf8JsonWriter writer, FormTypeRef value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value.Value);
-
-    // TODO(remove-legacy-read): the object form is written by no version since 0.14.1 and is read only for
-    // declarations a store kept from before it. Remove this reader (and the StartObject branch above) once no durable
-    // store holds a declaration written before 0.14.1 — a one-time rewrite of the stored declarations at upgrade, or a
-    // stated minimum version that starts after 0.14.1; the shape is then simply refused with the message below.
-    private static string? ReadLegacyObject(ref Utf8JsonReader reader)
-    {
-        string? value = null;
-        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-        {
-            if (reader.TokenType != JsonTokenType.PropertyName)
-            {
-                throw new JsonException("A form type object holds only property names and values.");
-            }
-
-            var name = reader.GetString();
-            reader.Read();
-            if (string.Equals(name, nameof(FormTypeRef.Value), StringComparison.OrdinalIgnoreCase) && reader.TokenType == JsonTokenType.String)
-            {
-                value = reader.GetString();
-            }
-            else
-            {
-                reader.Skip();
-            }
-        }
-
-        return value;
-    }
 }

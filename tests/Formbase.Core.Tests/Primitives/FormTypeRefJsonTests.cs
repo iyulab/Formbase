@@ -21,11 +21,12 @@ public sealed class FormTypeRefJsonTests
     }
 
     [Fact]
-    public void The_object_form_earlier_versions_wrote_is_still_read()
+    public void The_object_form_earlier_versions_wrote_is_refused_with_the_way_to_rewrite_it()
     {
-        var read = JsonSerializer.Deserialize<Holder>("""{"Type":{"Value":"work-order"}}""");
+        var read = () => JsonSerializer.Deserialize<Holder>("""{"Type":{"Value":"work-order"}}""");
 
-        read!.Type.Should().Be(FormTypeRef.Create("work-order"));
+        read.Should().Throw<JsonException>().Which.Message.Should().Contain("before 0.14.1").And.Contain("put the declaration again",
+            "a store that still holds the old shape has to be told what to do, not handed a blank form type");
     }
 
     [Theory]

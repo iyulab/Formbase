@@ -73,6 +73,9 @@
   projection. Run one with POST /formtypes/orders/projection.» The API reference now says what `limit=0` on records does (no rows,
   and `hasMore` says whether the query matches any), marks what this release adds with `Since 0.37.0`, and the README's link to
   it names the tag of the release rather than the default branch.
+- **Breaking:** a stored declaration that holds a form type in the object form (`{"Value":"…"}`) is no longer read. Versions before
+  0.14.1 wrote that form, and no version since has; reading it is refused with a message that says to put the declaration again with
+  0.36.x (which stores the string form) and then upgrade. A deployment that never ran a version before 0.14.1 is unaffected.
 
 ## 0.36.0
 

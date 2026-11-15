@@ -6,9 +6,10 @@ using Microsoft.Data.Sqlite;
 namespace Formbase.Core.Tests.Contracts.Sqlite;
 
 /// <summary>
-/// A declarations table written by an earlier version: three columns, and form types inside the fields
-/// JSON in the object form the serializer used to write. It is upgraded in place on first use, and what
-/// it held reads back as it was stored.
+/// A declarations table written by an earlier version: three columns, and an entity reference in the
+/// shape releases before 0.17.0 stored (<c>KeyField</c>). It is upgraded in place on first use, and what
+/// it held reads back as it was stored. A form type in the object form versions before 0.14.1 wrote is
+/// no longer read: it is refused with the way to rewrite it.
 /// </summary>
 public sealed class SqliteFieldHintUpgradeTests : IDisposable
 {
@@ -25,7 +26,7 @@ public sealed class SqliteFieldHintUpgradeTests : IDisposable
                 """
                 CREATE TABLE fb_field_hints (form_type TEXT PRIMARY KEY, table_name TEXT NOT NULL, fields TEXT NOT NULL);
                 INSERT INTO fb_field_hints VALUES ('inspection', 'inspections',
-                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":{"Value":"equipment"},"KeyField":"code"}}]');
+                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":"equipment","KeyField":"code"}}]');
                 """;
             await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
@@ -42,6 +43,29 @@ public sealed class SqliteFieldHintUpgradeTests : IDisposable
         var upgraded = await source.GetHintsAsync(FormTypeRef.Create("inspection"), TestContext.Current.CancellationToken);
         upgraded!.DeclarationVersion.Should().Be(2, "the upgraded table keeps what is declared into it now");
         upgraded.BusinessName.Should().Be("설비 점검일지");
+    }
+
+    [Fact]
+    public async Task A_declaration_whose_form_type_is_in_the_object_form_of_versions_before_0_14_1_is_refused_with_the_way_out()
+    {
+        await using (var connection = new SqliteConnection(_file.ConnectionString))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                CREATE TABLE fb_field_hints (form_type TEXT PRIMARY KEY, table_name TEXT NOT NULL, fields TEXT NOT NULL);
+                INSERT INTO fb_field_hints VALUES ('inspection', 'inspections',
+                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":{"Value":"equipment"},"KeyField":"code"}}]');
+                """;
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var source = new SqliteFieldHintSource(_file.Database);
+        var read = async () => await source.GetHintsAsync(FormTypeRef.Create("inspection"), TestContext.Current.CancellationToken);
+
+        (await read.Should().ThrowAsync<System.Text.Json.JsonException>())
+            .Which.Message.Should().Contain("before 0.14.1").And.Contain("put the declaration again");
     }
 
     public void Dispose() => _file.Dispose();
