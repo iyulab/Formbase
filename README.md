@@ -76,7 +76,8 @@ or generic host already has it). The adapters are what bring in Npgsql, the Morp
 `Microsoft.Data.Sqlite` and `Microsoft.Extensions.AI`.
 
 **Or run it as a service.** `Formbase.Host` serves the engine over HTTP so a consumer does not have
-to be a .NET process in the same container — see [docs/API.md](docs/API.md). The host is a packaging
+to be a .NET process in the same container — see the [HTTP API reference](https://github.com/iyulab/Formbase/blob/v0.36.0/docs/API.md)
+(the one for the release below; the copy on `main` may describe what is not released yet). The host is a packaging
 of the library rather than a replacement for it: embedding the engine directly stays supported, and
 the packages above are unchanged by its existence.
 
@@ -89,8 +90,22 @@ before it pushes — pull it instead of building from source:
 
 ```bash
 docker pull ghcr.io/iyulab/formbase:0.36.0
-docker run -p 8080:8080 ghcr.io/iyulab/formbase:0.36.0
+docker run -p 127.0.0.1:8080:8080 ghcr.io/iyulab/formbase:0.36.0
 ```
+
+`127.0.0.1:` keeps it on this machine: with no access key configured — the default — the host answers every caller that can
+reach it (*Who may call* in the API reference). Then, from another terminal, the whole path from a document to a row:
+
+```bash
+H='Content-Type: application/json'; B=http://127.0.0.1:8080
+curl -X POST $B/formtypes/orders/documents -H "$H" -d '{ "customer": "ada", "total": 42 }'        # accept a document — no declaration needed
+curl -X PUT  $B/formtypes/orders/declaration -H "$H" -d '{ "tableName": "orders", "declarationVersion": 1,
+  "fields": [ { "name": "customer", "type": "text" }, { "name": "total", "type": "integer" } ] }'  # say what its fields are
+curl -X POST $B/formtypes/orders/projection                                                        # build the table from what was accepted
+curl "$B/formtypes/orders/records?filter=customer:ada&orderBy=-total"                              # read rows back
+```
+
+A read before the projection answers `409 /problems/not-projected` and names the request that builds it.
 
 By default it composes the in-process stores, which needs nothing else running and loses everything
 on restart. A deployment selects the durable profile instead:
@@ -492,7 +507,7 @@ Implemented:
 - **Shape-aware staleness** — the projection state records a `ProjectionStamp` (watermark + table name + schema fingerprint of what was materialized). Redeclaring hints without re-projecting reads `Stale` even though no document arrived; a declaration that moved to a new table name reads `NotProjected` instead of masquerading as a transient backend outage
 - Record query with not-projected / stale / unverified / unavailable distinction, and deterministic ordering/paging
 - MorphDB projection-store adapter — the projection-store contract runs end-to-end against the published MorphDB server image; the `morphdb-live` CI job repeats that run on every push, watching for client/server drift
-- **HTTP surface** (`Formbase.Host`) — intake with a first-class idempotency key, raw reads (a document by id, or a form type's stream page by page — every field, declared or not), declarations read, put in force and removed, projection runs and state, and record queries, described by a generated OpenAPI document and held to [docs/API.md](docs/API.md) by a parity gate. A container image is — published to `ghcr.io/iyulab/formbase` from the same Dockerfile `docker-compose.yml` builds (see [Install](#install))
+- **HTTP surface** (`Formbase.Host`) — intake with a first-class idempotency key, raw reads (a document by id, or a form type's stream page by page — every field, declared or not), declarations read, put in force and removed, projection runs and state, and record queries, described by a generated OpenAPI document and held to the [API reference](https://github.com/iyulab/Formbase/blob/v0.36.0/docs/API.md) by a parity gate. A container image is — published to `ghcr.io/iyulab/formbase` from the same Dockerfile `docker-compose.yml` builds (see [Install](#install))
 - DI composition and contract test suites for the store ports
 - **Absence accounting** — a projection distinguishes a field a document never had from one explicitly written `null`: `ProjectionResult.AbsentFieldCounts` reports, per column, how many landed rows left out a field their own declaration asked for, and `NotYetDeclaredFieldCounts` how many came from documents accepted before that column was declared. Each document remembers the declaration it was accepted under (`declarationSeq`), and the declarations a form type has had are kept and can be read back, so a document is read by the form it was written on ([Formology](https://github.com/iyulab/Formology) rule 17). A document stored before this was recorded reads back with an unknown declaration and keeps the earlier counting
 - **Projection triggers** — `IProjectionTrigger` (watermark-lag policy) plus `ProjectionSupervisor`; the hosting cadence (timer, hook) stays with the host

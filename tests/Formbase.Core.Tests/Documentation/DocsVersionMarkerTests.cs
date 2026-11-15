@@ -58,6 +58,24 @@ public class DocsVersionMarkerTests
                 "the tag it sends a reader to for released documentation has to be the released one");
     }
 
+    /// <summary>
+    /// The front page sends a reader of the published image to the reference. A relative link goes to the default
+    /// branch, which is ahead of the image: the reader meets routes it answers <c>404</c> to. The link names the tag of
+    /// the released version instead, and moves with it — so a release cannot leave the reader on the old reference.
+    /// </summary>
+    [Fact]
+    public void The_front_page_links_the_reference_at_the_released_tag_and_not_at_the_branch()
+    {
+        var readme = RepoFiles.Read("README.md");
+
+        Regex.Matches(readme, @"\]\((?<url>[^)\s]*docs/API\.md[^)\s]*)\)").Select(m => m.Groups["url"].Value)
+            .Should().OnlyContain(url => url.Contains($"/blob/v{ReleasedVersion()}/docs/API.md", StringComparison.Ordinal),
+                "a relative link, or one at another version, lands a reader of the published image on text that "
+                + "describes what it does not serve yet");
+
+        Regex.IsMatch(readme, @"\]\([^)\s]*docs/API\.md").Should().BeTrue("the front page must link the reference at all");
+    }
+
     [Fact]
     public void The_bundle_says_it_cannot_start_exactly_while_it_asks_for_a_MorphDB_ahead_of_the_pair()
     {

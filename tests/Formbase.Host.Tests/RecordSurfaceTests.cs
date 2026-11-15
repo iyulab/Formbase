@@ -60,6 +60,8 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         var problem = await ReadAsync(response);
         problem.GetProperty("type").GetString().Should().Be("/problems/not-projected");
         problem.GetProperty("detail").GetString().Should().Contain("trigger a projection")
+            .And.Contain($"POST /formtypes/{type}/projection",
+                "«trigger a projection» does not say which request does it, and the caller has no other way to find the route")
             .And.NotContain("Declare field hints");
     }
 
@@ -226,6 +228,24 @@ public sealed class RecordSurfaceTests : IClassFixture<WebApplicationFactory<Pro
         all.GetProperty("rows").GetArrayLength().Should().Be(101);
         all.GetProperty("hasMore").GetBoolean().Should().BeFalse();
         exact.GetProperty("hasMore").GetBoolean().Should().BeFalse("the page ends exactly where the rows do");
+    }
+
+    /// <summary>
+    /// <c>limit=0</c> asks for no rows, and <c>hasMore</c> keeps its meaning — the query matches rows beyond this (empty)
+    /// page — so it answers whether anything matches. A caller paging by the size of the page it got must not use it: that
+    /// size is zero, so the offset never advances.
+    /// </summary>
+    [Fact]
+    public async Task A_limit_of_zero_returns_no_rows_and_says_whether_the_query_matches_any()
+    {
+        var type = await SeedManyAsync(3);
+
+        var matching = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?limit=0", TestContext.Current.CancellationToken));
+        var none = await ReadAsync(await _client.GetAsync($"/formtypes/{type}/records?limit=0&filter=total:-1", TestContext.Current.CancellationToken));
+
+        matching.GetProperty("rows").GetArrayLength().Should().Be(0);
+        matching.GetProperty("hasMore").GetBoolean().Should().BeTrue("the query matches rows and none of them is on this page");
+        none.GetProperty("hasMore").GetBoolean().Should().BeFalse("nothing matches, so nothing lies beyond the page");
     }
 
     [Fact]

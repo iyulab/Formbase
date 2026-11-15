@@ -33,11 +33,13 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
     {
         var problem = exception switch
         {
+            // The engine's message names the remedy without naming a route, since the engine has none; this
+            // surface does, and a caller reading «trigger a projection» has to go and find which request that is.
             NotProjectedException e => Problem(
                 StatusCodes.Status409Conflict,
                 "not-projected",
                 "The form type has no projection yet",
-                e.Message),
+                e.HasSchema ? $"{e.Message} Run one with POST /formtypes/{e.FormType}/projection." : e.Message),
 
             ProjectionUnverifiedException e => Problem(
                 StatusCodes.Status409Conflict,
