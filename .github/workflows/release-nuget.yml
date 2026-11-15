@@ -188,6 +188,16 @@ jobs:
           name: release-notes
           path: ${{ runner.temp }}
 
+      # The runner image carries whichever SDKs it was built with, and global.json pins one exactly
+      # (rollForward disabled), so `dotnet` refuses to run here until the pinned one is installed -- the
+      # same step the pack job uses. Without it this job failed after the packages were already out and
+      # left the tag, the GitHub Release and the GitHub Packages copy undone.
+      - name: Setup .NET
+        if: needs.pack.outputs.any == 'true'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
       # --skip-duplicate stays as idempotence for a run that resumes a partial release. GitHub
       # Packages rejects snupkg, so only the .nupkg glob is pushed here.
       - name: Push to GitHub Packages
