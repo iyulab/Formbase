@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.37.0
+
+A minor: the declarations a form type has had are kept and can be read by sequence, a document remembers the declaration it was accepted
+under (so a field declared later is no longer counted as absent from the documents that came before it), and a declaration may leave a
+field's binding out and read back as `undecided`. Two **Breaking** entries below: a stored declaration written by a version before 0.14.1
+(object form) or before 0.17.0 (`KeyField`) is no longer read — put it again with 0.36.x first, then upgrade. The image logs less on
+start. Pairs with MorphDB `0.37.x`.
 
 ### Added
 
@@ -74,8 +80,10 @@
   connection string, in an image that adds the library.
 - **`409 /problems/not-projected` names the request that builds the projection** when a shape is declared but not built: «… trigger a
   projection. Run one with POST /formtypes/orders/projection.» The API reference now says what `limit=0` on records does (no rows,
-  and `hasMore` says whether the query matches any), marks what this release adds with `Since 0.37.0`, and the README's link to
+  and `hasMore` says whether the query matches any), and the README's link to
   it names the tag of the release rather than the default branch.
+- **`Formbase.MorphDb` builds on `MorphDB.Client` 0.37.0** (was 0.36.0); the live MorphDB suite and the compose
+  file run `ghcr.io/iyulab/morphdb:0.37.0`.
 - **Breaking:** a stored declaration that holds a form type in the object form (`{"Value":"…"}`) is no longer read. Versions before
   0.14.1 wrote that form, and no version since has; reading it is refused with a message that says to put the declaration again with
   0.36.x (which stores the string form) and then upgrade. A deployment that never ran a version before 0.14.1 is unaffected.

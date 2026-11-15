@@ -1,7 +1,7 @@
 # HTTP API
 
-> The released version is **0.36.0**, and the documents that describe it are the tree at its tag —
-> open a file at `v0.36.0` to read the reference for what you can install today.
+> The released version is **0.37.0**, and the documents that describe it are the tree at its tag —
+> open a file at `v0.37.0` to read the reference for what you can install today.
 >
 > A `Since x.y.z` marker names a **Formbase** version. Statements about the MorphDB a deployment
 > runs against are written in prose, because that version moves on its own line.
@@ -21,7 +21,7 @@ GET    /formtypes/{type}/documents     # Read a form type's stream, page by page
 GET    /formtypes/{type}/rows          # Read a repeated section's rows, through its parent's stream
 GET    /documents/{id}                 # Read a stored document
 GET    /formtypes/{type}/declaration   # Read the declaration in force
-GET    /formtypes/{type}/declaration/history   # List the declarations the form type has had (Since 0.37.0)
+GET    /formtypes/{type}/declaration/history   # List the declarations the form type has had
 PUT    /formtypes/{type}/declaration   # Put a declaration in force
 DELETE /formtypes/{type}/declaration   # Remove it, and the projection it built
 POST   /formtypes/{type}/projection    # Build the projected table, or bring it forward
@@ -298,7 +298,7 @@ that form type's append-only stream.
 A retirement reads back with `"retired": true`, its `recordKey`, and `"body": null`. Read `retired`
 rather than testing the body: a document whose content is the JSON value `null` has a null body too.
 
-**`declarationSeq`** (**Since 0.37.0**) says which declaration the document was accepted under: the `sequence` that
+**`declarationSeq`** says which declaration the document was accepted under: the `sequence` that
 `GET /formtypes/orders/declaration/history` lists, so `GET /formtypes/orders/declaration?seq=2` reads the form
 as it was when the document came in. It is stamped once, at intake, and a declaration written later does not
 change it. **`0`** means no declaration was in force — intake does not need one, so a document is accepted before
@@ -334,7 +334,7 @@ GET /formtypes/orders/documents?after=12&limit=100
 }
 ```
 
-Each document carries **`declarationSeq`** (**Since 0.37.0**), the declaration it was accepted under — see *Reading a document*.
+Each document carries **`declarationSeq`**, the declaration it was accepted under — see *Reading a document*.
 
 **This always works, too** — it reads the raw store, so it answers before a declaration exists and
 after one does, and it carries every field the documents were sent with. That is what it is for: a
@@ -395,14 +395,14 @@ GET /formtypes/orders/declaration
 }
 ```
 
-A field that left its `binding` out reads `"binding": null`, and **`bindingState`** says what the declaration amounts to for it (**Since 0.37.0** — both).
+A field that left its `binding` out reads `"binding": null`, and **`bindingState`** says what the declaration amounts to for it.
 
 This is the shape the next projection run will build. A form type with no declaration answers `404`
 `/problems/no-declaration` — a state to read, not a failure to recover from.
 
 #### Reading an earlier declaration
 
-**Since 0.37.0.** Every declaration written for a form type is kept, oldest first, and deleting the declaration does not delete them.
+Every declaration written for a form type is kept, oldest first, and deleting the declaration does not delete them.
 
 ```http
 GET /formtypes/orders/declaration/history
@@ -465,9 +465,9 @@ in-memory, SQLite and PostgreSQL sources keep it.
   Blank is refused with `400`. The declaration has one too, top-level: the name a person reads the form
   by, on the same terms.
 - **`binding`** — `stored` (the document's own value), `snapshot` (copied and fixed at write time),
-  or `reference` (reads the target's current value); **Since 0.37.0** you may omit it when the declaration does not decide, and
+  or `reference` (reads the target's current value); you may omit it when the declaration does not decide, and
   it reads back as `null`. An undecided field is materialized as a stored value, exactly as a declared
-  `stored` one — only the declaration keeps the difference. **`bindingState`** (**Since 0.37.0**) is what the declaration
+  `stored` one — only the declaration keeps the difference. **`bindingState`** is what the declaration
   amounts to, one of `stored`, `snapshot`, `reference` or `undecided`: the declared binding when there
   is one; `undecided` for a field that takes its value from another form type (it has a `target`, or it
   is the `keyField` of a `reference` relation) and does not say whether that value is read now or was
@@ -703,11 +703,11 @@ reached at all (connection, timeout, auth, rate limit) answers `503`
 Three fields exist so that silence stays visible:
 
 - **`absentFieldCounts`** — per declared column, how many projected rows came from documents that did
-  not carry the field at all, **though the declaration they were accepted under asked for it** (**Since 0.37.0** — a column the
+  not carry the field at all, **though the declaration they were accepted under asked for it** (a column the
   document's own declaration did not yet have is counted in `notYetDeclaredFieldCounts` instead). An explicit
   `null` in a document is an answer and is not counted here. The projected NULL conflates the two; this is
   what makes the conflation visible.
-- **`notYetDeclaredFieldCounts`** (**Since 0.37.0**) — per declared column, how many projected rows came from documents
+- **`notYetDeclaredFieldCounts`** — per declared column, how many projected rows came from documents
   accepted under a declaration that did not yet have the column. A document cannot leave out a field nobody had
   asked for, so these rows are counted here and not in `absentFieldCounts` — which is what a field added to a
   form type after its first documents arrived would otherwise fill with false absences. Each document is
@@ -965,7 +965,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 401 | `/problems/access-key-required` | The host requires an access key and the request presented none, or not one of its keys |
 | 404 | `/problems/no-such-document` | No document has that id |
 | 404 | `/problems/no-declaration` | The form type has no declaration |
-| 404 | `/problems/no-such-declaration` | **Since 0.37.0.** The form type never had a declaration with that sequence |
+| 404 | `/problems/no-such-declaration` | The form type never had a declaration with that sequence |
 | 404 | `/problems/unknown-namespace` | The request named a namespace this host does not serve |
 | 409 | `/problems/not-projected` | Records were queried before any projection was built |
 | 409 | `/problems/projection-unverified` | A failed rebuild left the projection's integrity unconfirmed |
@@ -976,7 +976,7 @@ in that state projects nothing ([`notProjectedReason`](#projecting) says why).
 | 404 | `/problems/not-a-section` | Rows were read of a form type that is not a repeated section of another |
 | 409 | `/problems/form-type-is-a-section` | A document or retirement was sent under a form type that is a repeated section of another; send the row inside the parent document's section array |
 | 422 | `/problems/idempotency-key-reused` | The idempotency key already identifies another request: a document of another form type, or with a different body |
-| 501 | `/problems/declaration-history-unsupported` | **Since 0.37.0.** The host's declaration source does not keep the declarations a form type has had |
+| 501 | `/problems/declaration-history-unsupported` | The host's declaration source does not keep the declarations a form type has had |
 | 503 | `/problems/namespace-unverified` | The host could not confirm that its store holds the namespace it serves: the store was unreachable, or holds another namespace |
 | 503 | `/problems/intake-failed` | The document could not be written to the raw store |
 | 503 | `/problems/projection-store-missing` | The MorphDB project the host projects into was deleted after it started; retrying does not help — give the host a project again and restart (documents are still accepted) |
