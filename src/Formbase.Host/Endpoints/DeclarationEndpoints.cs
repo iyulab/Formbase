@@ -290,7 +290,8 @@ internal static class DeclarationEndpoints
         return duplicate is null
             ? null
             : Invalid(
-                $"The field '{duplicate.Key}' is declared more than once. One of them would land in " +
+                $"The fields {string.Join(" and ", duplicate.Select(f => $"'{f.Name}'"))} name the same column " +
+                "(field names are compared ignoring case). One of them would land in " +
                 "the projected column and the other would vanish without being reported.");
     }
 

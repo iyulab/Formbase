@@ -57,6 +57,18 @@
 - **`binding` reads back `null` on a field whose declaration left it out**, where it read `stored`. A caller that read `binding` as
   always present reads `bindingState` instead (it is always present). A declaration stored by an earlier version reads back with
   every binding as declared (`stored` where it was left to the default), so an existing declaration never turns `undecided`.
+- **A query or route value that will not convert now says which parameter and what it expects.** `GET …/records?limit=abc` answered
+  `400 invalid-request` with the framework's wording, which names a .NET type (`Nullable<int> limit`); it now reads
+  `The value 'abc' is not valid for the parameter 'limit': expected a whole number.` (`true or false`, `a number`, `a UUID` and
+  `a date and time` likewise). The value is echoed only in part (40 characters).
+- **Declaring two fields whose names differ only by case is refused by naming both spellings and the rule**: «The fields 'total' and
+  'TOTAL' name the same column (field names are compared ignoring case).» It named only the first spelling before.
+- **The host ships `appsettings.json` with `Microsoft.AspNetCore` logged at Warning and above** — the framework's usual default. Its
+  request and endpoint lines at Information (four per request, so four per health probe, which the image asks every ten seconds)
+  no longer fill the log. To see them again, set `Logging__LogLevel__Microsoft.AspNetCore=Information`.
+- **The image names its port by `ASPNETCORE_HTTP_PORTS=8080` only.** It also set `ASPNETCORE_URLS`, so every start logged that
+  the host was overriding the first with the second. Change the port with `ASPNETCORE_HTTP_PORTS`; the image's healthcheck reads the
+  same setting.
 
 ## 0.36.0
 

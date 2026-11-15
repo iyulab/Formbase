@@ -534,6 +534,25 @@ public sealed class DeclarationWriteTests : IClassFixture<WebApplicationFactory<
         (await ReadAsync(refused)).GetProperty("type").GetString().Should().Be("/problems/invalid-declaration");
     }
 
+    /// <summary>
+    /// The stores name columns ignoring case, so <c>total</c> and <c>TOTAL</c> are one column. The refusal used to name
+    /// only the first spelling and not say that case is ignored, which sent a caller looking for a field they had
+    /// declared once.
+    /// </summary>
+    [Fact]
+    public async Task Two_field_names_that_differ_only_by_case_are_refused_by_naming_both_and_the_rule()
+    {
+        var type = NewFormType();
+
+        var refused = await DeclareAsync(type, Declaration(type, version: 1, extraField: "TOTAL"));
+
+        refused.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var detail = (await ReadAsync(refused)).GetProperty("detail").GetString();
+        detail.Should().Contain("'total'").And.Contain("'TOTAL'",
+            "the caller has to see both spellings to find the pair they wrote");
+        detail.Should().Contain("ignoring case", "a name that differs only by case is not obviously the same name");
+    }
+
     private static object Declaration(string type, int version, int? expected = null, string? extraField = null, string? tableName = null)
     {
         var fields = new List<object> { new { name = "total", type = "integer", nullable = false } };

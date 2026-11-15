@@ -41,7 +41,10 @@ EXPOSE 8080
 # reason that has nothing to do with the service.
 HEALTHCHECK --interval=10s --timeout=5s --retries=12 --start-period=20s     CMD ["dotnet", "Formbase.Host.dll", "--health-check"]
 
-ENV ASPNETCORE_URLS=http://+:8080
+# The port by the setting the base image already uses (ASPNETCORE_HTTP_PORTS), which is also what the
+# healthcheck above reads. Setting ASPNETCORE_URLS beside it makes the host warn on every start that it is
+# overriding the first with the second.
+ENV ASPNETCORE_HTTP_PORTS=8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 ENTRYPOINT ["dotnet", "Formbase.Host.dll"]

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Formbase.Host.Tests;
@@ -80,5 +81,69 @@ public sealed class HealthProbeTests(WebApplicationFactory<Program> factory) : I
             .Should().Be(HttpStatusCode.ServiceUnavailable);
         (await client.GetAsync("/health/live", TestContext.Current.CancellationToken)).StatusCode
             .Should().Be(HttpStatusCode.OK);
+    }
+
+    /// <summary>
+    /// A probe is asked every few seconds by the image's own healthcheck and by whatever orchestrates it: a line per
+    /// request would make the log mostly probes. The host ships the framework's usual logging default -- its request
+    /// and endpoint lines are Warning and above -- and that is what keeps a probe out of the log.
+    /// </summary>
+    [Theory]
+    [InlineData("/health/ready")]
+    [InlineData("/health/live")]
+    public async Task A_probe_leaves_no_line_in_the_log(string route)
+    {
+        var sink = new CapturedLog();
+        using var logged = factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddLogging(logging => logging.AddProvider(sink))));
+        using var client = logged.CreateClient();
+
+        (await client.GetAsync(route, TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        sink.Lines.Where(l => l.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal))
+            .Should().BeEmpty("a probe that answers is not an event, and logging each one buries the ones that are");
+    }
+
+    /// <summary>
+    /// The image must name its port one way. Setting both <c>ASPNETCORE_URLS</c> and the base image's
+    /// <c>ASPNETCORE_HTTP_PORTS</c> makes the host warn on every start that it is overriding one with the other, and the
+    /// self-probe reads only the second -- so the image sets that one, to the port the probe falls back on.
+    /// </summary>
+    [Fact]
+    public void The_image_names_its_port_by_one_setting_the_self_probe_reads()
+    {
+        var dockerfile = RepoFile.Read("src/Formbase.Host/Dockerfile");
+
+        dockerfile.Split('\n').Select(l => l.Trim()).Where(l => l.StartsWith("ENV ", StringComparison.Ordinal))
+            .Should().NotContain(l => l.Contains("ASPNETCORE_URLS", StringComparison.Ordinal),
+                "the warning at start is the host saying the image set the port twice");
+        dockerfile.Should().Contain("ENV ASPNETCORE_HTTP_PORTS=8080", "the self-probe reads this setting and defaults to 8080");
+    }
+
+    private sealed class CapturedLog : ILoggerProvider
+    {
+        private readonly List<string> _lines = [];
+
+        public IReadOnlyList<string> Lines { get { lock (_lines) { return [.. _lines]; } } }
+
+        public ILogger CreateLogger(string categoryName) => new Sink(categoryName, _lines);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class Sink(string category, List<string> lines) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                lock (lines)
+                {
+                    lines.Add($"{category}: {formatter(state, exception)}");
+                }
+            }
+        }
     }
 }

@@ -121,4 +121,43 @@ public sealed class UnreadableRequestProblemTests : IClassFixture<WebApplication
             "there is no field to point at when the document never parsed, and pointing at one "
             + "would send the caller looking in the wrong place");
     }
+
+    /// <summary>
+    /// A query value that will not convert used to answer with the framework's own wording -- the CLR type of the
+    /// parameter (<c>Nullable&lt;int&gt;</c>) and nothing about what would have been accepted. The caller's own name for
+    /// the parameter is what they need, with the form it expects.
+    /// </summary>
+    [Theory]
+    [InlineData("/formtypes/orders/records?limit=abc", "limit", "a whole number")]
+    [InlineData("/formtypes/orders/records?offset=1.5", "offset", "a whole number")]
+    [InlineData("/formtypes/orders/records?referenceSources=maybe", "referenceSources", "true or false")]
+    public async Task A_query_value_that_will_not_convert_names_the_parameter_and_the_form_it_expects(
+        string route, string parameter, string expected)
+    {
+        var response = await _client.GetAsync(route, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        problem.GetProperty("type").GetString().Should().Be("/problems/invalid-request");
+        var detail = problem.GetProperty("detail").GetString() ?? string.Empty;
+
+        detail.Should().Contain($"'{parameter}'", "the caller has to know which of the values they sent was refused");
+        detail.Should().Contain(expected, "knowing a value is wrong does not say what would be right");
+        foreach (var token in InternalTokens.Append("Nullable"))
+        {
+            detail.Should().NotContain(token, $"'{token}' describes the host rather than what was sent");
+        }
+    }
+
+    [Fact]
+    public async Task An_unconvertible_value_is_echoed_only_in_part()
+    {
+        var long_ = new string('9', 500);
+
+        var response = await _client.GetAsync($"/formtypes/orders/records?limit={long_}", TestContext.Current.CancellationToken);
+
+        var detail = (await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken))
+            .GetProperty("detail").GetString() ?? string.Empty;
+        detail.Length.Should().BeLessThan(200, "a refusal is not a way to have a request reflected back at length");
+    }
 }

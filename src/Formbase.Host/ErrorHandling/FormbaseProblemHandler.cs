@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Formbase.Core.Errors;
 using Formbase.SchemaIntelligence;
 using Microsoft.AspNetCore.Diagnostics;
@@ -206,9 +207,15 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
     {
         if (exception.InnerException is not JsonException json)
         {
-            // No JSON underneath: a body too large, headers too long, a malformed chunked stream.
-            // The framework's message for those describes the request rather than the host, so it
-            // is the caller's answer already.
+            // No JSON underneath. A value that would not convert to the parameter's type is the one
+            // message here that describes the host: it names the CLR type ("Nullable<int> limit").
+            if (UnconvertibleValue(exception.Message) is { } unconvertible)
+            {
+                return unconvertible;
+            }
+
+            // The rest -- a body too large, headers too long, a malformed chunked stream -- describes
+            // the request rather than the host, so the framework's message is the caller's answer already.
             return exception.Message;
         }
 
@@ -225,6 +232,46 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
             : $"The request body could not be read: the value at '{at}' is not one this field accepts{position}. "
               + "See docs/API.md for the shape of this request.";
     }
+
+    /// <summary>
+    /// The framework words a query or route value that will not convert as <c>Failed to bind parameter "Nullable&lt;int&gt; limit" from "abc".</c>
+    /// -- a CLR type name the caller never wrote, and no hint of what would have been accepted. The parameter's
+    /// name is the one the caller sent (the documented query or route name), so it stays; the type becomes
+    /// what a caller can act on. A type this does not recognise is left out rather than shown.
+    /// </summary>
+    private static string? UnconvertibleValue(string message)
+    {
+        if (FailedToBind().Match(message) is not { Success: true } match)
+        {
+            return null;
+        }
+
+        var value = match.Groups["value"].Value;
+        if (value.Length > MaxEchoedValue)
+        {
+            value = string.Concat(value.AsSpan(0, MaxEchoedValue), "…");
+        }
+
+        var expected = ExpectedForm(match.Groups["type"].Value);
+        return $"The value '{value}' is not valid for the parameter '{match.Groups["name"].Value}'"
+            + (expected is null ? "." : $": expected {expected}.");
+    }
+
+    private const int MaxEchoedValue = 40;
+
+    private static string? ExpectedForm(string clrTypeName) =>
+        (clrTypeName.StartsWith("Nullable<", StringComparison.Ordinal) ? clrTypeName["Nullable<".Length..^1] : clrTypeName) switch
+        {
+            "int" or "long" or "short" or "byte" or "uint" or "ulong" or "ushort" or "sbyte" => "a whole number",
+            "double" or "float" or "decimal" => "a number",
+            "bool" => "true or false",
+            "Guid" => "a UUID",
+            "DateTime" or "DateTimeOffset" => "a date and time in ISO 8601 form",
+            _ => null,
+        };
+
+    [GeneratedRegex(@"^Failed to bind parameter ""(?<type>[^""]+?) (?<name>[^ ""]+)"" from ""(?<value>.*)""\.$", RegexOptions.Singleline, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FailedToBind();
 
     /// <summary>
     /// <c>type</c> is a relative reference rather than an invented absolute URL: it identifies the
