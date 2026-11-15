@@ -69,6 +69,9 @@
 - **The image names its port by `ASPNETCORE_HTTP_PORTS=8080` only.** It also set `ASPNETCORE_URLS`, so every start logged that
   the host was overriding the first with the second. Change the port with `ASPNETCORE_HTTP_PORTS`; the image's healthcheck reads the
   same setting.
+- **The image sets `PGGSSENCMODE=disable`.** It carries no GSSAPI library, so with the durable profile the PostgreSQL driver found that
+  out on every start and printed `Cannot load library libgssapi_krb5.so.2`. Override the variable, or set `Gss Encryption Mode` in the
+  connection string, in an image that adds the library.
 - **`409 /problems/not-projected` names the request that builds the projection** when a shape is declared but not built: «… trigger a
   projection. Run one with POST /formtypes/orders/projection.» The API reference now says what `limit=0` on records does (no rows,
   and `hasMore` says whether the query matches any), marks what this release adds with `Since 0.37.0`, and the README's link to

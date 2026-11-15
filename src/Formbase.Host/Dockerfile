@@ -45,6 +45,11 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=12 --start-period=20s     CMD 
 # healthcheck above reads. Setting ASPNETCORE_URLS beside it makes the host warn on every start that it is
 # overriding the first with the second.
 ENV ASPNETCORE_HTTP_PORTS=8080
+# The runtime image carries no GSSAPI library, so the Npgsql driver can never negotiate GSS encryption here; with the
+# durable profile it used to find that out on every start and print `Cannot load library libgssapi_krb5.so.2`. Saying so
+# once is the same behaviour without the noise. Override it (or the connection string's `Gss Encryption Mode`) in an image
+# that adds the library.
+ENV PGGSSENCMODE=disable
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 ENTRYPOINT ["dotnet", "Formbase.Host.dll"]
