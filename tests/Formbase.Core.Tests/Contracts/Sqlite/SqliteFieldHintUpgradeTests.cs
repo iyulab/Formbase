@@ -6,10 +6,9 @@ using Microsoft.Data.Sqlite;
 namespace Formbase.Core.Tests.Contracts.Sqlite;
 
 /// <summary>
-/// A declarations table written by an earlier version: three columns, and an entity reference in the
-/// shape releases before 0.17.0 stored (<c>KeyField</c>). It is upgraded in place on first use, and what
-/// it held reads back as it was stored. A form type in the object form versions before 0.14.1 wrote is
-/// no longer read: it is refused with the way to rewrite it.
+/// A declarations table written by an earlier version: three columns. It is upgraded in place on first use,
+/// and what it held reads back as it was stored. A form type in the object form versions before 0.14.1 wrote
+/// is no longer read: it is refused with the way to rewrite it.
 /// </summary>
 public sealed class SqliteFieldHintUpgradeTests : IDisposable
 {
@@ -26,7 +25,7 @@ public sealed class SqliteFieldHintUpgradeTests : IDisposable
                 """
                 CREATE TABLE fb_field_hints (form_type TEXT PRIMARY KEY, table_name TEXT NOT NULL, fields TEXT NOT NULL);
                 INSERT INTO fb_field_hints VALUES ('inspection', 'inspections',
-                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":"equipment","KeyField":"code"}}]');
+                  '[{"Name":"equipment","Type":"Text","Nullable":true,"SourceKey":null,"Binding":"Reference","Target":{"Entity":"equipment","ValueField":"code"}}]');
                 """;
             await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }

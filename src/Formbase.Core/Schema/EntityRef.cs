@@ -74,12 +74,11 @@ public sealed record EntityRef
 }
 
 /// <summary>
-/// Stores an <see cref="EntityRef"/> by its member names, and reads the shape releases before 0.17.0
-/// stored — <c>{"Entity": …, "KeyField": …}</c>, where <c>KeyField</c> already meant the value column —
-/// so a declaration on disk keeps its target across the upgrade instead of reading back without one.
-/// A lookup by field is stored as <c>"LookupKey": "&lt;field&gt;"</c> — the form releases before 0.20.0
-/// wrote, so their declarations read back as <see cref="TargetLookup.Field"/> — and a lookup by
-/// record as <c>"LookupRecord": true</c>.
+/// Stores an <see cref="EntityRef"/> by its member names. A lookup by field is stored as
+/// <c>"LookupKey": "&lt;field&gt;"</c> and a lookup by record as <c>"LookupRecord": true</c>. Releases before 0.17.0
+/// stored the value column as <c>KeyField</c>; that shape is no longer read — it is refused with the way to
+/// rewrite it, since reading it back without a target would render a binding target of <c>table.</c> and nothing
+/// would say so.
 /// </summary>
 internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
 {
@@ -96,7 +95,7 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
         }
 
         FormTypeRef? entity = null;
-        string? valueField = null, legacyKeyField = null, lookupKey = null, viaField = null;
+        string? valueField = null, lookupKey = null, viaField = null;
         var lookupRecord = false;
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -111,8 +110,9 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
                     valueField = reader.GetString();
                     break;
                 case "KeyField":
-                    legacyKeyField = reader.GetString();
-                    break;
+                    throw new JsonException(
+                        "A stored entity reference names its value column as 'KeyField', the form written before 0.17.0, which is no longer read: "
+                        + "put the declaration again with a release that still reads it (0.36.x), which stores 'ValueField', then upgrade.");
                 case "LookupKey":
                     lookupKey = reader.GetString();
                     break;
@@ -139,7 +139,7 @@ internal sealed class EntityRefJsonConverter : JsonConverter<EntityRef>
         }
 
         var lookup = lookupRecord ? TargetLookup.Record : lookupKey is not null ? TargetLookup.Field(lookupKey) : null;
-        return new EntityRef(entity.Value, valueField ?? legacyKeyField ?? throw new JsonException("A stored entity reference names no value field."), lookup, viaField);
+        return new EntityRef(entity.Value, valueField ?? throw new JsonException("A stored entity reference names no value field."), lookup, viaField);
     }
 
     public override void Write(Utf8JsonWriter writer, EntityRef value, JsonSerializerOptions options)

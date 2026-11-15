@@ -38,16 +38,16 @@ public sealed class EntityRefTests
     }
 
     /// <summary>
-    /// Releases before this one stored the value column as <c>KeyField</c>. A declaration on disk must
-    /// keep its target across the upgrade — reading it back without one would render a binding target
-    /// of <c>table.</c> and nothing would say so.
+    /// Releases before 0.17.0 stored the value column as <c>KeyField</c>. That shape is no longer read: reading it
+    /// back without a target would render a binding target of <c>table.</c> and nothing would say so, so it is
+    /// refused, with the way to rewrite it.
     /// </summary>
     [Fact]
-    public void The_shape_earlier_releases_stored_reads_back_as_the_value_column()
+    public void The_shape_releases_before_0_17_0_stored_is_refused_with_the_way_to_rewrite_it()
     {
-        var read = JsonSerializer.Deserialize<EntityRef>("""{"Entity":"equipment","KeyField":"code"}""");
+        var read = () => JsonSerializer.Deserialize<EntityRef>("""{"Entity":"equipment","KeyField":"code"}""");
 
-        read.Should().Be(new EntityRef(Equipment, "code"));
+        read.Should().Throw<JsonException>().Which.Message.Should().Contain("before 0.17.0").And.Contain("put the declaration again");
     }
 
     [Fact]
