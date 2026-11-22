@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`Npgsql` 10.0.3 → 11.0.0** (the PostgreSQL store). No behavior change; the full suite, including the PostgreSQL tests, passes on it.
+
 ## 0.37.0
 
 A minor: the declarations a form type has had are kept and can be read by sequence, a document remembers the declaration it was accepted

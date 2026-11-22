@@ -13,7 +13,7 @@
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="11.0.0" />
     <PackageVersion Include="M3L.Native" Version="0.26.0" />
     <PackageVersion Include="MorphDB.Client" Version="0.37.0" />
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <!-- Host: the HTTP surface and its OpenAPI document -->
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
