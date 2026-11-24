@@ -19,19 +19,44 @@ public static class FormbaseMcpExtensions
     /// Whether the host refuses callers that present no access key. Turning the door on while it does not is refused at
     /// start-up: agents call a door by themselves, and a host that asks nothing would let any of them read.
     /// </param>
-    /// <exception cref="McpConfigurationException">The door is enabled and the host asks for no access key.</exception>
-    public static IServiceCollection AddFormbaseMcp(this IServiceCollection services, IConfiguration configuration, bool accessKeysRequired)
+    /// <param name="rowCeiling">
+    /// The most rows or documents the host's own reads answer in one call. A <c>Formbase:Mcp:MaxRows</c> above it is
+    /// refused at start-up: the door reads through those paths, and it caps a request rather than reading past them.
+    /// </param>
+    /// <exception cref="McpConfigurationException">
+    /// <c>Formbase:Mcp:MaxRows</c> or <c>Formbase:Mcp:Path</c> is one the door cannot honor — checked with the door off too
+    /// — or the door is enabled and the host asks for no access key.
+    /// </exception>
+    public static IServiceCollection AddFormbaseMcp(this IServiceCollection services, IConfiguration configuration, bool accessKeysRequired, int rowCeiling)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
 
         var section = configuration.GetSection(FormbaseMcpOptions.SectionName);
+        // The same bounds, held once more on the options the host actually uses: a source added after composition is not
+        // part of what is checked below.
         services.AddOptions<FormbaseMcpOptions>()
             .Bind(section)
-            .Validate(o => o.MaxRows >= 1 && o.Path.StartsWith('/'), "Formbase:Mcp:MaxRows must be at least 1 and Formbase:Mcp:Path must start with '/'.")
+            .Validate(
+                o => o.MaxRows >= 1 && o.MaxRows <= rowCeiling && o.Path.StartsWith('/'),
+                $"Formbase:Mcp:MaxRows must be between 1 and {rowCeiling} and Formbase:Mcp:Path must start with '/'.")
             .ValidateOnStart();
 
-        if (!section.GetValue<bool>(nameof(FormbaseMcpOptions.Enabled)))
+        // Refused while the host is composed, so that the host ends as it does for any setting it will not take. An
+        // options validator would throw once the host is starting, which ends it like a crash.
+        var settings = section.Get<FormbaseMcpOptions>() ?? new FormbaseMcpOptions();
+        if (settings.MaxRows < 1 || settings.MaxRows > rowCeiling)
+        {
+            throw new McpConfigurationException(
+                $"Formbase:Mcp:MaxRows must be between 1 and {rowCeiling}, the most one read answers; it is {settings.MaxRows}.");
+        }
+
+        if (!settings.Path.StartsWith('/'))
+        {
+            throw new McpConfigurationException($"Formbase:Mcp:Path must start with '/'; it is '{settings.Path}'.");
+        }
+
+        if (!settings.Enabled)
         {
             return services;
         }

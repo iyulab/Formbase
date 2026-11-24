@@ -6,6 +6,7 @@ using Formbase.Core.Primitives;
 using Formbase.Core.Schema;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -260,6 +261,61 @@ public sealed class McpDoorTests : IClassFixture<WebApplicationFactory<Program>>
         Text(badFilter).Should().Contain("not a `column:value` pair");
         undeclared.IsError.Should().BeTrue();
         Text(undeclared).Should().Contain("no declaration");
+    }
+
+    // The REST API reads at most 1000 rows or documents in one call. A door capped above that would hand out a page of
+    // documents REST refuses, and refuse the records it says it caps — so the setting is refused, door on or off.
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1001, true)]
+    [InlineData(1001, false)]
+    public void A_row_cap_the_rest_api_does_not_serve_is_refused_at_start_as_a_configuration_error(int maxRows, bool enabled)
+    {
+        var start = () => Door(enabled, maxRows).CreateClient();
+
+        start.Should().Throw<InvalidOperationException>()
+            .Where(e => e.GetType().Name == "HostConfigurationException", "a refused setting ends the host as a configuration error, not as a crash")
+            .WithMessage("Formbase:Mcp:MaxRows must be between 1 and 1000*");
+    }
+
+    [Fact]
+    public void A_path_that_is_not_one_is_refused_at_start_as_a_configuration_error()
+    {
+        var start = () => Door().WithWebHostBuilder(builder => builder.UseSetting("Formbase:Mcp:Path", "mcp")).CreateClient();
+
+        start.Should().Throw<InvalidOperationException>()
+            .Where(e => e.GetType().Name == "HostConfigurationException")
+            .WithMessage("Formbase:Mcp:Path must start with '/'*");
+    }
+
+    // A source added after the host is composed is not seen by the check made while composing; the bound options are
+    // still held to the same bounds when the host starts.
+    [Theory]
+    [InlineData("Formbase:Mcp:MaxRows", "0")]
+    [InlineData("Formbase:Mcp:MaxRows", "1001")]
+    public void A_setting_that_arrives_after_composition_is_still_held_to_the_same_bounds(string key, string value)
+    {
+        var start = () => Door().WithWebHostBuilder(builder => builder.ConfigureAppConfiguration(
+            (_, configuration) => configuration.AddInMemoryCollection(new Dictionary<string, string?> { [key] = value }))).CreateClient();
+
+        start.Should().Throw<Microsoft.Extensions.Options.OptionsValidationException>().WithMessage("*Formbase:Mcp:MaxRows*1000*");
+    }
+
+    [Fact]
+    public async Task The_door_may_be_capped_at_the_rest_apis_own_page_and_still_caps_a_larger_request()
+    {
+        var host = Door(maxRows: 1000);
+        var type = await SeedAsync(host, 1);
+        await using var client = await McpAsync(host, Key);
+        var ct = TestContext.Current.CancellationToken;
+
+        var records = await client.CallToolAsync("query_records", new Dictionary<string, object?> { ["type"] = type, ["limit"] = 5000 }, cancellationToken: ct);
+        var documents = await client.CallToolAsync("list_documents", new Dictionary<string, object?> { ["type"] = type, ["limit"] = 5000 }, cancellationToken: ct);
+
+        records.IsError.Should().NotBe(true, Text(records));
+        records.StructuredContent!.Value.GetProperty("limit").GetInt32().Should().Be(1000);
+        documents.IsError.Should().NotBe(true, Text(documents));
+        documents.StructuredContent!.Value.GetProperty("limit").GetInt32().Should().Be(1000);
     }
 
     // The raw stream is the source of truth: a reader through the door gets the same documents, in the same order, as REST.

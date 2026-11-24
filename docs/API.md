@@ -914,6 +914,9 @@ Formbase__Mcp__Enabled=true      # the door, at /mcp (Formbase__Mcp__Path)
 Formbase__Mcp__MaxRows=100       # the most rows (or documents) one query_records or list_documents call returns
 ```
 
+**Since 0.38.0.** `Formbase__Mcp__MaxRows` is between 1 and 1000 — the most one REST read of records or documents answers. A value outside
+that, or a path that does not start with `/`, is a configuration error: the host refuses to start, with the door on or off.
+
 It is the same host, not a second one: a request passes the access key and the namespace selection first, and the tools
 read through the same paths as the REST endpoints, answering in their JSON. A host that asks for no access key refuses to
 start with the door on (see [Who may call](#who-may-call)). Streamable HTTP, stateless.

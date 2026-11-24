@@ -12,6 +12,9 @@ public sealed class FormbaseMcpOptions
     /// <summary>Gets or sets the path the door answers on. Default <c>/mcp</c>.</summary>
     public string Path { get; set; } = "/mcp";
 
-    /// <summary>Gets or sets the most rows one <c>query_records</c> call returns. Default 100.</summary>
+    /// <summary>
+    /// Gets or sets the most rows one <c>query_records</c> call, or documents one <c>list_documents</c> call, returns.
+    /// At least 1 and no more than one read of the host answers. Default 100.
+    /// </summary>
     public int MaxRows { get; set; } = 100;
 }

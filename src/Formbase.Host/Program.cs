@@ -112,7 +112,10 @@ static WebApplication Compose(string[] args)
     // The read-only MCP door: off unless Formbase__Mcp__Enabled, and never on a host that asks for no access key.
     try
     {
-        builder.Services.AddFormbaseMcp(builder.Configuration, accessKeysRequired: AccessKeys.From(builder.Configuration).Required);
+        builder.Services.AddFormbaseMcp(
+            builder.Configuration,
+            accessKeysRequired: AccessKeys.From(builder.Configuration).Required,
+            rowCeiling: Math.Min(RecordReads.MaxLimit, DocumentEndpoints.MaxPageSize));
     }
     catch (McpConfigurationException refused)
     {
