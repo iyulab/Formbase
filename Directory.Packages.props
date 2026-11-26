@@ -11,7 +11,7 @@
     <!-- The host's optional schema-intelligence extension, and the LLM live suite. Any
          OpenAI-compatible endpoint. -->
     <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="11.0.0" />
-    <PackageVersion Include="M3L.Native" Version="0.27.0" />
+    <PackageVersion Include="M3L.Native" Version="0.28.0" />
     <PackageVersion Include="MorphDB.Client" Version="0.37.0" />
     <PackageVersion Include="Npgsql" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />

@@ -10,7 +10,8 @@
   starting with `/`, was already refused; it now ends the host as a configuration error, with its message, instead of as an
   unhandled exception. All three are checked with the door off too.
 - **`Npgsql` 10.0.3 → 11.0.0** (the PostgreSQL store). No behavior change; the full suite, including the PostgreSQL tests, passes on it.
-- **The M3L adapter builds on `M3L.Native` 0.27.0** (was 0.26.0). The release fixes how a single-quoted default (`= 'PARSED'`) is read — it is now a string like a double-quoted one, with the quotes no longer part of the value. A model that relied on single quotes being kept in a default value writes it in double quotes with the single quotes inside. The adapter is not packaged.
+- **The M3L adapter builds on `M3L.Native` 0.28.0** (was 0.26.0). 0.28.0 adds a condition (`where:`) to `@index` and
+  `@unique`; the adapter reads no model indexes, so nothing it produces changes. 0.27.0 fixes how a single-quoted default (`= 'PARSED'`) is read — it is now a string like a double-quoted one, with the quotes no longer part of the value. A model that relied on single quotes being kept in a default value writes it in double quotes with the single quotes inside. The adapter is not packaged.
 
 ## 0.37.0
 
