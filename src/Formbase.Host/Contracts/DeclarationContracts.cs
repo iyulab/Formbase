@@ -138,12 +138,12 @@ public sealed record DeclaredRelationResponse(
 /// The caller's own version for this declaration. It is also the concurrency token: whoever replaces
 /// this declaration next has to say they expected this number.
 /// </param>
+/// <param name="Fields">The declared fields, in the order they should appear.</param>
 /// <param name="ExpectedDeclarationVersion">
 /// The version the caller believes is currently in force. Omit it only when declaring for the first
 /// time — a form type that already has a declaration cannot be replaced without naming the version
 /// being replaced, because a blind overwrite is how one consumer silently discards another's.
 /// </param>
-/// <param name="Fields">The declared fields, in the order they should appear.</param>
 /// <param name="Relations">Declared links to other form types.</param>
 /// <param name="BusinessName">
 /// The name a person reads the form by («설비 점검일지» for <c>inspection_log</c>) — declaration only,
@@ -156,9 +156,9 @@ public sealed record DeclaredRelationResponse(
 public sealed record DeclarationRequest(
     string TableName,
     int DeclarationVersion,
-    int? ExpectedDeclarationVersion,
     IReadOnlyList<DeclaredFieldRequest> Fields,
-    IReadOnlyList<DeclaredRelationRequest>? Relations,
+    int? ExpectedDeclarationVersion = null,
+    IReadOnlyList<DeclaredRelationRequest>? Relations = null,
     string? BusinessName = null,
     IReadOnlyList<DeclaredIndex>? Indexes = null);
 

@@ -616,7 +616,12 @@ without any document arriving — that is the shape axis of staleness, and the w
 show it. Run a projection when you want the table to match; a rebuild drops and refills the whole
 table, which is not a cost to spend on your behalf without being asked.
 
-A declaration is refused with `400` `/problems/invalid-declaration` when it names no table, names a
+**Nothing required is filled in for you.** A request carries `tableName`, `declarationVersion` and `fields`; each
+field its `name` and `type`; each relation its `name`, `kind`, `target` and `keyField`; a derivation its `kind`;
+a target its `formType` and `valueField`; an index its `fields` — the members the OpenAPI document marks required.
+Leaving one out, or sending `null` for it, is `400` `/problems/invalid-request`, and nothing is declared.
+
+A declaration is refused with `400` `/problems/invalid-declaration` when it names an empty table, names a
 table starting with `fb_` (the engine's own namespace — its system columns, and on a single-file store
 its own tables, live there), carries no fields, declares one field twice, or names a field starting with
 `fb_` (it would be a column beside the engine's own, or replace one) — each would otherwise land

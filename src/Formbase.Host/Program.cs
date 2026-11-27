@@ -129,8 +129,14 @@ static WebApplication Compose(string[] args)
     // Enum values cross as names. Ordinals would let a reordering of the wire enum change what every
     // stored client believes it is reading, without any request or response changing shape.
     builder.Services.ConfigureHttpJsonOptions(options =>
-        options.SerializerOptions.Converters.Add(
-            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+    {
+        options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+        // What the served contract lists as required, a request must carry, and a member the contract does
+        // not make nullable is not read from null. Without these the missing member was filled in with its
+        // type's default — a field read as text, a relation read as a child — and stored as if declared.
+        options.SerializerOptions.RespectRequiredConstructorParameters = true;
+        options.SerializerOptions.RespectNullableAnnotations = true;
+    });
 
     var app = builder.Build();
 

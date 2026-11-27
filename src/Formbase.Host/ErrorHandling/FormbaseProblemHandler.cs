@@ -225,6 +225,12 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
         // at the root. Reporting it as "the value at '$'" would send the caller looking for a field
         // that is not what went wrong.
         var at = string.IsNullOrEmpty(json.Path) || json.Path == "$" ? null : json.Path;
+        if (MissingMembers(json.Message) is { } missing)
+        {
+            return $"The request body leaves out a required member{(at is null ? string.Empty : $" at '{at}'")}: {missing}. "
+                + "See docs/API.md for the shape of this request.";
+        }
+
         var position = json.LineNumber is null
             ? null
             : $" (line {json.LineNumber + 1}, position {json.BytePositionInLine + 1})";
@@ -234,6 +240,26 @@ internal sealed partial class FormbaseProblemHandler(ILogger<FormbaseProblemHand
             : $"The request body could not be read: the value at '{at}' is not one this field accepts{position}. "
               + "See docs/API.md for the shape of this request.";
     }
+
+    /// <summary>
+    /// The members the deserializer says a body left out, as the caller would write them, or null for any
+    /// other failure. Only the quoted JSON names are taken from its message, which also names the CLR type.
+    /// </summary>
+    private static string? MissingMembers(string message)
+    {
+        const string Marker = "missing required properties including:";
+        var from = message.IndexOf(Marker, StringComparison.Ordinal);
+        if (from < 0)
+        {
+            return null;
+        }
+
+        var names = QuotedName().Matches(message[(from + Marker.Length)..]).Select(m => m.Value).ToList();
+        return names.Count > 0 ? string.Join(", ", names) : null;
+    }
+
+    [GeneratedRegex("'[A-Za-z][A-Za-z0-9]*'")]
+    private static partial Regex QuotedName();
 
     /// <summary>
     /// The framework words a query or route value that will not convert as <c>Failed to bind parameter "Nullable&lt;int&gt; limit" from "abc".</c>

@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **Breaking: a declaration that leaves out a required member is refused.** A field with no `type` was stored as
+  `text`, a relation with no `kind` as `child` (which also changed how its key field read back), a derivation with no
+  `kind` as `fromEpoch`, a missing `declarationVersion` as `0`, and a relation could be stored with no `keyField`. All
+  the members the OpenAPI document lists as required are now enforced, `null` included: `400`
+  `/problems/invalid-request`, naming the missing member. A request that left out `tableName` or `fields` is answered
+  the same way instead of `/problems/invalid-declaration`. The OpenAPI document no longer lists
+  `expectedDeclarationVersion` and `relations` as required — a first declaration leaves them out, as before.
+  Declarations already stored are unchanged; send what you mean when you replace one.
 - **Breaking: a timestamp is read only from text that writes the whole date.** Looser text was read by guessing:
   `01/02` became that day of the year the projection ran in, `02/03/04` a day in 2004, and
   `2026-12-31T23:59:59.99999999Z` an instant in 2027. Now `yyyy-MM-dd`, alone or with a time and an optional `Z` or

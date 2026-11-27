@@ -939,9 +939,7 @@
         "required": [
           "tableName",
           "declarationVersion",
-          "expectedDeclarationVersion",
-          "fields",
-          "relations"
+          "fields"
         ],
         "type": "object",
         "properties": {
@@ -956,6 +954,12 @@
             ],
             "format": "int32"
           },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclaredFieldRequest"
+            }
+          },
           "expectedDeclarationVersion": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -964,12 +968,6 @@
               "string"
             ],
             "format": "int32"
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DeclaredFieldRequest"
-            }
           },
           "relations": {
             "type": [
