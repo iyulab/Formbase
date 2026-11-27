@@ -241,7 +241,7 @@ jobs:
       # Published text must not name something only an insider can look up. Needs no dotnet, so
       # it runs before the SDK is set up and fails the job in seconds when it fails.
       - name: Internal token scan
-        uses: iyulab/dotnet-ci-actions/internal-token-scan@39e741c1cbd64f944584dbc4b47b75d5da329425 # main, 2026-11-25
+        uses: iyulab/dotnet-ci-actions/internal-token-scan@a42931da129ca3945a65dd263bac85376db164a3 # main, 2026-11-27
         with:
           min-files: '50'
 
@@ -307,7 +307,7 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Package consumer check
-        uses: iyulab/dotnet-ci-actions/package-consumer-check@8ab06f352d8c3e31d8c7f56dae1ecc6c3a160ef6 # main, 2026-09-25
+        uses: iyulab/dotnet-ci-actions/package-consumer-check@a42931da129ca3945a65dd263bac85376db164a3 # main, 2026-11-27
         with:
           project: Formbase.slnx
           min-snippets: '2'
