@@ -92,7 +92,10 @@ public sealed class ErrorSurfaceContractTests : IClassFixture<WebApplicationFact
             new HttpMethod(method),
             template.Replace("{type}", "%20", StringComparison.Ordinal))
         {
-            Content = new StringContent("""{"total":1}""", Encoding.UTF8, "application/json")
+            // One body every route can read — a declaration to the declaration route, a document to the others — so that
+            // the form type is what is wrong with the request.
+            Content = new StringContent(
+                """{"tableName":"orders","declarationVersion":1,"fields":[{"name":"total","type":"integer"}],"total":1}""", Encoding.UTF8, "application/json")
         };
 
         var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
