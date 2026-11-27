@@ -855,7 +855,8 @@ Each row is **which record it is** and **its declared fields**:
   `GET /documents/{id}` reads back in full. A correction moves a keyed record to a new document and
   keeps its key, so the key is what identifies a record across reads; a document without a key is a
   record of its own, and its document is its identity.
-- **`fields`** — **exactly the declared columns**. The projection's own bookkeeping is not part of what
+- **`fields`** — **exactly the columns of the projected schema**: the declared ones, and, on a host with schema
+  intelligence, after them the ones it added for fields nobody declared. The projection's own bookkeeping is not part of what
   a caller reads, because an internal that leaked here would calcify into their contract; which record
   a row is reaches the caller as `record` instead.
   Each value is written as its column's type whichever store the projection lives in: a `timestamp`

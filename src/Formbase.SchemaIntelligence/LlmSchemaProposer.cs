@@ -29,11 +29,29 @@ public sealed class LlmSchemaProposer : ISchemaProposer
 
     private readonly IRawStore _rawStore;
     private readonly IChatClient _chatClient;
+    private readonly ISchemaProposer? _declared;
 
     public LlmSchemaProposer(IRawStore rawStore, IChatClient chatClient)
     {
         _rawStore = rawStore;
         _chatClient = chatClient;
+    }
+
+    /// <summary>
+    /// A proposer that answers beside a declaration, for composing with
+    /// <see cref="Formbase.Core.Projection.DeclaredFirstSchemaProposer"/>: a proposed property whose name is a declared
+    /// column's (ignoring case, as the stores do) or a key a declared column reads is left to the declaration before the
+    /// proposal is checked, so nothing the model says about a declared field can refuse the whole proposal. What this
+    /// proposes for such a form type is only what was never declared — null when that is nothing.
+    /// </summary>
+    /// <param name="rawStore">The documents the model is shown.</param>
+    /// <param name="chatClient">The model.</param>
+    /// <param name="declared">What answers for the declaration — the same proposer the composition puts first.</param>
+    public LlmSchemaProposer(IRawStore rawStore, IChatClient chatClient, ISchemaProposer declared)
+        : this(rawStore, chatClient)
+    {
+        ArgumentNullException.ThrowIfNull(declared);
+        _declared = declared;
     }
 
     /// <summary>What was last proposed for one form type, and the head of its stream when it was.</summary>
@@ -45,16 +63,50 @@ public sealed class LlmSchemaProposer : ISchemaProposer
 
         public Watermark Head { get; set; }
 
+        public Claims Claimed { get; set; } = Claims.None;
+
         public TableSchema? Schema { get; set; }
     }
 
     private readonly ConcurrentDictionary<FormTypeRef, Memo> _memos = new();
 
+    /// <summary>The column names and raw keys a declaration already holds.</summary>
+    private sealed class Claims
+    {
+        // A column name is a store's, which compares names ignoring case; a raw key is a JSON key, compared as written.
+        private readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
+
+        public static Claims None { get; } = new();
+
+        public static Claims Of(TableSchema? declared)
+        {
+            if (declared is null)
+            {
+                return None;
+            }
+
+            var claims = new Claims();
+            foreach (var column in declared.Columns)
+            {
+                claims._names.Add(column.Name);
+                claims._keys.Add(column.ExtractionKey);
+            }
+
+            return claims;
+        }
+
+        public bool Hold(string property) => _names.Contains(property) || _keys.Contains(property);
+
+        public bool SameAs(Claims other) => _names.SetEquals(other._names) && _keys.SetEquals(other._keys);
+    }
+
     /// <remarks>
     /// Every read of a form type asks its proposer for the shape, so a proposer that asks the model each time puts a model call under every
     /// read — its latency, its outage, and the wobble of its answer in <c>required</c>, which changes the shape's fingerprint and
-    /// reads as a stale projection. What is proposed is a function of the documents observed, so until another is appended
-    /// (the stream's head moves) the last answer stands. A failure is not an answer and is not kept. The memory is the instance's: a
+    /// reads as a stale projection. What is proposed is a function of the documents observed and of what a declaration beside it
+    /// holds, so until another document is appended (the stream's head moves) or the declaration takes or releases a name, the
+    /// last answer stands. A failure is not an answer and is not kept. The memory is the instance's: a
     /// restart asks again, which is the same as a document having arrived.
     /// </remarks>
     public async Task<TableSchema?> ProposeAsync(FormTypeRef type, CancellationToken cancellationToken = default)
@@ -62,19 +114,23 @@ public sealed class LlmSchemaProposer : ISchemaProposer
         // Read before sampling: a document appended in between is in the sample but not in the key, so the next call sees a newer head
         // and asks again — never the reverse.
         var head = await _rawStore.HeadAsync(type, cancellationToken).ConfigureAwait(false);
+        var claimed = _declared is null
+            ? Claims.None
+            : Claims.Of(await _declared.ProposeAsync(type, cancellationToken).ConfigureAwait(false));
         var memo = _memos.GetOrAdd(type, static _ => new Memo());
 
         await memo.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (memo.Has && memo.Head == head)
+            if (memo.Has && memo.Head == head && memo.Claimed.SameAs(claimed))
             {
                 return memo.Schema;
             }
 
-            var schema = await ProposeFromDocumentsAsync(type, cancellationToken).ConfigureAwait(false);
+            var schema = await ProposeFromDocumentsAsync(type, claimed, cancellationToken).ConfigureAwait(false);
             memo.Schema = schema;
             memo.Head = head;
+            memo.Claimed = claimed;
             memo.Has = true;
             return schema;
         }
@@ -84,7 +140,7 @@ public sealed class LlmSchemaProposer : ISchemaProposer
         }
     }
 
-    private async Task<TableSchema?> ProposeFromDocumentsAsync(FormTypeRef type, CancellationToken cancellationToken)
+    private async Task<TableSchema?> ProposeFromDocumentsAsync(FormTypeRef type, Claims claimed, CancellationToken cancellationToken)
     {
         var samples = new List<JsonElement>(SampleLimit);
         // First-seen order: column order must be deterministic from the raw stream, never from the
@@ -151,8 +207,8 @@ public sealed class LlmSchemaProposer : ISchemaProposer
             throw new SchemaProposerUnavailableException(type, ex);
         }
 
-        var columns = ParseProposal(response.Text, observedFields);
-        return new TableSchema(type.Value, columns);
+        var columns = ParseProposal(response.Text, observedFields, claimed);
+        return columns.Count > 0 ? new TableSchema(type.Value, columns) : null;
     }
 
     private const string SystemPrompt =
@@ -192,7 +248,7 @@ public sealed class LlmSchemaProposer : ISchemaProposer
         return prompt.ToString();
     }
 
-    private static List<ColumnDef> ParseProposal(string text, List<string> observedFields)
+    private static List<ColumnDef> ParseProposal(string text, List<string> observedFields, Claims claimed)
     {
         JsonDocument proposal;
         try
@@ -231,8 +287,16 @@ public sealed class LlmSchemaProposer : ISchemaProposer
             // The stores name columns ignoring case, so two properties that differ only by case are one
             // column to them — the table could not be built (SQLite: "duplicate column name").
             var byFoldedName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var leftToDeclaration = false;
             foreach (var property in properties.EnumerateObject())
             {
+                // Before any check: what is said about a name the declaration holds is never used.
+                if (claimed.Hold(property.Name))
+                {
+                    leftToDeclaration = true;
+                    continue;
+                }
+
                 if (!observedFields.Contains(property.Name))
                 {
                     throw new SchemaProposalFormatException(
@@ -262,7 +326,7 @@ public sealed class LlmSchemaProposer : ISchemaProposer
                     Nullable: !required.Contains(property.Name));
             }
 
-            if (proposed.Count == 0)
+            if (proposed.Count == 0 && !leftToDeclaration)
             {
                 throw new SchemaProposalFormatException("The proposal contains no properties.");
             }

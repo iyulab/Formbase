@@ -35,12 +35,15 @@ public static class LlmSchemaProposerServiceCollectionExtensions
 
         services.AddSingleton<ISchemaProposer>(provider =>
         {
-            var inferred = new LlmSchemaProposer(
-                provider.GetRequiredService<IRawStore>(),
-                provider.GetRequiredService<IChatClient>());
-            return declared is null
-                ? inferred
-                : new DeclaredFirstSchemaProposer(Instantiate(declared, provider), inferred);
+            var rawStore = provider.GetRequiredService<IRawStore>();
+            var chatClient = provider.GetRequiredService<IChatClient>();
+            if (declared is null)
+            {
+                return new LlmSchemaProposer(rawStore, chatClient);
+            }
+
+            var stated = Instantiate(declared, provider);
+            return new DeclaredFirstSchemaProposer(stated, new LlmSchemaProposer(rawStore, chatClient, stated));
         });
         return services;
     }

@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- **With schema intelligence on, a declared projection is no longer refused over a declared field.** The model was shown
+  every key and its whole proposal was checked, so a document carrying `amount` and `Amount` beside a declared `amount`
+  failed every projection with `400` `/problems/schema-proposal-invalid`, with no declaration that would fix it; a
+  proposal naming a declared column that reads another key was refused as naming an unseen property. A proposed property
+  the declaration holds — its column name, ignoring case, or the key it reads — is now left to the declaration before the
+  proposal is checked. Two undeclared properties differing only by case are still refused. In the library,
+  `LlmSchemaProposer` takes the declared proposer in a new constructor (`AddLlmSchemaProposer` passes it); a host that
+  composes `DeclaredFirstSchemaProposer` by hand passes it too to get this. The API reference now says that a record's
+  `fields` include the columns schema intelligence added.
 - **Breaking: a declaration that leaves out a required member is refused.** A field with no `type` was stored as
   `text`, a relation with no `kind` as `child` (which also changed how its key field read back), a derivation with no
   `kind` as `fromEpoch`, a missing `declarationVersion` as `0`, and a relation could be stored with no `keyField`. All
