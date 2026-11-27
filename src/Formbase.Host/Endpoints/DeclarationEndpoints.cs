@@ -154,6 +154,15 @@ internal static class DeclarationEndpoints
     {
         var formType = FormTypeRef.Create(type);
 
+        if (NullMember(request) is { } member)
+        {
+            return Results.Problem(
+                detail: $"The request body gives null for a required member: '{member}'. See docs/API.md for the shape of this request.",
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "The request could not be read",
+                type: "/problems/invalid-request");
+        }
+
         if (Rejected(request) is { } invalid)
         {
             return invalid;
@@ -383,6 +392,67 @@ internal static class DeclarationEndpoints
 
     internal static ProjectionStatusResponse Describe(ProjectionStatus status, LastProjectionRun? lastRun) =>
         new(status.State.ToWire(), status.ProjectedWatermark.Value, status.RawHead.Value, LastRunResponse.FromTracked(lastRun));
+
+    /// <summary>
+    /// The path of the first required member the request gives as null, or null when there is none. The
+    /// deserializer refuses a missing one; a null written out reaches here. A null in place of a whole
+    /// field, relation or index is answered by the declaration's own checks.
+    /// </summary>
+    private static string? NullMember(DeclarationRequest request)
+    {
+        if (request.TableName is null)
+        {
+            return "$.tableName";
+        }
+
+        if (request.Fields is null)
+        {
+            return "$.fields";
+        }
+
+        for (var i = 0; i < request.Fields.Count; i++)
+        {
+            var field = request.Fields[i];
+            if (field is null)
+            {
+                continue;
+            }
+
+            var missing = field.Name is null ? "name"
+                : field.Target is { FormType: null } ? "target.formType"
+                : field.Target is { ValueField: null } ? "target.valueField"
+                : null;
+            if (missing is not null)
+            {
+                return $"$.fields[{i}].{missing}";
+            }
+        }
+
+        for (var i = 0; i < (request.Relations?.Count ?? 0); i++)
+        {
+            var relation = request.Relations![i];
+            if (relation is null)
+            {
+                continue;
+            }
+
+            var missing = relation.Name is null ? "name" : relation.Target is null ? "target" : relation.KeyField is null ? "keyField" : null;
+            if (missing is not null)
+            {
+                return $"$.relations[{i}].{missing}";
+            }
+        }
+
+        for (var i = 0; i < (request.Indexes?.Count ?? 0); i++)
+        {
+            if (request.Indexes![i] is { Fields: null })
+            {
+                return $"$.indexes[{i}].fields";
+            }
+        }
+
+        return null;
+    }
 
     private static IResult Invalid(string detail) =>
         Results.Problem(

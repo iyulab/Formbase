@@ -131,11 +131,12 @@ static WebApplication Compose(string[] args)
     builder.Services.ConfigureHttpJsonOptions(options =>
     {
         options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-        // What the served contract lists as required, a request must carry, and a member the contract does
-        // not make nullable is not read from null. Without these the missing member was filled in with its
-        // type's default — a field read as text, a relation read as a child — and stored as if declared.
+        // What the served contract lists as required, a request must carry. Without this the missing member
+        // was filled in with its type's default — a field read as text, a relation read as a child — and
+        // stored as if declared. A null given for such a member is refused by the declaration endpoint, not
+        // by RespectNullableAnnotations: that option also governs what the host writes, and a declaration
+        // stored before the rule may hold a null the response has to say back.
         options.SerializerOptions.RespectRequiredConstructorParameters = true;
-        options.SerializerOptions.RespectNullableAnnotations = true;
     });
 
     var app = builder.Build();

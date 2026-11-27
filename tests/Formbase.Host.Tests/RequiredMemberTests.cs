@@ -1,7 +1,12 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Formbase.Core.InMemory;
+using Formbase.Core.Ports;
+using Formbase.Core.Primitives;
+using Formbase.Core.Schema;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Formbase.Host.Tests;
 
@@ -13,9 +18,32 @@ namespace Formbase.Host.Tests;
 public sealed class RequiredMemberTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
+    private readonly WebApplicationFactory<Program> _factory;
 
     public RequiredMemberTests(WebApplicationFactory<Program> factory)
-        => _client = factory.CreateClient();
+    {
+        _factory = factory;
+        _client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task A_declaration_stored_before_the_rule_is_still_read_back_as_it_was()
+    {
+        // Earlier hosts took a relation with no keyField and stored it that way. What is refused is a request
+        // that leaves a member out now; what is already stored is read back, nulls and all.
+        var form = FormTypeRef.Create($"stored-{Guid.NewGuid():N}");
+        var hints = (InMemoryFieldHintSource)_factory.Services.GetRequiredService<IFieldHintSource>();
+        hints.Declare(new FormTypeHints(form, $"t_{Guid.NewGuid():N}", [new FieldHint("a", ColumnType.Text)],
+            Relations: [new RelationHint("r", RelationKind.Reference, FormTypeRef.Create("other"), null!)],
+            DeclarationVersion: 1));
+
+        foreach (var route in new[] { $"/formtypes/{form.Value}/declaration", $"/formtypes/{form.Value}/declaration?seq=1" })
+        {
+            var (status, body) = await Send(HttpMethod.Get, route);
+
+            status.Should().Be(HttpStatusCode.OK, body.ToString());
+        }
+    }
 
     private async Task<(HttpStatusCode Status, JsonElement Body)> Send(HttpMethod method, string route, string? body = null)
     {
@@ -68,6 +96,15 @@ public sealed class RequiredMemberTests : IClassFixture<WebApplicationFactory<Pr
     [Theory]
     [InlineData("\"type\":\"text\"},{\"name\":\"made\"", "\"type\":null},{\"name\":\"made\"")]
     [InlineData("\"keyField\":\"supplier\"", "\"keyField\":null")]
+    [InlineData("\"tableName\":\"@table\"", "\"tableName\":null")]
+    [InlineData("\"name\":\"supplier\"", "\"name\":null")]
+    [InlineData("\"name\":\"by\"", "\"name\":null")]
+    [InlineData("\"target\":\"suppliers\"", "\"target\":null")]
+    [InlineData("\"formType\":\"suppliers\"", "\"formType\":null")]
+    [InlineData("\"valueField\":\"grade\"", "\"valueField\":null")]
+    [InlineData("\"fields\":[\"supplier\"]", "\"fields\":null")]
+    [InlineData("\"declarationVersion\":1", "\"declarationVersion\":null")]
+    [InlineData("\"kind\":\"partOf\"", "\"kind\":null")]
     public async Task A_required_member_given_as_null_is_refused_too(string given, string asNull)
     {
         var form = $"required-null-{Guid.NewGuid():N}";
