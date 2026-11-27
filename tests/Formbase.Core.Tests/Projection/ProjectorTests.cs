@@ -432,12 +432,12 @@ public class ProjectorTests
     }
 
     /// <summary>
-    /// The shape a hand-edited file produces: one optional date column holding a date, a dotted local
-    /// date, free text, and nothing. Every document must land; only the free text is emptied, and both
-    /// dates read the same calendar day on any host.
+    /// The shape a hand-edited file produces: one optional date column holding a written date, a dotted local
+    /// date, free text, and nothing. Every document must land; only a written date is read, and the other two
+    /// texts are emptied and reported rather than guessed at.
     /// </summary>
     [Fact]
-    public async Task Hand_written_dates_land_as_rows_and_only_the_unreadable_one_is_emptied()
+    public async Task Hand_written_dates_land_as_rows_and_only_a_written_date_is_read()
     {
         var h = new Harness();
         h.Hints.Declare(new FormTypeHints(Qc, Table,
@@ -454,13 +454,13 @@ public class ProjectorTests
 
         result.Inserted.Should().Be(4);
         result.Skipped.Should().BeEmpty();
-        result.SkippedFields.Should().ContainSingle().Which.Field.Should().Be("received");
+        result.SkippedFields.Should().HaveCount(2).And.OnlyContain(skip => skip.Field == "received");
         result.AbsentFieldCounts.Should().Equal(new Dictionary<string, int> { ["received"] = 1 });
 
         var rows = (await h.Store.QueryAsync(Table, QuerySpec.All, TestContext.Current.CancellationToken))
             .ToDictionary(r => (string)r["lot"]!, r => (DateTimeOffset?)r["received"]);
         rows["L-1"].Should().Be(new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero));
-        rows["L-2"].Should().Be(new DateTimeOffset(2026, 1, 16, 0, 0, 0, TimeSpan.Zero));
+        rows["L-2"].Should().BeNull();
         rows["L-3"].Should().BeNull();
         rows["L-4"].Should().BeNull();
     }
