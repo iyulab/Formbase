@@ -424,6 +424,8 @@ source does not keep the history answers `501` `/problems/declaration-history-un
 in-memory, SQLite and PostgreSQL sources keep it.
 
 - **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`, `date`.
+  *Since 0.38.0* the number and timestamp rules below hold: 0.37.0 rounds a number its column cannot hold and guesses
+  at looser date text.
   An `integer` takes a JSON number whose value is whole and fits 64 bits, however it is written —
   `100`, `1e2` and `100.0` are the same value, and a store that keeps the raw document may normalize one into
   another; `1.5`, or a number past 64 bits, is not read (the field is skipped), never rounded. A `decimal` takes a
@@ -616,7 +618,7 @@ without any document arriving — that is the shape axis of staleness, and the w
 show it. Run a projection when you want the table to match; a rebuild drops and refills the whole
 table, which is not a cost to spend on your behalf without being asked.
 
-**Nothing required is filled in for you.** A request carries `tableName`, `declarationVersion` and `fields`; each
+**Nothing required is filled in for you.** *Since 0.38.0* (0.37.0 fills a missing member with its type's default). A request carries `tableName`, `declarationVersion` and `fields`; each
 field its `name` and `type`; each relation its `name`, `kind`, `target` and `keyField`; a derivation its `kind`;
 a target its `formType` and `valueField`; an index its `fields` — the members the OpenAPI document marks required.
 Leaving one out, or sending `null` for it, is `400` `/problems/invalid-request`, and nothing is declared.
