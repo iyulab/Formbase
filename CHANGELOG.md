@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **Breaking: a timestamp is read only from text that writes the whole date.** Looser text was read by guessing:
+  `01/02` became that day of the year the projection ran in, `02/03/04` a day in 2004, and
+  `2026-12-31T23:59:59.99999999Z` an instant in 2027. Now `yyyy-MM-dd`, alone or with a time and an optional `Z` or
+  `±hh:mm` offset, is read ([the forms](docs/API.md)); other text leaves the box empty and listed in `skippedFields`,
+  or, in a filter, matches no row. This includes unambiguous local forms that used to be read, such as `2026. 1. 16.` or
+  `20260116`: write them as `2026-01-16`. The stored documents are unchanged; a rebuild applies the rule to them.
 - **A number is no longer rounded into a column.** A `decimal` column read `1e-30` as `0`, and an `integer` column read
   `0.99999999999999999999999999999999` as `1` — silently, since the .NET parser rounds what a `decimal` cannot hold and
   reports success. A number is now taken only when the column holds exactly its value; otherwise the box is left empty

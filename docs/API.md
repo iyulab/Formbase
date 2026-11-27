@@ -432,8 +432,11 @@ in-memory, SQLite and PostgreSQL sources keep it.
   stored document keeps the number as it was written.
   A `date` is a calendar day, not a point in time: a document carries it as `yyyy-MM-dd` and a filter
   names it the same way; a timestamp string in a `date` field is not read (the field is skipped).
-  A `timestamp` value without an offset — a date alone, or a date and time with no zone — is read as
-  UTC, in documents and in query filters alike; a value with an offset keeps it.
+  A `timestamp` is written `yyyy-MM-dd`, alone or followed by `T` (or one space), `HH:mm` with optional seconds and
+  fraction, and an optional offset `Z` or `±hh:mm`; no other text is read (`01/02/2026`, `2 January` and `2026. 1. 2.`
+  are skipped). A value without an offset — a date alone, or a date and time with no zone — is read as UTC, in
+  documents and in query filters alike; a value with an offset keeps it. A fraction finer than 100 ns is cut, never
+  rounded up.
 - **`sourceKey`** — where in the document the field is read from, when it differs from the column
   name. A top-level key — a rename that keeps already-stored documents readable — or a JSON Pointer
   ([RFC 6901](https://www.rfc-editor.org/rfc/rfc6901)) for a nested value: `/commit/collection`

@@ -530,6 +530,21 @@ public class RecordQueryTests
         await act.Should().ThrowAsync<ProjectionUnavailableException>();
     }
 
+    [Theory]
+    [InlineData(DateTimeKind.Utc)]
+    [InlineData(DateTimeKind.Unspecified)]
+    public async Task A_DateTime_filter_value_is_the_instant_it_names(DateTimeKind kind)
+    {
+        var h = new Harness();
+        h.DeclareHintsWithInstant();
+        await h.Accept("""{"lot":"L-1","qty":1,"at":"2026-03-05T10:30:00Z"}""");
+        await h.Projector.ProjectAsync(Qc, TestContext.Current.CancellationToken);
+
+        var found = await h.Query.QueryAsync(Qc, new QuerySpec([FieldFilter.Equal("at", new DateTime(2026, 3, 5, 10, 30, 0, kind))]), TestContext.Current.CancellationToken);
+
+        found.Rows.Should().ContainSingle();
+    }
+
     private sealed class StubAggregateStore(IReadOnlyList<AggregateGroup> groups) : IProjectionStore
     {
         public Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default) => Task.FromResult(true);

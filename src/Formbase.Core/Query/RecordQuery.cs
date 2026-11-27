@@ -669,9 +669,13 @@ public sealed class RecordQuery : IRecordQuery
                 ColumnType.Boolean => Convert.ToBoolean(value, CultureInfo.InvariantCulture),
                 ColumnType.Text => value as string ?? Convert.ToString(value, CultureInfo.InvariantCulture),
                 ColumnType.Uuid => value is Guid ? value : Guid.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),
-                ColumnType.Timestamp => value is DateTimeOffset
-                    ? value
-                    : TimestampText.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),
+                ColumnType.Timestamp => value switch
+                {
+                    DateTimeOffset => value,
+                    // A DateTime with no kind is read as text without an offset is: as UTC.
+                    DateTime at => new DateTimeOffset(at.Kind == DateTimeKind.Local ? at : DateTime.SpecifyKind(at, DateTimeKind.Utc)),
+                    _ => TimestampText.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!),
+                },
                 // A day is asked for as a day: a DateOnly, or its ISO text. An instant names a day only
                 // in some offset, so it is left as it is and matches nothing.
                 ColumnType.Date => value switch
