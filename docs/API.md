@@ -426,7 +426,10 @@ in-memory, SQLite and PostgreSQL sources keep it.
 - **`type`** — `text`, `integer`, `decimal`, `boolean`, `timestamp`, `uuid`, `jsonb`, `date`.
   An `integer` takes a JSON number whose value is whole and fits 64 bits, however it is written —
   `100`, `1e2` and `100.0` are the same value, and a store that keeps the raw document may normalize one into
-  another; `1.5`, or a number past 64 bits, is not read (the field is skipped), never rounded.
+  another; `1.5`, or a number past 64 bits, is not read (the field is skipped), never rounded. A `decimal` takes a
+  JSON number it can hold exactly — 28 to 29 significant digits, at most 28 decimal places; `1e-30`, or a number with
+  more digits, is not read either. Only the value counts: `1e3`, `1000` and `1000.00` are the same number. The
+  stored document keeps the number as it was written.
   A `date` is a calendar day, not a point in time: a document carries it as `yyyy-MM-dd` and a filter
   names it the same way; a timestamp string in a `date` field is not read (the field is skipped).
   A `timestamp` value without an offset — a date alone, or a date and time with no zone — is read as
@@ -855,7 +858,8 @@ The parameters:
 
 - **`filter`** — repeatable, `column:value`, equality only. The **first** colon separates the two, so
   a value may contain colons. Values are compared as the declared column's type, so `total:42`
-  matches a number. A filter that cannot be read is refused rather than dropped: dropping one widens
+  matches a number. A value the column's type cannot take — `abc` or `1.5` for an `integer`, a `decimal` with more
+  digits than the column holds — matches no row, on every store: it is never rounded onto one. A filter that cannot be read is refused rather than dropped: dropping one widens
   the result, and the caller reads rows they asked to exclude. A `jsonb` column cannot be filtered: the stores
   read two JSON values as equal differently, so the same filter would match on one and not another
   (`400` `/problems/invalid-query`).

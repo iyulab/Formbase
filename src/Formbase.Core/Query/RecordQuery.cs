@@ -508,7 +508,11 @@ public sealed class RecordQuery : IRecordQuery
                 : ProjectionSystemColumns.Record;
             resolved.Add(child with
             {
-                Condition = child.Condition is null ? null : Coerce(condition, childSchema)![0],
+                // A condition no value of the column can meet is asked as one no related row meets: the key column
+                // is the one every related row has a value in.
+                Condition = child.Condition is { } asked
+                    ? TryCoerce(asked, childSchema, out var held) ? held : FieldFilter.IsNull(relation.KeyColumn)
+                    : null,
                 Join = new ChildJoin(childSchema.TableName, relation.KeyColumn, parentColumn),
             });
             targets.Add(target);
@@ -542,19 +546,107 @@ public sealed class RecordQuery : IRecordQuery
             return filters;
         }
 
-        return filters
-            .Select(filter =>
+        var coerced = new List<FieldFilter>(filters.Count);
+        foreach (var filter in filters)
+        {
+            if (TryCoerce(filter, schema, out var held))
             {
-                var columnType = schema.Columns.FirstOrDefault(c => c.Name == filter.Column)?.Type;
-                return columnType switch
+                coerced.Add(held);
+            }
+            else
+            {
+                // No row meets this filter, so it goes to the store as two that no row meets together.
+                // Handing the value on instead would leave the answer to each store: one refuses a value
+                // of another type, and one reads text again by its own rules and may round it onto a row.
+                coerced.Add(FieldFilter.IsNull(filter.Column));
+                coerced.Add(FieldFilter.IsNotNull(filter.Column));
+            }
+        }
+
+        return coerced;
+    }
+
+    /// <summary>
+    /// The filter with its value as the column's type. False when no value of that type is the one asked
+    /// for. A column that is not declared cannot be asked about and was refused before this; a value that
+    /// does not fit a declared column asks something answerable, and the answer is no rows.
+    /// </summary>
+    private static bool TryCoerce(FieldFilter filter, TableSchema schema, out FieldFilter coerced)
+    {
+        coerced = filter;
+        if (schema.Columns.FirstOrDefault(c => c.Name == filter.Column)?.Type is not { } type)
+        {
+            return true;
+        }
+
+        if (filter.Operator == FilterOperator.In && filter.Value is IReadOnlyList<object?> values)
+        {
+            var held = new List<object?>(values.Count);
+            foreach (var value in values)
+            {
+                if (TryAsAsked(value, type, out var asked))
                 {
-                    { } type when filter.Operator == FilterOperator.In && filter.Value is IReadOnlyList<object?> values
-                        => filter with { Value = values.Select(value => CoerceValue(value, type)).ToArray() },
-                    { } type => filter with { Value = CoerceValue(filter.Value, type) },
-                    _ => filter,
-                };
-            })
-            .ToList();
+                    held.Add(asked);
+                }
+            }
+
+            coerced = filter with { Value = held.ToArray() };
+            return held.Count > 0 || values.Count == 0;
+        }
+
+        if (!TryAsAsked(filter.Value, type, out var single))
+        {
+            return false;
+        }
+
+        coerced = filter with { Value = single };
+        return true;
+    }
+
+    /// <summary>
+    /// A value a caller asks for, as the column's type and without changing what it asks for: unlike a
+    /// value a store gave back, it is never rounded into one the column can hold.
+    /// </summary>
+    private static bool TryAsAsked(object? value, ColumnType type, out object? asked)
+    {
+        asked = value;
+        switch (value, type)
+        {
+            case (null, _):
+                return true;
+            case (bool, ColumnType.Integer):
+                return false;
+            case (double or float, ColumnType.Integer) when Convert.ToDouble(value, CultureInfo.InvariantCulture) is var real
+                && real != Math.Floor(real):
+                return false;
+            case (decimal number, ColumnType.Integer) when number != decimal.Truncate(number):
+                return false;
+            case (string text, ColumnType.Decimal):
+                // Text is read as a plain decimal number. Convert.ToDecimal(string) accepts thousands separators, so «1,5»
+                // would be 15: a filter that asks for rows the caller did not name.
+                const NumberStyles Plain = NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite
+                    | NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
+                if (!ExactNumber.TryParse(text, Plain, out var exact))
+                {
+                    return false;
+                }
+
+                asked = exact;
+                return true;
+        }
+
+        asked = CoerceValue(value, type);
+        return type switch
+        {
+            ColumnType.Integer => asked is long,
+            ColumnType.Decimal => asked is decimal,
+            ColumnType.Boolean => asked is bool,
+            ColumnType.Text => asked is string,
+            ColumnType.Uuid => asked is Guid,
+            ColumnType.Timestamp => asked is DateTimeOffset,
+            ColumnType.Date => asked is DateOnly,
+            _ => true,
+        };
     }
 
     private static object? CoerceValue(object? value, ColumnType type)
@@ -593,13 +685,8 @@ public sealed class RecordQuery : IRecordQuery
         }
         catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
         {
-            // Uncoercible filter value: leave it as-is so it simply fails to match, rather than
-            // throwing — an over-specific filter returning nothing is a valid query outcome.
-            //
-            // This is the other side of the line RefuseUndeclaredColumns draws, and the two look
-            // contradictory only until the question is separated from the answer. A column that is
-            // not declared cannot be asked about; a value that does not fit a column that is
-            // declared asks something answerable, and the answer is no rows.
+            // Left as it is: a store's answer is shown as the store gave it, and a caller's filter value
+            // that stays unreadable matches nothing (TryAsAsked).
             return value;
         }
     }

@@ -325,6 +325,25 @@ public static class FormdownAdapter
         schema.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String && type.GetString() == "checkbox"
         && schema.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array && options.GetArrayLength() > 0;
 
+    private const NumberStyles DecimalText = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent;
+
+    /// <summary>
+    /// A decimal number's text as JSON spells the same number: no plus sign, no leading zeros, and a digit on
+    /// both sides of a decimal point that is there. <paramref name="text"/> has already been read as a number.
+    /// </summary>
+    private static string AsJsonNumber(string text)
+    {
+        var sign = text[0] == '-' ? "-" : string.Empty;
+        var unsigned = text.TrimStart('+', '-');
+        var e = unsigned.IndexOfAny(['e', 'E']);
+        var mantissa = e < 0 ? unsigned : unsigned[..e];
+        var exponent = e < 0 ? string.Empty : unsigned[e..];
+        var point = mantissa.IndexOf('.', StringComparison.Ordinal);
+        var whole = (point < 0 ? mantissa : mantissa[..point]).TrimStart('0');
+        var fraction = point < 0 ? string.Empty : mantissa[(point + 1)..];
+        return sign + (whole.Length > 0 ? whole : "0") + (fraction.Length > 0 ? "." + fraction : string.Empty) + exponent;
+    }
+
     private static void WriteTyped(Utf8JsonWriter writer, JsonElement value, ColumnType type)
     {
         if (value.ValueKind == JsonValueKind.String)
@@ -341,8 +360,11 @@ public static class FormdownAdapter
                 case ColumnType.Integer when long.TryParse(text.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var whole):
                     writer.WriteNumberValue(whole);
                     return;
-                case ColumnType.Decimal when decimal.TryParse(text.Trim(), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent, CultureInfo.InvariantCulture, out var number):
-                    writer.WriteNumberValue(number);
+                case ColumnType.Decimal when decimal.TryParse(text.Trim(), DecimalText, CultureInfo.InvariantCulture, out _):
+                    // The digits as written, not the parsed value: decimal rounds what it cannot hold, and the
+                    // raw document is what every later projection reads. Whether a column holds the number is
+                    // the projection's question.
+                    writer.WriteRawValue(AsJsonNumber(text.Trim()));
                     return;
             }
         }

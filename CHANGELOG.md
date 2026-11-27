@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A number is no longer rounded into a column.** A `decimal` column read `1e-30` as `0`, and an `integer` column read
+  `0.99999999999999999999999999999999` as `1` — silently, since the .NET parser rounds what a `decimal` cannot hold and
+  reports success. A number is now taken only when the column holds exactly its value; otherwise the box is left empty
+  and listed in `skippedFields` (a required field leaves the document out, listed in `skipped`). How a number is written
+  does not matter: `1e3`, `100.0` and `-0` are read as before. The stored documents are unchanged, so a rebuild applies
+  the rule to them — a table built before this keeps its rounded values until it is projected again.
+- **A filter value the column cannot take matches no row, as documented, on every store.** On the durable configuration,
+  `abc` or `1.5` asked of an `integer`, or an unreadable timestamp, `boolean` or `uuid`, was answered `503`
+  `/problems/projection-unavailable`; a `decimal` value with too many digits matched the row it rounded to; and `1,5`
+  asked of a `decimal` was read again by MorphDB as `15`. In the library, a fraction asked of an `integer` column as a
+  `double` or `decimal` is no longer rounded to a whole number.
+- **`FormdownAdapter.AdaptData` writes a decimal field's digits as the form sent them.** It parsed the text and wrote the
+  parsed number, so digits past what a `decimal` holds were lost before the document was stored. A leading `+`, leading
+  zeros and a bare decimal point are rewritten as JSON spells the same number.
+
 ### Changed
 
 - **Breaking (host settings): `Formbase:Mcp:MaxRows` above 1000 is refused at start.** 1000 is the most one REST read of records

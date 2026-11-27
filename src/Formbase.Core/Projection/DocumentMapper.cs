@@ -211,7 +211,7 @@ internal static class DocumentMapper
                 // normalized (PostgreSQL's jsonb keeps 1e2 as 100): the value is what a column takes, so the same document projects
                 // the same on every store. A number that is not whole, or does not fit, stays a skip — never a rounded value.
                 if (field.ValueKind == JsonValueKind.Number
-                    && field.TryGetDecimal(out var whole)
+                    && ExactNumber.TryRead(field, out var whole)
                     && whole == decimal.Truncate(whole)
                     && whole >= long.MinValue
                     && whole <= long.MaxValue)
@@ -222,7 +222,7 @@ internal static class DocumentMapper
                 break;
 
             case ColumnType.Decimal:
-                if (field.ValueKind == JsonValueKind.Number && field.TryGetDecimal(out var d))
+                if (field.ValueKind == JsonValueKind.Number && ExactNumber.TryRead(field, out var d))
                 {
                     value = d;
                     return true;
